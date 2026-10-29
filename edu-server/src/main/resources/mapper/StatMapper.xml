@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edu.mapper.StatMapper">
+
+    <!-- 按学校(学生就读学校)统计收入 -->
+    <select id="revenueBySchool" resultType="map">
+        SELECT IFNULL(s.school, '未填写') AS name,
+               COUNT(*)          AS payCount,
+               IFNULL(SUM(p.amount), 0) AS income
+        FROM edu_payment p
+        JOIN edu_student s ON s.id = p.student_id
+        WHERE (#{tenantId} IS NULL OR p.tenant_id = #{tenantId})
+          AND p.pay_time &gt;= #{begin} AND p.pay_time &lt; #{end}
+        GROUP BY s.school
+        ORDER BY income DESC
+    </select>
+
+    <!-- 按教师统计收入：缴费通过报名合同关联授课教师 -->
+    <select id="revenueByTeacher" resultType="map">
+        SELECT t.name        AS name,
+               t.subject     AS subject,
+               COUNT(DISTINCT p.id) AS payCount,
+               IFNULL(SUM(p.amount), 0) AS income
+        FROM edu_payment p
+        JOIN edu_enroll e ON e.id = p.enroll_id AND e.teacher_id IS NOT NULL
+        JOIN edu_teacher t ON t.id = e.teacher_id
+        WHERE (#{tenantId} IS NULL OR p.tenant_id = #{tenantId})
+          AND p.pay_time &gt;= #{begin} AND p.pay_time &lt; #{end}
+        GROUP BY t.id, t.name, t.subject
+        ORDER BY income DESC
+    </select>
+
+    <!-- 按学生统计缴费 -->
+    <select id="revenueByStudent" resultType="map">
+        SELECT s.name        AS name,
+               s.school      AS school,
+               COUNT(*)      AS payCount,
+               IFNULL(SUM(p.amount), 0) AS income
+        FROM edu_payment p
+        JOIN edu_student s ON s.id = p.student_id
+        WHERE (#{tenantId} IS NULL OR p.tenant_id = #{tenantId})
+          AND p.pay_time &gt;= #{begin} AND p.pay_time &lt; #{end}
+        GROUP BY s.id, s.name, s.school
+        ORDER BY income DESC
+    </select>
+
+    <!-- 教师投入量/闲置量：排课总课时、已完成课时、授课学生数、总可用课时(按每月160小时容量折算) -->
+    <select id="teacherLoad" resultType="map">
+        SELECT t.name AS name,
+               t.subject AS subject,
+               COUNT(sch.id) AS scheduleCount,
+               IFNULL(SUM(TIMESTAMPDIFF(MINUTE, sch.start_time, sch.end_time)) / 60, 0) AS scheduledHours,
+               IFNULL(SUM(CASE WHEN sch.status = 1 THEN TIMESTAMPDIFF(MINUTE, sch.start_time, sch.end_time) ELSE 0 END) / 60, 0) AS completedHours,
+               COUNT(DISTINCT sch.student_id) + COUNT(DISTINCT sch.clazz_id) AS dutyCount
+        FROM edu_teacher t
+        LEFT JOIN edu_schedule sch ON sch.teacher_id = t.id
+            AND sch.status != 2
+            AND sch.start_time &gt;= #{begin} AND sch.start_time &lt; #{end}
+        WHERE (#{tenantId} IS NULL OR t.tenant_id = #{tenantId}) AND t.status = 1
+        GROUP BY t.id, t.name, t.subject
+        ORDER BY scheduledHours DESC
+    </select>
+
+    <!-- 课时占比：按课程统计排课课时 -->
+    <select id="hoursShareByCourse" resultType="map">
+        SELECT c.name AS name,
+               COUNT(sch.id) AS scheduleCount,
+               IFNULL(SUM(TIMESTAMPDIFF(MINUTE, sch.start_time, sch.end_time)) / 60, 0) AS hours
+        FROM edu_schedule sch
+        JOIN edu_course c ON c.id = sch.course_id
+        WHERE (#{tenantId} IS NULL OR sch.tenant_id = #{tenantId}) AND sch.status != 2
+        GROUP BY c.id, c.name
+        ORDER BY hours DESC
+    </select>
+    <!-- 近N日缴费趋势 -->
+    <select id="revenueTrend" resultType="map">
+        SELECT DATE_FORMAT(p.pay_time, '%m-%d') AS name,
+               IFNULL(SUM(p.amount), 0) AS income,
+               COUNT(*) AS payCount
+        FROM edu_payment p
+        WHERE (#{tenantId} IS NULL OR p.tenant_id = #{tenantId})
+          AND p.pay_time &gt;= #{begin} AND p.pay_time &lt; #{end}
+        GROUP BY DATE_FORMAT(p.pay_time, '%m-%d')
+        ORDER BY MIN(p.pay_time)
+    </select>
+</mapper>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.edu.mapper.CostMapper">
+
+  <!-- 公共过滤条件 -->
+  <sql id="baseFrom">
+    FROM edu_consume c
+    JOIN edu_contract ct ON ct.id = c.contract_id
+    JOIN edu_teacher t ON t.id = c.teacher_id
+    JOIN edu_student s ON s.id = c.student_id
+    JOIN edu_course co ON co.id = c.course_id
+    WHERE c.canceled = 0 AND c.deleted = 0 AND c.audit_status = 1
+      AND (#{tenantId} IS NULL OR c.tenant_id = #{tenantId})
+      <if test="begin != null and begin != ''">AND c.create_time &gt;= CONCAT(#{begin},' 00:00:00')</if>
+      <if test="end != null and end != ''">AND c.create_time &lt;= CONCAT(#{end},' 23:59:59')</if>
+      <if test="teacherId != null">AND c.teacher_id = #{teacherId}</if>
+      <if test="courseId != null">AND c.course_id = #{courseId}</if>
+      <if test="classType != null">AND c.class_type = #{classType}</if>
+  </sql>
+
+  <!-- 教师成本表达式（PRD公式固化：一对一用rate_one2one，班课用rate_class） -->
+  <sql id="costExpr">
+    ROUND(CASE WHEN c.class_type = 1 THEN IFNULL(t.rate_one2one,0) ELSE IFNULL(t.rate_class,0) END * c.hours, 2)
+  </sql>
+
+  <select id="detail" resultType="map">
+    SELECT c.consume_no AS consumeNo,
+           DATE(c.create_time) AS consumeDate,
+           s.name AS studentName,
+           co.name AS courseName,
+           c.class_type AS classType,
+           t.name AS teacherName,
+           c.hours AS hours,
+           ROUND(ct.unit_price * c.hours, 2) AS revenue,
+           <include refid="costExpr"/> AS teacherCost,
+           ROUND(ct.unit_price * c.hours - <include refid="costExpr"/>, 2) AS profit,
+           CASE WHEN ct.unit_price * c.hours &gt; 0
+                THEN ROUND(<include refid="costExpr"/> / (ct.unit_price * c.hours) * 100, 1)
+                ELSE 0 END AS costRatio,
+           ct.contract_no AS contractNo
+    <include refid="baseFrom"/>
+    ORDER BY c.create_time DESC
+  </select>
+
+  <select id="summary" resultType="map">
+    <choose>
+      <when test="groupBy == 'course'">
+        SELECT co.name AS name
+      </when>
+      <otherwise>
+        SELECT t.name AS name
+      </otherwise>
+    </choose>
+           ,SUM(c.hours) AS totalHours,
+           ROUND(SUM(ct.unit_price * c.hours), 2) AS totalRevenue,
+           ROUND(SUM(<include refid="costExpr"/>), 2) AS totalCost,
+           ROUND(SUM(ct.unit_price * c.hours) - SUM(<include refid="costExpr"/>), 2) AS totalProfit,
+           CASE WHEN SUM(ct.unit_price * c.hours) &gt; 0
+                THEN ROUND(SUM(<include refid="costExpr"/>) / SUM(ct.unit_price * c.hours) * 100, 1)
+                ELSE 0 END AS avgCostRatio
+    <include refid="baseFrom"/>
+    <choose>
+      <when test="groupBy == 'course'">
+        GROUP BY co.id, co.name ORDER BY totalRevenue DESC
+      </when>
+      <otherwise>
+        GROUP BY t.id, t.name ORDER BY totalRevenue DESC
+      </otherwise>
+    </choose>
+  </select>
+
+  <select id="dashboard" resultType="map">
+    SELECT IFNULL(SUM(c.hours), 0) AS totalHours,
+           IFNULL(ROUND(SUM(ct.unit_price * c.hours), 2), 0) AS totalRevenue,
+           IFNULL(ROUND(SUM(<include refid="costExpr"/>), 2), 0) AS totalCost,
+           IFNULL(ROUND(SUM(ct.unit_price * c.hours) - SUM(<include refid="costExpr"/>), 2), 0) AS totalProfit,
+           CASE WHEN SUM(ct.unit_price * c.hours) &gt; 0
+                THEN ROUND(SUM(<include refid="costExpr"/>) / SUM(ct.unit_price * c.hours) * 100, 1)
+                ELSE 0 END AS costRatio
+    <include refid="baseFrom"/>
+  </select>
+</mapper>

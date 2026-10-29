@@ -1,0 +1,692 @@
+/* 全局基础样式：清零默认边距，撑满视口，避免出现意外滚动条 */
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Element Plus 主色统一为登录页亮蓝 #0094FF（含各档衍生色） */
+:root {
+  --el-color-primary: #0094ff;
+  --el-color-primary-light-3: #4db3ff;
+  --el-color-primary-light-5: #7fc7ff;
+  --el-color-primary-light-7: #b3daff;
+  --el-color-primary-light-8: #cce7ff;
+  --el-color-primary-light-9: #e6f4ff;
+  --el-color-primary-dark-2: #0076cc;
+}
+
+/* =========================================================
+   页面通用样式（参考WRJ风格，主色 #0094FF）
+   ========================================================= */
+/* 页面容器 */
+.page { height: 100%; overflow: auto; padding: 16px; }
+
+/* 页头：标题 + 操作按钮 */
+.page-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.page-title { font-size: 17px; font-weight: 700; letter-spacing: 0.5px; color: #142a44; }
+.actions { display: flex; gap: 10px; align-items: center; }
+
+/* 面板卡片 */
+.panel {
+  background: #fff;
+  border: 1px solid #e4eaf2;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 40, 80, 0.05);
+}
+.panel-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 600;
+  padding: 14px 16px 10px;
+  color: #142a44;
+}
+.panel-title::before {
+  content: '';
+  width: 4px; height: 16px; border-radius: 2px;
+  background: linear-gradient(180deg, #0094FF, #8B6FF0);
+}
+
+/* 列表面板：工具栏 + 全高表格 + 分页 */
+.table-panel { height: calc(100% - 50px); padding: 8px; display: flex; flex-direction: column; }
+.toolbar { display: flex; gap: 10px; padding: 8px 8px 12px; flex-wrap: wrap; align-items: center; }
+.table-panel .el-table { flex: 1; }
+.pager-row { display: flex; justify-content: flex-end; padding: 10px 4px 2px; }
+
+/* 表格观感 */
+.el-table {
+  --el-table-header-bg-color: #f7f9fc;
+  --el-table-header-text-color: #475467;
+  --el-table-row-hover-bg-color: #f0f6ff;
+  --el-table-border-color: #eef2f7;
+  --el-table-text-color: #344054;
+}
+.el-table th.el-table__cell { font-weight: 600; }
+
+/* 弹窗圆角 */
+.el-dialog { border-radius: 14px; }
+.el-drawer { --el-drawer-padding-primary: 20px; }
+
+/* 细滚动条 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #cbd5e4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 菜单折叠后的弹出子菜单：深色主题与侧栏一致 */
+.dark-menu-popper.el-popper {
+  border: 1px solid #e4edf7;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(20, 60, 140, 0.12);
+  background: #ffffff;
+}
+.dark-menu-popper .el-menu {
+  background: transparent;
+}
+.dark-menu-popper .el-menu-item {
+  color: #475467;
+  border-radius: 8px;
+  margin: 2px 6px;
+}
+.dark-menu-popper .el-menu-item:hover {
+  background: #f0f6ff;
+  color: #0094FF;
+}
+.dark-menu-popper .el-menu-item.is-active {
+  background: rgba(0, 148, 255, 0.10);
+  color: #0094FF;
+  font-weight: 600;
+}
+
+/* =========================================================
+   全局字体与列表排版美化（科技感）
+   ========================================================= */
+body {
+  font-family: 'Inter', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 表格：13px 正文字号 + 等宽数字（科技感数据对齐） */
+.el-table { font-size: 13px; }
+.el-table .cell { font-variant-numeric: tabular-nums; letter-spacing: 0.2px; }
+.el-table th.el-table__cell .cell {
+  letter-spacing: 1px;
+  font-weight: 600;
+  color: #3d4d63;
+}
+/* 表头底部渐变细线（呼应登录页蓝→紫） */
+.el-table th.el-table__cell {
+  position: relative;
+}
+.el-table th.el-table__cell::after {
+  content: '';
+  position: absolute; left: 12px; right: 12px; bottom: 0;
+  height: 2px; border-radius: 1px;
+  background: linear-gradient(90deg, rgba(0,148,255,0.35), rgba(139,111,240,0.35));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.el-table th.el-table__cell:hover::after { opacity: 1; }
+/* 行悬停左侧高亮条 */
+.el-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+/* 数字加粗雅黑（指标/金额） */
+.el-tag, .el-pagination, .el-checkbox__label { font-size: 12.5px; }
+.el-pagination { --el-pagination-font-size: 13px; }
+.el-pagination .el-pagination__total { color: #667085; }
+
+/* 工具栏控件字号统一 */
+.toolbar .el-input__inner { font-size: 13px; }
+
+/* 列设置弹层美化 */
+.col-setting-popper.el-popper { border-radius: 10px; box-shadow: 0 8px 28px rgba(20,60,140,0.14); }
+.col-setting-popper .col-head {
+  font-size: 12px; font-weight: 600; color: #667085;
+  letter-spacing: 1px; padding: 2px 4px 8px;
+  border-bottom: 1px solid #eef2f7; margin-bottom: 6px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.col-setting-popper .col-head a { color: #0094FF; cursor: pointer; font-weight: 500; }
+.col-setting-popper .el-checkbox {
+  display: flex; align-items: center;
+  padding: 5px 4px; margin: 0; border-radius: 6px;
+  transition: background 0.15s ease;
+}
+.col-setting-popper .el-checkbox:hover { background: #f0f6ff; }
+.col-setting-popper .el-checkbox__label { font-size: 13px; color: #344054; }
+
+/* =========================================================
+   科技感排版统一 + 隐藏滚动条
+   ========================================================= */
+
+/* 1. 全局隐藏滚动条（滚轮/触摸仍可滚动，视觉零滚动条） */
+* {
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;                   /* Chrome/Edge/Safari */
+}
+html, body, #app { overflow: hidden; }
+
+/* 2. 全局字体：现代无衬线栈 + 数字等宽 */
+body {
+  font-family: 'Inter', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 3. 表格排版：13px 正文 / 表头加字距 / 数字等宽 / 行高紧凑 */
+.el-table { font-size: 13px; }
+.el-table .cell {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  line-height: 1.5;
+  padding: 0 12px;
+}
+.el-table td.el-table__cell { padding: 7px 0; }
+.el-table th.el-table__cell {
+  height: 42px;
+  background: #ffffff;
+}
+.el-table th.el-table__cell .cell {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #3d4d63;
+}
+/* 表头常显蓝紫渐变底线（呼应登录页） */
+.el-table th.el-table__cell::after {
+  content: '';
+  position: absolute; left: 10px; right: 10px; bottom: 0;
+  height: 2px; border-radius: 1px; opacity: 0.6;
+  background: linear-gradient(90deg, rgba(0,148,255,0.4), rgba(139,111,240,0.4));
+}
+/* 排序激活列：主色高亮 */
+.el-table .sort-caret.ascending { border-bottom-color: #a8cbef; }
+.el-table .sort-caret.descending { border-top-color: #a8cbef; }
+.el-table .ascending .sort-caret.ascending { border-bottom-color: #0094FF; }
+.el-table .descending .sort-caret.descending { border-top-color: #0094FF; }
+
+/* 4. 标签/按钮/输入框：字号统一 12.5/13px，标签圆角收窄更利落 */
+.el-tag { font-size: 12px; border-radius: 4px; padding: 0 8px; }
+.el-button { font-size: 13px; }
+.el-button--small { font-size: 12px; }
+.el-input__inner { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* 5. 分页器：圆角页码 + 激活态蓝紫渐变胶囊 */
+.el-pagination { font-size: 12.5px; --el-pagination-font-size: 12.5px; }
+.el-pagination.is-background .el-pager li {
+  border-radius: 6px; margin: 0 2px;
+  transition: background 0.2s ease;
+}
+.el-pagination.is-background .el-pager li.is-active {
+  background: linear-gradient(135deg, #0094FF, #7B5BE6);
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(0, 148, 255, 0.35);
+}
+.el-pagination .el-pagination__total,
+.el-pagination .el-pagination__jump { color: #667085; font-size: 12.5px; }
+
+/* 6. 列设置弹层：文字字号/字距统一，科技蓝交互 */
+.col-setting-popper .el-checkbox__label {
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  color: #344054;
+}
+.col-setting-popper .col-head {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: #667085;
+}
+.col-setting-popper .col-head a { color: #0094FF; }
+
+/* 7. 抽屉/弹窗标题与表单文字统一 */
+.el-drawer__header {
+  margin-bottom: 14px;
+  color: #142a44;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.el-dialog__title { font-weight: 600; letter-spacing: 0.5px; }
+.el-form-item__label { font-size: 13px; color: #475467; }
+
+/* 8. 页面密度微调，避免内容溢出 */
+.page { padding: 12px 14px; }
+.page-header { margin-bottom: 10px; }
+.table-panel { height: calc(100% - 46px); }
+
+/* 9. 表头禁止折行（列宽不足时省略而非换行） */
+.el-table th.el-table__cell .cell { white-space: nowrap; }
+
+/* 10. 分页器字体与表头统一（12.5px / 字距 / 同色系） */
+.el-pagination {
+  font-size: 12.5px;
+  color: #3d4d63;
+  letter-spacing: 0.3px;
+}
+.el-pagination .el-pagination__total { font-size: 12.5px; color: #3d4d63; letter-spacing: 0.3px; }
+.el-pagination .el-pagination__jump { font-size: 12.5px; color: #3d4d63; }
+.el-pagination .el-select .el-input__inner { font-size: 12.5px; }
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next { font-size: 12.5px; }
+.el-pagination.is-background .el-pager li {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.el-pagination.is-background .el-pager li.is-active { font-weight: 600; letter-spacing: 0.5px; }
+
+/* 11. 内容区页头标题：渐变竖条 + 科技感字重（顶栏已改为面包屑，不再重复） */
+.page-title {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 16px; font-weight: 700;
+  letter-spacing: 1px;
+  color: #142a44;
+}
+.page-title::before {
+  content: '';
+  width: 4px; height: 17px; border-radius: 2px;
+  background: linear-gradient(180deg, #0094FF, #8B6FF0);
+  box-shadow: 0 2px 8px rgba(0, 148, 255, 0.35);
+}
+
+/* =========================================================
+   列设置按钮与弹层美化（科技感）
+   ========================================================= */
+
+/* 触发按钮：浅描边胶囊，悬停点亮主色渐变描边与光晕 */
+.col-setting-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 14px;
+  font-size: 13px; letter-spacing: 0.5px;
+  color: #475467;
+  background: linear-gradient(180deg, #ffffff, #f7fafd);
+  border: 1px solid #d8e4f2;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.col-setting-btn:hover {
+  color: #0094FF;
+  border-color: rgba(0, 148, 255, 0.55);
+  box-shadow: 0 3px 12px rgba(0, 148, 255, 0.18);
+  background: #ffffff;
+}
+.col-setting-btn:active { transform: scale(0.97); }
+.col-setting-btn .arrow { color: #9db4cc; transition: transform 0.2s ease; }
+.col-setting-btn:hover .arrow { color: #0094FF; transform: translateY(1px); }
+
+/* 弹层容器：圆角 + 大投影 + 细腻边框 */
+.col-setting-popper.el-popper {
+  border: 1px solid #e4edf7;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(20, 60, 140, 0.14), 0 2px 8px rgba(20, 60, 140, 0.06);
+  padding: 12px 10px 8px;
+}
+
+/* 头部：标题字距 + 操作链接 */
+.col-setting-popper .col-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 2px;
+  color: #667085;
+  padding: 0 6px 9px;
+  border-bottom: 1px solid #eef2f7;
+  margin-bottom: 6px;
+}
+.col-setting-popper .col-head .col-ops { display: flex; align-items: center; gap: 4px; letter-spacing: 0; }
+.col-setting-popper .col-head i { color: #d4dde9; font-style: normal; margin: 0 2px; }
+.col-setting-popper .col-head a {
+  color: #0094FF; cursor: pointer; font-weight: 500;
+  transition: color 0.15s ease;
+}
+.col-setting-popper .col-head a:hover { color: #0072CC; text-decoration: underline; }
+
+/* 选项行：圆角行悬停 + 选中加粗 */
+.col-setting-popper .col-list { display: flex; flex-direction: column; }
+.col-setting-popper .col-item {
+  display: flex; align-items: center; gap: 2px;
+  padding: 6px 8px; border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.col-setting-popper .col-item:hover { background: #f0f6ff; }
+.col-setting-popper .col-item .el-checkbox { height: auto; margin-right: 6px; }
+.col-setting-popper .col-item .el-checkbox__label { display: none; } /* 隐藏默认label，用自定义文字 */
+.col-setting-popper .col-label {
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  color: #344054;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
+}
+.col-setting-popper .col-item:has(.el-checkbox__input.is-checked) .col-label {
+  color: #142a44; font-weight: 600;
+}
+.col-setting-popper .el-checkbox__inner {
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.col-setting-popper .el-checkbox__input.is-checked .el-checkbox__inner {
+  background: #0094FF; border-color: #0094FF;
+  box-shadow: 0 1px 4px rgba(0, 148, 255, 0.35);
+}
+
+/* 登录页备案信息 */
+.icp { text-align: center; font-size: 12px; color: rgba(255,255,255,0.65); margin-top: 14px; }
+.icp a { color: rgba(255,255,255,0.65); text-decoration: none; }
+.icp a:hover { color: #fff; text-decoration: underline; }
+
+/* 12. 分页每页条数选择器（"10条/页"）文字与表头统一 */
+.el-pagination .el-pagination__sizes .el-select__wrapper {
+  min-height: 24px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.el-pagination .el-pagination__sizes .el-select__selected-item,
+.el-pagination .el-pagination__sizes .el-select__placeholder {
+  font-size: 12.5px;
+  color: #3d4d63;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+/* 该选择器的下拉选项同步 */
+.el-select-dropdown.el-popper .el-select-dropdown__item { font-size: 13px; }
+
+/* 13. 工具栏筛选区（Element Plus 2.8 新版 select 结构）文字统一 13px */
+.toolbar .el-select__wrapper {
+  font-size: 13px;
+  border-radius: 10px;
+}
+.toolbar .el-select__selected-item,
+.toolbar .el-select__placeholder {
+  font-size: 13px;
+  letter-spacing: 0.2px;
+}
+.toolbar .el-select__placeholder { color: #9db4cc; }
+.toolbar .el-range-editor .el-range-input { font-size: 13px; font-variant-numeric: tabular-nums; }
+.toolbar .el-range-editor .el-range-separator { font-size: 12.5px; color: #98a2b3; }
+/* 下拉面板选项统一 13px、悬停淡蓝 */
+.el-select-dropdown__item { font-size: 13px; }
+.el-select-dropdown__item.is-hovering { background: #f0f6ff; }
+.el-select-dropdown__item.is-selected { color: #0094FF; font-weight: 600; }
+
+/* 14. 列表页右上角"新增"主按钮：蓝紫渐变 + 悬停流光上浮 */
+.actions .el-button--primary {
+  border: none;
+  font-weight: 600;
+  letter-spacing: 1px;
+  border-radius: 10px;
+  height: 34px;
+  padding: 0 18px;
+  color: #fff;
+  background: linear-gradient(120deg, #0094FF 0%, #3D8BFF 45%, #8B6FF0 100%);
+  box-shadow: 0 6px 16px rgba(0, 148, 255, 0.32);
+  transition: transform 0.2s ease, box-shadow 0.25s ease, filter 0.25s ease;
+}
+.actions .el-button--primary:hover {
+  transform: translateY(-2px);
+  filter: saturate(1.15) brightness(1.05);
+  box-shadow: 0 10px 24px rgba(0, 148, 255, 0.42), 0 3px 10px rgba(139, 111, 240, 0.3);
+}
+.actions .el-button--primary:active { transform: translateY(0); filter: brightness(0.97); }
+/* 新增/导出等按钮统一间距与圆角 */
+.actions .el-button { border-radius: 9px; }
+
+/* =========================================================
+   全局精致化：语义色 / 加载态 / 入场动效 / 表格细节
+   ========================================================= */
+
+/* 1. 语义色升级为低饱和高级色系（与蓝紫主色更协调） */
+:root {
+  --el-color-success: #12b76a;
+  --el-color-success-light-3: #4bd192;
+  --el-color-success-light-5: #7fe3b6;
+  --el-color-success-light-7: #b2f0d5;
+  --el-color-success-light-8: #cef7e6;
+  --el-color-success-light-9: #e7fbf1;
+  --el-color-success-dark-2: #0e9255;
+  --el-color-warning: #f79009;
+  --el-color-warning-light-3: #f9ad4d;
+  --el-color-warning-light-5: #fbc684;
+  --el-color-warning-light-7: #fdddba;
+  --el-color-warning-light-8: #fee9d3;
+  --el-color-warning-light-9: #fff4e8;
+  --el-color-warning-dark-2: #c67307;
+  --el-color-danger: #f04438;
+  --el-color-danger-light-3: #f47066;
+  --el-color-danger-light-5: #f89a93;
+  --el-color-danger-light-7: #fbc3bf;
+  --el-color-danger-light-8: #fdd9d6;
+  --el-color-danger-light-9: #feeceb;
+  --el-color-danger-dark-2: #c0362d;
+}
+
+/* 2. 加载态：主色 spinner + 轻遮罩 */
+.el-loading-spinner .path { stroke: #0094FF; }
+.el-loading-mask { background-color: rgba(255, 255, 255, 0.72); backdrop-filter: blur(1px); }
+.el-loading-spinner .el-loading-text { color: #667085; font-size: 13px; letter-spacing: 1px; }
+
+/* 3. 内容区入场动效：页头与面板依次轻浮现 */
+.page-header { animation: page-rise-in 0.4s cubic-bezier(0.22, 0.8, 0.32, 1) both; }
+.page .panel { animation: page-rise-in 0.45s cubic-bezier(0.22, 0.8, 0.32, 1) 0.06s both; }
+@keyframes page-rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 4. 表格细节：斑马纹蓝调 + 圆角收口 + 行悬停渐变 */
+.el-table { --el-table-tr-bg-color: #fff; }
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: #ffffff;
+}
+.table-panel .el-table { border-radius: 10px; overflow: hidden; }
+.el-table tbody tr:hover > td.el-table__cell {
+  background: linear-gradient(90deg, #f0f6ff, #f5f9ff);
+}
+.el-table .el-table__empty-block { background: #ffffff; }
+
+/* 5. 面板悬停微交互：轻微提亮描边（列表主体不抢眼） */
+.panel { transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+.panel:hover {
+  border-color: #d5e6f8;
+  box-shadow: 0 4px 18px rgba(20, 60, 140, 0.08);
+}
+
+/* 6. 链接与文字按钮悬停统一主色 */
+.el-button.is-link:hover { color: #0094FF; }
+
+/* =========================================================
+   侧栏精修：指示条 / 图标层级 / 缩进引导 / 箭头适配
+   ========================================================= */
+
+/* 菜单项定位基准（指示条锚点） */
+.el-aside .el-menu-item { position: relative; }
+
+/* 激活项左缘光条：青→紫渐变，微光晕 */
+.el-aside .el-menu-item.is-active::before {
+  content: '';
+  position: absolute; left: -10px; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #0094FF, #8B6FF0);
+  box-shadow: 0 2px 8px rgba(0, 148, 255, 0.4);
+}
+
+/* 图标层级：默认弱、悬停/激活提亮为纯白 */
+.el-aside .el-menu-item .el-icon,
+.el-aside .el-sub-menu__title .el-icon {
+  color: #8fa8c4;
+  transition: color 0.2s ease;
+}
+.el-aside .el-menu-item:hover .el-icon,
+.el-aside .el-menu-item.is-active .el-icon,
+.el-aside .el-sub-menu__title:hover .el-icon,
+.el-aside .el-sub-menu.is-active > .el-sub-menu__title .el-icon { color: #0094FF; }
+
+/* 展开箭头适配深底 */
+.el-aside .el-sub-menu__icon-arrow { color: #9db4cc; }
+.el-aside .el-sub-menu__title:hover .el-sub-menu__icon-arrow,
+.el-aside .el-sub-menu.is-active > .el-sub-menu__title .el-sub-menu__icon-arrow { color: #0094FF; }
+
+/* 二级菜单缩进引导线 */
+.el-aside .el-sub-menu .el-menu { position: relative; }
+.el-aside .el-sub-menu .el-menu .el-menu-item::before {
+  content: '';
+  position: absolute; left: 26px; top: 8px; bottom: 8px;
+  width: 1px;
+  background: #e8eef7;
+}
+.el-aside .el-sub-menu .el-menu .el-menu-item.is-active::before {
+  background: linear-gradient(180deg, #0094FF, #8B6FF0);
+  box-shadow: none;
+}
+
+/* 顶级目录之间的呼吸间距 */
+.el-aside .menu > .el-sub-menu:not(:first-of-type) { margin-top: 6px; }
+
+/* =========================================================
+   列表操作列：默认降噪、悬停行点亮（高级交互细节）
+   ========================================================= */
+.el-table .el-button.is-link { opacity: 0.55; }
+.el-table tbody tr:hover .el-button.is-link,
+.el-table tbody tr:hover > td .el-button.is-link { opacity: 1; }
+.el-table .el-button.is-link { transition: opacity 0.2s ease; }
+
+/* 15. 紧凑密度模式（头像菜单切换，全局记忆） */
+body.ui-compact .el-table td.el-table__cell { padding: 3px 0; }
+body.ui-compact .el-table th.el-table__cell { height: 36px; }
+body.ui-compact .el-table { font-size: 12.5px; }
+body.ui-compact .toolbar { padding: 6px 8px 10px; }
+
+/* 16. 列表面板顶部品牌渐变线（科技感点睛，低调） */
+.panel.table-panel { overflow: hidden; }
+.panel.table-panel::before {
+  content: '';
+  position: absolute; top: 0; left: 20px;
+  width: 120px; height: 2.5px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, #0094FF, #8B6FF0);
+  opacity: 0.75;
+}
+/* 页头标题下加淡色说明线，拉开层次 */
+.page-header { position: relative; padding-bottom: 10px; }
+.page-header::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, #e8eef7, rgba(232, 238, 247, 0.4));
+}
+
+/* 17. 修复：二级激活项的指示条被引导线规则覆盖而拉高，恢复标准尺寸与贴边定位 */
+.el-aside .el-sub-menu .el-menu .el-menu-item.is-active::before {
+  left: -10px;
+  top: 50%; bottom: auto;
+  transform: translateY(-50%);
+  width: 3px; height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #0094FF, #8B6FF0);
+  box-shadow: 0 2px 8px rgba(0, 148, 255, 0.4);
+}
+
+/* 17. 全局表面色统一为亮白 #FFFFFF */
+body { background: #ffffff; }
+.el-main, .el-aside { background-color: #ffffff; }
+
+/* 排课视图TAB与日历面板贴合 */
+.view-tabs { margin-bottom: 10px; }
+.view-tabs .el-tabs__header { margin-bottom: 0; }
+.cal-panel .fc { font-size: 12.5px; }
+.cal-panel .fc .fc-toolbar-title { font-size: 16px; color: #142a44; }
+.cal-panel .fc .fc-button {
+  background: #0094FF; border-color: #0094FF;
+  text-transform: capitalize;
+}
+.cal-panel .fc .fc-button:hover { background: #33aaff; }
+.cal-panel .fc .fc-button-active, .cal-panel .fc .fc-button:disabled {
+  background: linear-gradient(135deg, #0094FF, #7B5BE6) !important;
+  border-color: transparent;
+}
+.cal-panel .fc .fc-event { border-radius: 5px; border: none; cursor: pointer; }
+.cal-panel .fc .fc-daygrid-day-number, .cal-panel .fc .fc-col-header-cell-cushion { color: #475467; }
+.cal-panel .fc .fc-day-today { background: rgba(0, 148, 255, 0.06) !important; }
+
+/* 操作列不折行 */
+.el-table .no-wrap-col .cell { white-space: nowrap; }
+
+/* 合同详情：咨询顾问等文字列轻微弱化 */
+
+/* “更多”操作下拉：圆角/投影/图标项 */
+.more-dropdown.el-popper {
+  border: 1px solid #e4edf7;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(20, 60, 140, 0.14);
+  padding: 5px;
+}
+.more-dropdown .el-dropdown-menu__item {
+  font-size: 13px;
+  border-radius: 7px;
+  padding: 7px 14px;
+  display: flex; align-items: center; gap: 7px;
+  transition: all 0.15s ease;
+}
+.more-dropdown .el-dropdown-menu__item:hover {
+  background: #f0f6ff; color: #0094FF;
+}
+.more-dropdown .el-dropdown-menu__item--divided::before { display: none; }
+
+/* 18. “更多”下拉弹层：彩色图标块 + 双行文字 + 入场动效 */
+.more-dropdown.el-popper {
+  border: 1px solid #e4edf7;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(20, 60, 140, 0.16), 0 2px 8px rgba(20, 60, 140, 0.06);
+  padding: 5px;
+  min-width: 172px;
+}
+.more-dropdown .el-dropdown-menu { padding: 0; }
+.more-dropdown .el-dropdown-menu__item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: 8px;
+  font-size: 13px; color: #344054;
+  line-height: 1.3;
+  transition: background 0.15s ease;
+}
+.more-dropdown .el-dropdown-menu__item:hover {
+  background: #f0f6ff; color: inherit;
+}
+.more-dropdown .mi {
+  width: 24px; height: 24px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: #fff;
+}
+.more-dropdown .mi-blue { background: linear-gradient(135deg, #0094FF, #4FA8FF); }
+.more-dropdown .mi-red  { background: linear-gradient(135deg, #f04438, #f97066); }
+.more-dropdown .mi-txt { display: flex; flex-direction: column; line-height: 1.2; }
+.more-dropdown .mi-txt b { font-weight: 600; font-size: 13px; color: #344054; }
+.more-dropdown .mi-txt i { font-style: normal; font-size: 11px; color: #98a2b3; }
+.more-dropdown .el-dropdown-menu__item:hover .mi-txt b { color: #0094FF; }
+.more-dropdown .el-dropdown-menu__item:hover .mi { opacity: 0.85; }
+.more-dropdown .el-dropdown-menu__item--divided { border-top: 1px solid #f2f6fc; margin-top: 4px; padding-top: 10px; }
+/* 弹层入场动效 */
+.more-dropdown .el-dropdown-menu {
+  animation: more-drop-in 0.18s cubic-bezier(0.22, 0.8, 0.32, 1) both;
+}
+@keyframes more-drop-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* “更多”下拉：编辑项紫色图标块 */
+.more-dropdown .mi-purple { background: linear-gradient(135deg, #8B6FF0, #B18CFF); }

@@ -1,0 +1,5 @@
+/* Tailwind CSS v4 —— 只引入 theme + utilities，跳过 preflight，
+   避免基础样式重置影响 Element Plus 既有页面 */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
