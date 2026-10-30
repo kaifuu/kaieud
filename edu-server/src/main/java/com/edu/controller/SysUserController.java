@@ -36,6 +36,12 @@ public class SysUserController {
     private final com.edu.mapper.EduStudentMapper studentMapper;
     private final com.edu.mapper.EduTeacherMapper teacherMapper;
     private final com.edu.service.DataScopeService dataScopeService;
+    /** 取消"兼任教师"时校验档案是否已被业务引用 */
+    private final com.edu.mapper.EduScheduleMapper scheduleMapper;
+    private final com.edu.mapper.EduEnrollMapper enrollMapper;
+    private final com.edu.mapper.EduConsumeMapper consumeMapper;
+    private final com.edu.mapper.EduEvaluationMapper evaluationMapper;
+    private final com.edu.mapper.EduConsultMapper consultMapper;
 
     @GetMapping("/page")
     public Result<PageResult<Map<String, Object>>> page(@RequestParam(defaultValue = "1") long page,
@@ -67,6 +73,16 @@ public class SysUserController {
                 : studentMapper.selectList(new LambdaQueryWrapper<com.edu.entity.EduStudent>()
                         .in(com.edu.entity.EduStudent::getUserId, stuUserIds))
                 .stream().collect(Collectors.toMap(com.edu.entity.EduStudent::getUserId, s -> s, (a, b) -> a));
+        // 非学生用户合并"兼任教师"标注（有教师档案即可上课、可用教师中心）
+        List<Long> staffUserIds = p.getRecords().stream()
+                .filter(u -> u.getUserType() == null || u.getUserType() != 5)
+                .map(SysUser::getId).collect(Collectors.toList());
+        Map<Long, Long> teacherUserMap = staffUserIds.isEmpty()
+                ? new HashMap<>()
+                : teacherMapper.selectList(new LambdaQueryWrapper<com.edu.entity.EduTeacher>()
+                        .in(com.edu.entity.EduTeacher::getUserId, staffUserIds))
+                .stream().collect(Collectors.toMap(com.edu.entity.EduTeacher::getUserId,
+                        com.edu.entity.EduTeacher::getId, (a, b) -> a));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SysUser u : p.getRecords()) {
             u.setPassword(null);
@@ -81,6 +97,7 @@ public class SysUserController {
             m.put("status", u.getStatus());
             m.put("lastLoginTime", u.getLastLoginTime());
             m.put("createTime", u.getCreateTime());
+            m.put("asTeacher", teacherUserMap.containsKey(u.getId()));
             com.edu.entity.EduStudent st = stuMap.get(u.getId());
             if (st != null) {
                 m.put("grade", st.getGrade());
@@ -122,8 +139,9 @@ public class SysUserController {
     @Log("修改用户")
     public Result<Void> update(@RequestBody SysUser user) {
         user.setPassword(null); // 不通过此接口改密码
-        userMapper.updateById(user);
+        // 先同步档案（取消兼任可能被拒），再更新用户主档，避免半更新
         syncUserProfile(user);
+        userMapper.updateById(user);
         if (user.getRoleIds() != null) {
             userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, user.getId()));
             for (Long roleId : user.getRoleIds()) {
@@ -135,7 +153,7 @@ public class SysUserController {
         return Result.ok();
     }
 
-    /** 按用户类型联动建档：学生 -> edu_student；教师 -> edu_teacher */
+    /** 按用户类型联动建档：学生 -> edu_student；教师 -> edu_teacher（含"兼任教师"勾选） */
     private void createUserProfile(SysUser user) {
         Integer type = user.getUserType();
         if (type == null) return;
@@ -164,27 +182,32 @@ public class SysUserController {
             st.setStatus(1);
             st.setDeleted(0);
             studentMapper.insert(st);
-        } else if (type == 4) {
-            com.edu.entity.EduTeacher t = new com.edu.entity.EduTeacher();
-            t.setTenantId(tenantId);
-            t.setUserId(user.getId());
-            t.setName(user.getRealName());
-            t.setGender(user.getGender() == null ? 1 : user.getGender());
-            t.setPhone(user.getPhone());
-            t.setEmail(user.getEmail());
-            t.setSubject(user.getSubject());
-            t.setTitle(user.getTitle());
-            t.setRateOne2one(user.getRateOne2one());
-            t.setRateClass(user.getRateClass());
-            t.setClassTypes(user.getClassTypes());
-            t.setIntro(user.getIntro());
-            t.setStatus(1);
-            t.setDeleted(0);
-            teacherMapper.insert(t);
+        } else if (type == 4 || Boolean.TRUE.equals(user.getAsTeacher())) {
+            createTeacherProfile(user, tenantId);
         }
     }
 
-    /** 编辑用户时同步联动档案的基础信息 */
+    /** 从用户表单字段创建教师档案（教师账号 / 勾选"兼任教师"的账号共用） */
+    private void createTeacherProfile(SysUser user, Long tenantId) {
+        com.edu.entity.EduTeacher t = new com.edu.entity.EduTeacher();
+        t.setTenantId(tenantId);
+        t.setUserId(user.getId());
+        t.setName(user.getRealName());
+        t.setGender(user.getGender() == null ? 1 : user.getGender());
+        t.setPhone(user.getPhone());
+        t.setEmail(user.getEmail());
+        t.setSubject(user.getSubject());
+        t.setTitle(user.getTitle());
+        t.setRateOne2one(user.getRateOne2one());
+        t.setRateClass(user.getRateClass());
+        t.setClassTypes(StringUtils.hasText(user.getClassTypes()) ? user.getClassTypes() : "2");
+        t.setIntro(user.getIntro());
+        t.setStatus(1);
+        t.setDeleted(0);
+        teacherMapper.insert(t);
+    }
+
+    /** 编辑用户时同步档案；"兼任教师"开关负责教师档案的建立/移除 */
     private void syncUserProfile(SysUser user) {
         Integer type = user.getUserType();
         if (type == null) return;
@@ -199,16 +222,49 @@ public class SysUserController {
                 if (StringUtils.hasText(user.getSchool())) st.setSchool(user.getSchool());
                 studentMapper.updateById(st);
             }
-        } else if (type == 4) {
+        } else {
             com.edu.entity.EduTeacher t = teacherMapper.selectOne(
                     new LambdaQueryWrapper<com.edu.entity.EduTeacher>()
                             .eq(com.edu.entity.EduTeacher::getUserId, user.getId()).last("LIMIT 1"));
-            if (t != null) {
+            boolean wantTeacher = type == 4 || Boolean.TRUE.equals(user.getAsTeacher());
+            if (wantTeacher && t == null) {
+                // 新勾选"兼任教师"：补建教师档案（租户取库中用户主档）
+                SysUser dbUser = userMapper.selectById(user.getId());
+                createTeacherProfile(user, dbUser == null || dbUser.getTenantId() == null ? 1L : dbUser.getTenantId());
+            } else if (wantTeacher) {
+                // 同步基础信息与档案字段（科目/职称/提成/班型/简介）
                 if (StringUtils.hasText(user.getRealName())) t.setName(user.getRealName());
                 if (user.getPhone() != null) t.setPhone(user.getPhone());
+                if (StringUtils.hasText(user.getSubject())) t.setSubject(user.getSubject());
+                if (StringUtils.hasText(user.getTitle())) t.setTitle(user.getTitle());
+                if (user.getRateOne2one() != null) t.setRateOne2one(user.getRateOne2one());
+                if (user.getRateClass() != null) t.setRateClass(user.getRateClass());
+                if (StringUtils.hasText(user.getClassTypes())) t.setClassTypes(user.getClassTypes());
+                if (StringUtils.hasText(user.getIntro())) t.setIntro(user.getIntro());
                 teacherMapper.updateById(t);
+            } else if (t != null) {
+                // 取消兼任：教师档案已被业务引用则拒绝，避免排课/消课记录失去归属
+                removeTeacherProfile(t);
             }
         }
+    }
+
+    /** 取消"兼任教师"：无排课/报名/消课/评价/咨询引用时软删教师档案 */
+    private void removeTeacherProfile(com.edu.entity.EduTeacher t) {
+        Long tid = t.getId();
+        long refs = scheduleMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduSchedule>()
+                        .eq(com.edu.entity.EduSchedule::getTeacherId, tid))
+                + enrollMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduEnroll>()
+                        .eq(com.edu.entity.EduEnroll::getTeacherId, tid))
+                + consumeMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduConsume>()
+                        .eq(com.edu.entity.EduConsume::getTeacherId, tid))
+                + evaluationMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduEvaluation>()
+                        .eq(com.edu.entity.EduEvaluation::getTeacherId, tid))
+                + consultMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduConsult>()
+                        .eq(com.edu.entity.EduConsult::getTeacherId, tid));
+        if (refs > 0) throw new com.edu.common.exception.BizException(
+                "该账号的教师档案已有排课/报名/消课等业务记录，不能取消兼任教师");
+        teacherMapper.deleteById(tid); // @TableLogic 软删，登录时不再解析档案
     }
 
     @DeleteMapping("/{id}")
@@ -256,10 +312,12 @@ public class SysUserController {
                 m.put("tags", st.getTags());
                 m.put("address", st.getAddress());
             }
-        } else if (type != null && type == 4) {
+        } else if (type != null) {
+            // 教师档案回显：教师账号，或已开启"兼任教师"的其他非学生账号
             com.edu.entity.EduTeacher t = teacherMapper.selectOne(
                     new LambdaQueryWrapper<com.edu.entity.EduTeacher>()
                             .eq(com.edu.entity.EduTeacher::getUserId, id).last("LIMIT 1"));
+            m.put("asTeacher", t != null);
             if (t != null) {
                 m.put("subject", t.getSubject());
                 m.put("title", t.getTitle());

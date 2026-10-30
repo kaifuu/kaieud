@@ -223,13 +223,13 @@ onMounted(() => dictStore.load(true))
   width: 0; opacity: 0; overflow: hidden; font-size: 13px;
   transition: all 0.2s ease; cursor: pointer;
 }
-.ti-edit { color: #0094FF; }
+.ti-edit { color: #155EEF; }
 .ti-del { color: #f04438; }
 .type-item:hover .ti-edit,
 .type-item:hover .ti-del { width: 15px; opacity: 1; }
 .type-item:hover { background: #f0f6ff; }
 .type-item.active {
-  background: linear-gradient(90deg, #0094FF, #7B5BE6);
+  background: linear-gradient(90deg, #155EEF, #5B8DEF);
   color: #fff; font-weight: 600;
 }
 .type-item.active .el-tag { --el-tag-bg-color: rgba(255,255,255,0.2); --el-tag-text-color: #fff; --el-tag-border-color: transparent; }

@@ -45,7 +45,7 @@
 ```
 ├── sql/                  # 建库建表 + 种子数据 + 增量升级脚本
 │   ├── edu_course.sql    # 基础库（V1 全量）
-│   └── upgrade_v2*.sql   # V2 ~ V2.3 增量（套餐/合同/消课/成本/校区/教室）
+│   └── upgrade_v2*.sql   # V2 ~ V2.6 增量（套餐/合同/消课/成本/校区/教室/排课历史/旷课审批/课时管理）
 ├── edu-server/           # Spring Boot 后端（端口 8080）
 └── edu-web/              # Vue3 前端（端口 5173，代理 /api → 8080）
 ```
@@ -62,6 +62,11 @@ mysql -uroot -p edu_course < sql/upgrade_v2.sql
 mysql -uroot -p edu_course < sql/upgrade_v2.1.sql
 mysql -uroot -p edu_course < sql/upgrade_v2.2.sql
 mysql -uroot -p edu_course < sql/upgrade_v2.3.sql
+mysql -uroot -p edu_course < sql/upgrade_v2.4.sql
+mysql -uroot -p edu_course < sql/upgrade_v2.5.sql
+mysql -uroot -p edu_course < sql/upgrade_v2.6.sql
+mysql -uroot -p edu_course < sql/upgrade_v2.7.sql
+mysql -uroot -p edu_course < sql/upgrade_v2.8.sql
 ```
 
 连接配置在 `edu-server/src/main/resources/application.yml`（默认 root / root，按需修改）。

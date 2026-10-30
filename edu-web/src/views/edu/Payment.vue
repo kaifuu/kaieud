@@ -63,7 +63,7 @@
         </el-form-item>
         <el-form-item label="收款凭证">
           <input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="onVoucher" />
-          <span v-if="form.voucherUrl" style="color:#0094FF;font-size:12px">已上传</span>
+          <span v-if="form.voucherUrl" style="color:#155EEF;font-size:12px">已上传</span>
         </el-form-item>
         <el-form-item label="实缴金额" required><el-input-number v-model="form.amount" :min="0" :precision="2" /></el-form-item>
         <el-form-item label="优惠金额"><el-input-number v-model="form.discountAmount" :min="0" :precision="2" /></el-form-item>

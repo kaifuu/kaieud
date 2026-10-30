@@ -72,7 +72,7 @@ const filteredIcons = computed(() => {
   color: #475467; cursor: pointer;
   transition: all 0.15s ease;
 }
-.icon-cell:hover { background: #f0f6ff; color: #0094FF; }
-.icon-cell.active { background: #0094FF; color: #fff; }
+.icon-cell:hover { background: #f0f6ff; color: #155EEF; }
+.icon-cell.active { background: #155EEF; color: #fff; }
 .icon-empty { grid-column: 1 / -1; text-align: center; color: #98a2b3; font-size: 12px; padding: 10px 0; }
 </style>

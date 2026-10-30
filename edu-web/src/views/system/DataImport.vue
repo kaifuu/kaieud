@@ -20,7 +20,7 @@
       <div v-else-if="step === 1">
         <input type="file" accept=".xlsx,.xls" @change="onFile" style="margin-bottom: 16px" />
         <div v-if="parsedRows.length" style="margin-bottom: 16px">
-          解析出 <b style="color:#0094FF">{{ parsedRows.length }}</b> 条学员数据，预览前5条：
+          解析出 <b style="color:#155EEF">{{ parsedRows.length }}</b> 条学员数据，预览前5条：
           <el-table :data="parsedRows.slice(0, 5)" size="small" stripe style="margin-top: 8px">
             <el-table-column prop="name" label="姓名" />
             <el-table-column prop="gender" label="性别">

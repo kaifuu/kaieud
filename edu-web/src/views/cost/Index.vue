@@ -175,7 +175,7 @@ onMounted(async () => {
 
 <style scoped>
 .d-num { font-size: 26px; font-weight: 700;
-  background: linear-gradient(135deg, #1d2939 20%, #0094FF 90%);
+  background: linear-gradient(135deg, #1d2939 20%, #155EEF 90%);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .d-suffix { font-size: 14px; }
 .d-label { font-size: 13px; color: #8fa8c4; }

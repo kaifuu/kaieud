@@ -82,7 +82,7 @@ onMounted(load)
   border: 1px solid #e4eaf2;
   display: flex; align-items: center; justify-content: center;
   font-size: 30px; font-weight: 800; color: #fff;
-  background: linear-gradient(135deg, #0094FF, #8B6FF0);
+  background: linear-gradient(135deg, #155EEF, #5B8DEF);
 }
 .logo-empty { content: 'E'; }
 .logo-ops { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }

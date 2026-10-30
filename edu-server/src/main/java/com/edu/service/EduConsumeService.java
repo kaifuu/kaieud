@@ -39,6 +39,19 @@ public class EduConsumeService {
     /** 消课：绑定合同，按 购买->赠送 顺序扣减 */
     @Transactional
     public EduConsume consume(Long contractId, Long scheduleId, BigDecimal hours, Integer consumeType, Long teacherId) {
+        return consume(contractId, scheduleId, hours, consumeType, teacherId, "消课");
+    }
+
+    /** 消课（带扣课来源：消课/签到消课/到课/旷课） */
+    @Transactional
+    public EduConsume consume(Long contractId, Long scheduleId, BigDecimal hours, Integer consumeType, Long teacherId, String source) {
+        return consume(contractId, scheduleId, hours, consumeType, teacherId, source, null);
+    }
+
+    /** 消课（带扣课来源与扣课说明） */
+    @Transactional
+    public EduConsume consume(Long contractId, Long scheduleId, BigDecimal hours, Integer consumeType,
+                              Long teacherId, String source, String remark) {
         EduContract contract = contractMapper.selectById(contractId);
         if (contract == null || contract.getDeleted() == 1) throw new BizException("合同不存在");
         if (contract.getStatus() == 3) throw new BizException("合同已退费，课时已冻结，不允许消课");
@@ -73,6 +86,8 @@ public class EduConsumeService {
         c.setBeforeHours(before);
         c.setAfterHours(before.subtract(hours));
         c.setConsumeType(consumeType == null ? 0 : consumeType);
+        c.setSource(source == null ? "消课" : source);
+        c.setRemark(remark);
         c.setOperator(operatorName());
         c.setCanceled(0);
         c.setDeleted(0);
@@ -91,6 +106,18 @@ public class EduConsumeService {
      */
     @Transactional
     public int signBySchedule(Long scheduleId, BigDecimal hours) {
+        return signBySchedule(scheduleId, hours, "签到消课");
+    }
+
+    /** 同上，带扣课来源（到课/旷课等，写入课时管理台账） */
+    @Transactional
+    public int signBySchedule(Long scheduleId, BigDecimal hours, String source) {
+        return signBySchedule(scheduleId, hours, source, null);
+    }
+
+    /** 同上，带扣课来源与扣课说明（扣减少于应扣节数时记录原因） */
+    @Transactional
+    public int signBySchedule(Long scheduleId, BigDecimal hours, String source, String remark) {
         com.edu.entity.EduSchedule sch = scheduleMapper.selectById(scheduleId);
         if (sch == null) throw new BizException("排课记录不存在");
         java.util.List<Long> contractIds = new java.util.ArrayList<>();
@@ -112,7 +139,7 @@ public class EduConsumeService {
         if (contractIds.isEmpty()) throw new BizException("未找到可消课的生效合同，请先为学员签订合同");
         int count = 0;
         for (Long cid : contractIds) {
-            consume(cid, scheduleId, hours, 0, null);
+            consume(cid, scheduleId, hours, 0, null, source, remark);
             count++;
         }
         return count;
@@ -190,6 +217,7 @@ public class EduConsumeService {
 
     private String operatorName() {
         com.edu.security.LoginUser lu = AuthContext.get();
-        return lu == null ? "system" : lu.getRealName();
+        // 操作人统一记录登录账号用户名（与排课操作日志口径一致）
+        return lu == null ? "system" : lu.getUsername();
     }
 }

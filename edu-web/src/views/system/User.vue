@@ -51,11 +51,13 @@
           <el-table-column v-if="cols.parentPhone" prop="parentPhone" label="家长电话" width="135" />
           <el-table-column v-if="cols.advisor" prop="advisor" label="归属顾问" width="100" />
         </template>
-        <el-table-column v-if="cols.userType && (tab === 'staff' || tab === 'system')" label="类型" width="110" sortable="custom">
+        <el-table-column v-if="cols.userType && (tab === 'staff' || tab === 'system')" label="类型" width="150" sortable="custom">
           <template #default="{ row }">
             <el-tag size="small" :type="row.userType === 1 ? 'danger' : 'primary'" effect="light">
               {{ typeNames[row.userType] }}
             </el-tag>
+            <el-tag v-if="tab === 'staff' && row.asTeacher" size="small" type="warning" effect="light"
+                    style="margin-left: 4px">兼教师</el-tag>
           </template>
         </el-table-column>
         <el-table-column v-if="cols.phone" prop="phone" label="手机号" width="135" />
@@ -114,6 +116,11 @@
             <el-option v-for="(n, k) in typeNames" :key="k" :label="n" :value="Number(k)" />
           </el-select>
         </el-form-item>
+        <!-- 兼任教师：非教师/学生账号开启后创建教师档案，可上课、可用教师中心 -->
+        <el-form-item v-if="canAdjunct" label="兼任教师">
+          <el-switch v-model="form.asTeacher" />
+          <span class="u-tip" style="margin-left: 8px">开启后创建教师档案，可排课上课</span>
+        </el-form-item>
         <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="邮箱"><el-input v-model="form.email" /></el-form-item>
 
@@ -131,8 +138,8 @@
           <el-form-item label="家庭住址"><el-input v-model="form.address" /></el-form-item>
         </template>
 
-        <!-- 教师信息（用户类型=兼职老师） -->
-        <template v-else-if="Number(form.userType) === 4">
+        <!-- 教师信息（教师账号 或 开启"兼任教师"的账号） -->
+        <template v-else-if="teacherSection">
           <el-divider content-position="left">教师信息</el-divider>
           <el-form-item label="科目"><el-input v-model="form.subject" /></el-form-item>
           <el-form-item label="职称"><el-input v-model="form.title" /></el-form-item>
@@ -269,16 +276,30 @@ function fmt(t) { return t ? String(t).replace('T', ' ').slice(0, 16) : '-' }
 const visible = ref(false)
 const saving = ref(false)
 const form = ref({})
+// 兼任教师开关可见：已选定非教师/学生的用户类型（教师天然有档案，学生不授课）
+const canAdjunct = computed(() => {
+  const t = form.value.userType
+  return t !== null && t !== '' && t !== undefined && ![4, 5].includes(Number(t))
+})
+// 教师信息区块可见：教师账号 或 勾选了兼任教师
+const teacherSection = computed(() => Number(form.value.userType) === 4 || !!form.value.asTeacher)
 const detailVisible = ref(false)
 const detailRow = ref({})
-const detailFields = [
-  { prop: 'avatarUrl', label: '照片' },
-  { prop: 'username', label: '用户名' }, { prop: 'realName', label: '姓名' },
-  { prop: 'userType', label: '类型', map: { 1: '超级管理员', 2: '教管人员', 3: '班主任', 4: '教师', 5: '学生' } },
-  { prop: 'phone', label: '手机号' }, { prop: 'email', label: '邮箱' },
-  { prop: 'status', label: '状态', map: { 1: '启用', 0: '停用' } },
-  { prop: 'lastLoginTime', label: '最近登录' }
-]
+const detailFields = computed(() => {
+  const fields = [
+    { prop: 'avatarUrl', label: '照片' },
+    { prop: 'username', label: '用户名' }, { prop: 'realName', label: '姓名' },
+    { prop: 'userType', label: '类型', map: typeNames }
+  ]
+  if (tab.value === 'staff' || tab.value === 'teacher')
+    fields.push({ prop: 'asTeacher', label: '教师档案', map: { true: '已关联（可上课）', false: '未关联' } })
+  fields.push(
+    { prop: 'phone', label: '手机号' }, { prop: 'email', label: '邮箱' },
+    { prop: 'status', label: '状态', map: { 1: '启用', 0: '停用' } },
+    { prop: 'lastLoginTime', label: '最近登录' }
+  )
+  return fields
+})
 const viewerVisible = ref(false)
 const viewerUrl = ref('')
 function openPhotoViewer(url) {
@@ -305,27 +326,26 @@ async function openEdit(row) {
     const roleIds = await api.userRoles(row.id)
     form.value = { ...row, roleIds, password: undefined }
     avatarPreview.value = row.avatarUrl || (await fetchAvatarUrl(row.id)) || ''
-    // 编辑时回填学生/教师档案字段
-    if ([4, 5].includes(Number(row.userType))) {
-      const p = (await api.userProfile(row.id)) || {}
-      form.value.birthDate = p.birthDate
-      form.value.grade = p.grade
-      form.value.school = p.school
-      form.value.parentName = p.parentName
-      form.value.parentPhone = p.parentPhone
-      form.value.backupPhone = p.backupPhone
-      form.value.advisor = p.advisor
-      form.value.tags = p.tags
-      form.value.address = p.address
-      form.value.subject = p.subject
-      form.value.title = p.title
-      form.value.rateOne2one = p.rateOne2one
-      form.value.rateClass = p.rateClass
-      form.value.intro = p.intro
-      form.value.classTypes = p.classTypes
-    }
+    // 编辑时回填档案字段（学生/教师/兼任教师状态）
+    const p = (await api.userProfile(row.id)) || {}
+    form.value.birthDate = p.birthDate
+    form.value.grade = p.grade
+    form.value.school = p.school
+    form.value.parentName = p.parentName
+    form.value.parentPhone = p.parentPhone
+    form.value.backupPhone = p.backupPhone
+    form.value.advisor = p.advisor
+    form.value.tags = p.tags
+    form.value.address = p.address
+    form.value.subject = p.subject
+    form.value.title = p.title
+    form.value.rateOne2one = p.rateOne2one
+    form.value.rateClass = p.rateClass
+    form.value.intro = p.intro
+    form.value.classTypes = p.classTypes
+    form.value.asTeacher = !!p.asTeacher
   } else {
-    form.value = { status: 1, roleIds: [], userType: null }
+    form.value = { status: 1, roleIds: [], userType: null, asTeacher: false }
     avatarPreview.value = ''
   }
   classTypeArr.value = (form.value.classTypes || '2').split(',').filter(Boolean)
@@ -334,6 +354,10 @@ async function openEdit(row) {
 const avatarPreview = ref('')
 const pendingPhoto = ref(null) // 新增用户时暂存的照片文件，随保存统一上传
 const classTypeArr = ref(['2'])
+// 切到学生类型时复位兼任开关（教师类型天然有档案，无需开关）
+watch(() => form.value.userType, (t) => {
+  if ([4, 5].includes(Number(t))) form.value.asTeacher = false
+})
 function onPhotoUploaded(url) {
   avatarPreview.value = url
   load()
@@ -349,7 +373,8 @@ async function save() {
   const f = form.value
   saving.value = true
   try {
-    if (Number(f.userType) === 4) f.classTypes = (f.classTypeArr || []).join(',')
+    // 班型取独立 ref classTypeArr（修复原先误读 f.classTypeArr 恒为空、保存即清空班型的问题）
+    if (Number(f.userType) === 4 || f.asTeacher) f.classTypes = (classTypeArr.value || []).join(',')
     else delete f.classTypes
     if (f.id) {
       await api.userUpdate(f)
@@ -431,7 +456,7 @@ onMounted(async () => {
   width: 64px; height: 64px; border-radius: 50%;
   object-fit: cover; display: block;
   border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 148, 255, 0.35), 0 4px 12px rgba(20, 60, 140, 0.15);
+  box-shadow: 0 0 0 1px rgba(21, 94, 239, 0.35), 0 4px 12px rgba(20, 60, 140, 0.15);
   cursor: zoom-in;
 }
 /* 列表照片：28px 紧凑圆形，不撑行高 */

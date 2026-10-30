@@ -65,6 +65,9 @@ public class SysUser {
     private String classTypes;
     @TableField(exist = false)
     private String intro;
+    /** 兼任教师（非表字段）：非教师/学生类型账号勾选后创建教师档案，可上课、可用教师中心 */
+    @TableField(exist = false)
+    private Boolean asTeacher;
 
     /** 角色ID集合(非表字段) */
     @TableField(exist = false)

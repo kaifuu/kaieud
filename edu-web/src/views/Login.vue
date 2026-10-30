@@ -13,7 +13,7 @@
             <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stop-color="#BFE9FF" stop-opacity="0.9"/>
               <stop offset="55%" stop-color="#4FC3FF" stop-opacity="0.35"/>
-              <stop offset="100%" stop-color="#0094FF" stop-opacity="0"/>
+              <stop offset="100%" stop-color="#155EEF" stop-opacity="0"/>
             </radialGradient>
             <linearGradient id="capGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#FFFFFF"/>
@@ -63,21 +63,21 @@
             <g transform="translate(320 76)">
               <rect x="-17" y="-17" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.95"/>
               <path d="M-9 -3 C -5 -6, -2 -6, 0 -4 C 2 -6, 5 -6, 9 -3 L 9 6 C 5 4, 2 4, 0 6 C -2 4, -5 4, -9 6 Z"
-                    fill="none" stroke="#0094FF" stroke-width="2"/>
+                    fill="none" stroke="#155EEF" stroke-width="2"/>
             </g>
           </g>
           <g class="spin-slow2">
             <g transform="translate(320 420)">
               <rect x="-17" y="-17" width="34" height="34" rx="9" fill="#FFFFFF" opacity="0.95"/>
-              <rect x="-9" y="-8" width="18" height="16" rx="3" fill="none" stroke="#7B5BE6" stroke-width="2"/>
-              <line x1="-9" y1="-3" x2="9" y2="-3" stroke="#7B5BE6" stroke-width="2"/>
+              <rect x="-9" y="-8" width="18" height="16" rx="3" fill="none" stroke="#5B8DEF" stroke-width="2"/>
+              <line x1="-9" y1="-3" x2="9" y2="-3" stroke="#5B8DEF" stroke-width="2"/>
             </g>
           </g>
           <g class="spin-fast">
             <g transform="translate(208 248)">
               <rect x="-17" y="-17" width="34" height="34" rx="17" fill="#FFFFFF" opacity="0.95"/>
-              <circle cx="0" cy="-4" r="5" fill="#0094FF"/>
-              <path d="M-7 9 C -7 3, -3 1, 0 1 C 3 1, 7 3, 7 9" fill="#0094FF"/>
+              <circle cx="0" cy="-4" r="5" fill="#155EEF"/>
+              <path d="M-7 9 C -7 3, -3 1, 0 1 C 3 1, 7 3, 7 9" fill="#155EEF"/>
             </g>
           </g>
 
@@ -97,16 +97,16 @@
           <g class="float-a">
             <rect x="66" y="128" width="118" height="64" rx="12" fill="#FFFFFF" opacity="0.92"/>
             <polyline points="82,172 98,152 112,160 132,142 152,150 168,140"
-                      stroke="#0094FF" stroke-width="3" fill="none" stroke-linecap="round"/>
+                      stroke="#155EEF" stroke-width="3" fill="none" stroke-linecap="round"/>
             <circle cx="168" cy="140" r="4" fill="#FFB648"/>
             <text x="82" y="150" font-size="10" fill="#5B9BD0" font-family="sans-serif">+12.6%</text>
           </g>
           <g class="float-b">
             <rect x="470" y="368" width="126" height="58" rx="12" fill="#FFFFFF" opacity="0.92"/>
             <rect x="484" y="392" width="12" height="22" rx="3" fill="#8FCFF7"/>
-            <rect x="502" y="384" width="12" height="30" rx="3" fill="#0094FF"/>
-            <rect x="520" y="378" width="12" height="36" rx="3" fill="#8B6FF0"/>
-            <rect x="538" y="390" width="12" height="24" rx="3" fill="#0094FF" opacity="0.55"/>
+            <rect x="502" y="384" width="12" height="30" rx="3" fill="#155EEF"/>
+            <rect x="520" y="378" width="12" height="36" rx="3" fill="#5B8DEF"/>
+            <rect x="538" y="390" width="12" height="24" rx="3" fill="#155EEF" opacity="0.55"/>
             <text x="558" y="404" font-size="10" fill="#5B9BD0" font-family="sans-serif">周课时</text>
           </g>
         </svg>
@@ -170,6 +170,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import api from '../api'
 import { useUserStore } from '../store/user'
 import { buildDynamicRoutes } from '../router'
 
@@ -220,7 +221,7 @@ const drawCaptcha = () => {
   ctx.fillStyle = '#EAF5FF'
   ctx.fillRect(0, 0, 112, 40)
   for (let i = 0; i < 2; i++) {
-    ctx.strokeStyle = `rgba(0,148,255,${0.15 + Math.random() * 0.1})`
+    ctx.strokeStyle = `rgba(21,94,239,${0.15 + Math.random() * 0.1})`
     ctx.lineWidth = 1
     ctx.beginPath()
     ctx.moveTo(0, 8 + Math.random() * 24)
@@ -228,7 +229,7 @@ const drawCaptcha = () => {
     ctx.stroke()
   }
   for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = `rgba(0,148,255,${0.15 + Math.random() * 0.2})`
+    ctx.fillStyle = `rgba(21,94,239,${0.15 + Math.random() * 0.2})`
     ctx.beginPath()
     ctx.arc(Math.random() * 112, Math.random() * 40, 1.2, 0, Math.PI * 2)
     ctx.fill()
@@ -238,7 +239,7 @@ const drawCaptcha = () => {
     ctx.translate(18 + i * 25, 27 + (Math.random() * 4 - 2))
     ctx.rotate((Math.random() * 24 - 12) * Math.PI / 180)
     ctx.font = 'bold 23px Consolas, monospace'
-    ctx.fillStyle = ['#0094FF', '#2FA8FF', '#0072CC', '#57B5FF'][Math.floor(Math.random() * 4)]
+    ctx.fillStyle = ['#155EEF', '#2FA8FF', '#0072CC', '#57B5FF'][Math.floor(Math.random() * 4)]
     ctx.textAlign = 'center'
     ctx.fillText(code[i], 0, 0)
     ctx.restore()
@@ -282,7 +283,7 @@ onMounted(() => {
   background:
     radial-gradient(1100px 700px at 12% 15%, rgba(200, 185, 255, 0.4) 0%, transparent 55%),
     radial-gradient(900px 700px at 88% 85%, rgba(70, 50, 190, 0.45) 0%, transparent 60%),
-    linear-gradient(125deg, #0080F0 0%, #3D7BFA 42%, #6E5BE8 78%, #8B6FF0 100%);
+    linear-gradient(125deg, #0080F0 0%, #3D7BFA 42%, #6E5BE8 78%, #5B8DEF 100%);
 }
 .fade-in { animation: page-fade 0.7s ease-out both; }
 @keyframes page-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -362,7 +363,7 @@ onMounted(() => {
   border-radius: 20px;
   background:
     linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)) padding-box,
-    linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(139, 111, 240, 0.4) 50%, rgba(255, 255, 255, 0.6)) border-box;
+    linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(91, 141, 239, 0.4) 50%, rgba(255, 255, 255, 0.6)) border-box;
   border: 1.2px solid transparent;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -383,7 +384,7 @@ onMounted(() => {
   width: 46px; height: 46px; border-radius: 13px;
   display: flex; align-items: center; justify-content: center;
   font-size: 24px; font-weight: 800; color: #fff;
-  background: linear-gradient(135deg, #0094FF, #8B6FF0);
+  background: linear-gradient(135deg, #155EEF, #5B8DEF);
   box-shadow: 0 6px 18px rgba(110, 91, 232, 0.45);
 }
 .card-head h2 { margin: 0; font-size: 21px; color: #142a44; letter-spacing: 1px; }
@@ -400,7 +401,7 @@ onMounted(() => {
   box-shadow:
     0 0 0 1.5px #6E5BE8 inset,
     0 0 0 4px rgba(110, 91, 232, 0.1),
-    0 0 14px rgba(0, 148, 255, 0.2);
+    0 0 14px rgba(21, 94, 239, 0.2);
 }
 .login-card :deep(.el-input__prefix .el-icon) { color: #6ea6d8; }
 .login-card :deep(.el-input__inner) { color: #142a44; }
@@ -410,13 +411,13 @@ onMounted(() => {
   flex-shrink: 0; width: 112px; height: 40px; border-radius: 10px;
   cursor: pointer; transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
-.captcha-canvas:hover { box-shadow: 0 0 10px rgba(0, 148, 255, 0.3); transform: scale(1.02); }
+.captcha-canvas:hover { box-shadow: 0 0 10px rgba(21, 94, 239, 0.3); transform: scale(1.02); }
 
 /* 登录按钮：hover轻微放大 + 柔光扩散 + 流光平移 */
 .login-btn {
   width: 100%; margin-top: 4px; border: none; border-radius: 10px;
   font-size: 16px; font-weight: 600; letter-spacing: 6px; color: #fff;
-  background: linear-gradient(110deg, #0080E8 0%, #0094FF 28%, #7B5BE6 55%, #0094FF 78%, #0080E8 100%);
+  background: linear-gradient(110deg, #0080E8 0%, #155EEF 28%, #5B8DEF 55%, #155EEF 78%, #0080E8 100%);
   background-size: 220% 100%;
   box-shadow: 0 8px 22px rgba(0, 120, 220, 0.4);
   transition: transform 0.2s ease, box-shadow 0.25s ease, background-position 0.6s ease;

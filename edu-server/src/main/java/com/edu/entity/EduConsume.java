@@ -27,6 +27,10 @@ public class EduConsume {
     private BigDecimal afterHours;
     /** 0正常上课 1补课 */
     private Integer consumeType;
+    /** 扣课来源：消课/签到消课/到课/旷课 */
+    private String source;
+    /** 扣课说明（扣减节数少于本课次应扣节数时填写原因） */
+    private String remark;
     private String operator;
     private Integer canceled;
     private LocalDateTime cancelTime;

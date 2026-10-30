@@ -90,13 +90,13 @@ async function upload({ file }) {
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 .upload-area:hover {
-  border-color: #0094FF;
+  border-color: #155EEF;
   background: #f5f9ff;
 }
 .plus-icon { color: #9db4cc; transition: color 0.2s ease; }
 .plus-text { font-size: 11px; color: #9db4cc; letter-spacing: 1px; }
 .upload-area:hover .plus-icon,
-.upload-area:hover .plus-text { color: #0094FF; }
+.upload-area:hover .plus-text { color: #155EEF; }
 
 /* 已有照片：铺满 + 悬停更换遮罩 */
 .upload-area.filled { border-style: solid; border-color: #e4eaf2; }

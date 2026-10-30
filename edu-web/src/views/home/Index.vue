@@ -61,15 +61,15 @@ const teacherRef = ref()
 const schoolRef = ref()
 
 const cards = computed(() => [
-  { label: '在读学生', value: stat.value.studyingCount, icon: 'Avatar', grad: 'linear-gradient(135deg,#0094FF,#33B0FF)' },
-  { label: '在职教师', value: stat.value.teacherCount, icon: 'UserFilled', grad: 'linear-gradient(135deg,#0094FF,#8B6FF0)' },
-  { label: '开课班级', value: stat.value.clazzCount, icon: 'Files', grad: 'linear-gradient(135deg,#7B5BE6,#B18CFF)' },
-  { label: '缴费总收入(元)', value: stat.value.totalRevenue, icon: 'Money', grad: 'linear-gradient(135deg,#8B6FF0,#C0A8FF)' }
+  { label: '在读学生', value: stat.value.studyingCount, icon: 'Avatar', grad: 'linear-gradient(135deg,#155EEF,#33B0FF)' },
+  { label: '在职教师', value: stat.value.teacherCount, icon: 'UserFilled', grad: 'linear-gradient(135deg,#155EEF,#5B8DEF)' },
+  { label: '开课班级', value: stat.value.clazzCount, icon: 'Files', grad: 'linear-gradient(135deg,#5B8DEF,#B18CFF)' },
+  { label: '缴费总收入(元)', value: stat.value.totalRevenue, icon: 'Money', grad: 'linear-gradient(135deg,#5B8DEF,#C0A8FF)' }
 ])
 
 // 主色渐变
-const BLUE = '#0094FF'
-const PURPLE = '#8B6FF0'
+const BLUE = '#155EEF'
+const PURPLE = '#5B8DEF'
 const axisStyle = {
   axisLine: { lineStyle: { color: '#d4dde9' } },
   axisLabel: { color: '#667085' },
@@ -92,8 +92,8 @@ function renderCharts() {
       itemStyle: { color: BLUE },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(0,148,255,0.35)' },
-          { offset: 1, color: 'rgba(0,148,255,0.02)' }
+          { offset: 0, color: 'rgba(21,94,239,0.35)' },
+          { offset: 1, color: 'rgba(21,94,239,0.02)' }
         ])
       }
     }]
@@ -105,7 +105,7 @@ function renderCharts() {
   c2.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} 课时 ({d}%)' },
     legend: { bottom: 0, type: 'scroll', textStyle: { color: '#667085' } },
-    color: ['#0094FF', '#4FA8FF', '#7B5BE6', '#8B6FF0', '#B18CFF', '#C9B8FF'],
+    color: ['#155EEF', '#4FA8FF', '#5B8DEF', '#5B8DEF', '#B18CFF', '#C9B8FF'],
     series: [{
       type: 'pie', radius: ['42%', '68%'], center: ['50%', '44%'],
       itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
@@ -176,12 +176,12 @@ onBeforeUnmount(() => {
 }
 .stat-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 10px 26px rgba(0, 148, 255, 0.16);
+  box-shadow: 0 10px 26px rgba(21, 94, 239, 0.16);
 }
 .s-icon {
   width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; box-shadow: 0 6px 14px rgba(0, 148, 255, 0.28);
+  color: #fff; box-shadow: 0 6px 14px rgba(21, 94, 239, 0.28);
 }
 .s-num { font-size: 24px; font-weight: 700; color: #142a44; line-height: 1.1; }
 .s-label { font-size: 13px; color: #8fa8c4; margin-top: 4px; }

@@ -306,91 +306,84 @@ const changePwd = async () => {
 .layout { height: 100vh; height: 100dvh; }
 .right { min-width: 0; }
 
-/* ===== 侧栏：深蓝→紫渐变（登录页同款色系） ===== */
+/* ===== 侧栏：亮蓝底（Dify 风），白色胶囊激活项 ===== */
 .aside {
   position: relative;
   overflow: hidden;
   transition: width 0.25s ease;
-  background: #ffffff;
-  border-right: 1px solid #e8eef7;
+  background: linear-gradient(180deg, #2264ee 0%, #1748c9 100%);
   display: flex;
   flex-direction: column;
 }
-/* 底部装饰光斑（淡紫，低透明度） */
+/* 底部柔光斑：半透白，增加层次 */
 .aside-glow {
   position: absolute; left: -60px; bottom: -80px;
-  width: 240px; height: 240px; border-radius: 50%;
-  background: rgba(0, 148, 255, 0.10);
+  width: 260px; height: 260px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
   filter: blur(50px);
   pointer-events: none;
 }
 
-/* Logo区：渐变角标 + 白色字标 */
+/* Logo区：白色字标 + 半透白分隔线 */
 .logo {
   display: flex; align-items: center; justify-content: flex-start; gap: 10px;
   padding-left: 18px;
   white-space: nowrap;
   padding: 20px 0 16px;
-  border-bottom: 1px solid #e8eef7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 .logo-img {
   width: 34px; height: 34px; border-radius: 8px;
   object-fit: contain; display: block;
   background: #fff; padding: 2px;
-  box-shadow: 0 2px 8px rgba(0, 148, 255, 0.25);
+  box-shadow: 0 2px 8px rgba(9, 30, 66, 0.25);
 }
 .logo-mark {
   width: 34px; height: 34px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   font-size: 19px; font-weight: 800; color: #fff;
-  background: linear-gradient(135deg, #0094FF, #8B6FF0);
-  box-shadow: 0 4px 12px rgba(0, 148, 255, 0.4);
+  background: rgba(255, 255, 255, 0.18);
 }
-.logo-text { color: #142a44; font-size: 17px; font-weight: 700; letter-spacing: 2px; }
+.logo-text { color: #ffffff; font-size: 17px; font-weight: 700; letter-spacing: 2px; }
 
-/* ===== 菜单：透明底，圆角悬浮项，渐变激活态 ===== */
+/* ===== 菜单：亮蓝底 + 圆角项 + 白色胶囊激活态 ===== */
 .aside.collapsed .logo { justify-content: center; padding-left: 0; }
 .menu { flex: 1; border-right: none; background: transparent; padding: 8px 10px; overflow-y: auto; }
 .menu :deep(.el-menu-item),
 .menu :deep(.el-sub-menu__title) {
-  height: 42px; line-height: 42px;
-  margin: 3px 0; border-radius: 10px;
-  color: #475467;
+  height: 40px; line-height: 40px;
+  margin: 2px 0; border-radius: 8px;
+  color: rgba(255, 255, 255, 0.78);
   transition: background 0.2s ease, color 0.2s ease;
 }
 .menu :deep(.el-menu-item:hover),
 .menu :deep(.el-sub-menu__title:hover) {
-  background: #f0f6ff;
-  color: #0094FF;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
-/* 激活项：主色文字 + 品牌渐变淡底（浅色教育风） */
+/* 激活项：白色胶囊 + 深蓝文字（Dify 风） */
 .menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(90deg, rgba(0, 148, 255, 0.12), rgba(139, 111, 240, 0.10));
-  color: #0094FF;
+  background: #ffffff;
+  color: #1748c9;
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(9, 30, 66, 0.22);
 }
 /* 子菜单 */
 .menu :deep(.el-sub-menu .el-menu) { background: transparent; }
 .menu :deep(.el-sub-menu .el-menu .el-menu-item) { padding-left: 48px !important; }
-.menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { color: #0094FF; }
+.menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: #ffffff; font-weight: 600;
+}
 .menu :deep(.el-menu-item .el-icon),
 .menu :deep(.el-sub-menu__title .el-icon) { color: inherit; }
 
-/* ===== 顶栏：白色，渐变标题条 + 渐变头像 ===== */
+/* ===== 顶栏：纯白扁平，浅灰分隔线 ===== */
 .header {
   position: relative;
   display: flex; justify-content: space-between; align-items: center;
   background: #ffffff;
-  border-bottom: 1px solid #eaf0f8;
-  box-shadow: 0 2px 12px rgba(20, 60, 140, 0.05);
+  border-bottom: 1px solid #eaecf0;
   padding: 0 20px;
-}
-/* 底部蓝紫渐变细线（呼应登录页/侧栏） */
-.header::after {
-  content: '';
-  position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
-  background: linear-gradient(90deg, rgba(0,148,255,0.30), rgba(139,111,240,0.30) 45%, transparent 80%);
-  pointer-events: none;
 }
 
 /* 面包屑 */
@@ -402,7 +395,7 @@ const changePwd = async () => {
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
 }
-.collapse-btn:hover { background: #eef4ff; color: #0094FF; }
+.collapse-btn:hover { background: #eef4ff; color: #155EEF; }
 .crumb-parent { font-size: 13px; color: #8fa8c4; letter-spacing: 0.5px; }
 .crumb-sep { font-size: 12px; color: #c0cbdb; }
 .crumb-current { font-size: 14.5px; font-weight: 600; color: #142a44; letter-spacing: 0.5px; }
@@ -413,9 +406,9 @@ const changePwd = async () => {
 .welcome b { color: #142a44; font-weight: 600; font-size: 13.5px; letter-spacing: 0.3px; }
 .role-pill {
   font-style: normal; font-size: 11.5px; line-height: 1;
-  color: #0094FF;
-  background: rgba(0, 148, 255, 0.08);
-  border: 1px solid rgba(0, 148, 255, 0.28);
+  color: #155EEF;
+  background: rgba(21, 94, 239, 0.08);
+  border: 1px solid rgba(21, 94, 239, 0.28);
   padding: 3px 9px; border-radius: 10px;
   letter-spacing: 0.5px;
 }
@@ -428,21 +421,19 @@ const changePwd = async () => {
   color: #5b7396; cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
 }
-.bell:hover { background: #eef4ff; color: #0094FF; }
+.bell:hover { background: #eef4ff; color: #155EEF; }
 
-/* 渐变头像：白色描边圈 + 悬停光晕 */
+/* 头像：主色实底 + 悬停光环 */
 .avatar {
   width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
-  background: linear-gradient(135deg, #0094FF, #8B6FF0);
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 148, 255, 0.35), 0 4px 10px rgba(110, 91, 232, 0.28);
+  background: #155EEF;
   transition: transform 0.2s ease, box-shadow 0.25s ease;
 }
 .avatar:hover {
   transform: scale(1.06);
-  box-shadow: 0 0 0 2px rgba(0, 148, 255, 0.3), 0 6px 16px rgba(110, 91, 232, 0.4);
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.18);
 }
 
 /* 菜单徽标：红底白字，靠右 */
@@ -450,22 +441,21 @@ const changePwd = async () => {
   margin-left: auto;
   font-size: 11px; line-height: 1;
   color: #fff; font-weight: 600;
-  background: linear-gradient(135deg, #FF6B6B, #F04438);
+  background: #f04438;
   padding: 3px 6px; border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(240, 68, 56, 0.4);
 }
 
 .photo-box {
   position: relative; width: 64px; height: 64px;
   border-radius: 50%; cursor: pointer;
 }
-.photo-box:hover .p-avatar { box-shadow: 0 4px 14px rgba(0, 148, 255, 0.35); }
+.photo-box:hover .p-avatar { box-shadow: 0 4px 14px rgba(21, 94, 239, 0.35); }
 .p-avatar {
   width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #E3EEFF, #EDE8FF); color: #4a7ad1; font-weight: 600; font-size: 22px;
+  background: #e8effe; color: #155EEF; font-weight: 600; font-size: 22px;
 }
 
-/* ===== 内容区：淡蓝白底 ===== */
+/* ===== 内容区：纯白 ===== */
 .main { background: #ffffff; padding: 14px 18px; }
 </style>

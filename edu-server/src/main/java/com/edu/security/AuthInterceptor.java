@@ -84,16 +84,14 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         lu.setPerms(perps(perms));
 
-        // 教师档案/学生档案关联
-        if (user.getUserType() == 4) {
-            EduTeacher t = teacherMapper.selectOne(
-                    new LambdaQueryWrapper<EduTeacher>().eq(EduTeacher::getUserId, userId).last("LIMIT 1"));
-            if (t != null) lu.setTeacherId(t.getId());
-        } else if (user.getUserType() == 5) {
-            EduStudent s = studentMapper.selectOne(
-                    new LambdaQueryWrapper<EduStudent>().eq(EduStudent::getUserId, userId).last("LIMIT 1"));
-            if (s != null) lu.setStudentId(s.getId());
-        }
+        // 教师档案/学生档案关联：按档案行存在性解析，与用户类型解耦
+        // （教务/校长等账号可通过用户管理"兼任教师"建档，登录即挂 teacherId）
+        EduTeacher t = teacherMapper.selectOne(
+                new LambdaQueryWrapper<EduTeacher>().eq(EduTeacher::getUserId, userId).last("LIMIT 1"));
+        if (t != null) lu.setTeacherId(t.getId());
+        EduStudent s = studentMapper.selectOne(
+                new LambdaQueryWrapper<EduStudent>().eq(EduStudent::getUserId, userId).last("LIMIT 1"));
+        if (s != null) lu.setStudentId(s.getId());
         return lu;
     }
 

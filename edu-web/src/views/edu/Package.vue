@@ -303,11 +303,11 @@ onMounted(async () => {
   transition: all 0.2s ease;
 }
 .more-trigger:hover, .more-trigger.open {
-  color: #0094FF; border-color: rgba(0, 148, 255, 0.45);
+  color: #155EEF; border-color: rgba(21, 94, 239, 0.45);
   background: linear-gradient(180deg, #ffffff, #f0f7ff);
-  box-shadow: 0 3px 10px rgba(0, 148, 255, 0.16);
+  box-shadow: 0 3px 10px rgba(21, 94, 239, 0.16);
 }
-.more-trigger.open { border-color: rgba(139, 111, 240, 0.5); }
+.more-trigger.open { border-color: rgba(91, 141, 239, 0.5); }
 .more-arrow { transition: transform 0.2s ease; }
 .more-trigger.open .more-arrow { transform: rotate(180deg); }
 </style>

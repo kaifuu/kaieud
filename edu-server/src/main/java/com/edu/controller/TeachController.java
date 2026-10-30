@@ -31,19 +31,56 @@ public class TeachController {
     private final EduConsultMapper consultMapper;
     private final EduStudentMapper studentMapper;
     private final EduCourseMapper courseMapper;
+    private final EduClazzMapper clazzMapper;
 
     private Long teacherId() {
         LoginUser lu = AuthContext.get();
-        if (lu.getTeacherId() == null) throw new BizException("当前账号未关联教师档案");
+        if (lu.getTeacherId() == null)
+            throw new BizException("当前账号未关联教师档案（可在用户管理中开启\"兼任教师\"）");
         return lu.getTeacherId();
     }
 
-    /** 我的课表 */
+    /**
+     * 我的课表（教师端只读）：附带课程/班级/学员名称与格式化时间，供日历展示；
+     * begin/end 为日历当前视图的日期范围（可缺省取全部）。
+     */
     @GetMapping("/my-schedule")
-    public Result<List<EduSchedule>> mySchedule() {
-        return Result.ok(scheduleMapper.selectList(new LambdaQueryWrapper<EduSchedule>()
+    public Result<List<Map<String, Object>>> mySchedule(@RequestParam(required = false) String begin,
+                                                        @RequestParam(required = false) String end) {
+        LambdaQueryWrapper<EduSchedule> qw = new LambdaQueryWrapper<EduSchedule>()
                 .eq(EduSchedule::getTeacherId, teacherId())
-                .orderByAsc(EduSchedule::getStartTime)));
+                .ge(begin != null, EduSchedule::getStartTime, begin + " 00:00:00")
+                .le(end != null, EduSchedule::getStartTime, end + " 23:59:59")
+                .orderByAsc(EduSchedule::getStartTime);
+        java.time.format.DateTimeFormatter fmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (EduSchedule s : scheduleMapper.selectList(qw)) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", s.getId());
+            m.put("start", s.getStartTime() == null ? null : s.getStartTime().format(fmt));
+            m.put("end", s.getEndTime() == null ? null : s.getEndTime().format(fmt));
+            m.put("classroom", s.getClassroom());
+            m.put("status", s.getStatus());
+            m.put("remark", s.getRemark());
+            // 展示名称：班课取班级名，一对一取学员名
+            if (s.getClazzId() != null) {
+                com.edu.entity.EduClazz c = clazzMapper.selectById(s.getClazzId());
+                m.put("name", c == null ? "-" : c.getName());
+                m.put("classType", "班课");
+            } else if (s.getStudentId() != null) {
+                EduStudent st = studentMapper.selectById(s.getStudentId());
+                m.put("name", st == null ? "-" : st.getName());
+                m.put("classType", "一对一");
+            } else {
+                m.put("name", "-");
+                m.put("classType", "-");
+            }
+            EduCourse c2 = s.getCourseId() == null ? null : courseMapper.selectById(s.getCourseId());
+            m.put("courseName", c2 == null ? "-" : c2.getName());
+            result.add(m);
+        }
+        return Result.ok(result);
     }
 
     /** 我所带的学生（在读报名 + 课时/折扣信息） */
