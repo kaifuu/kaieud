@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page tabs-page">
     <div class="page-header">
       <span class="page-title">咨询与评价</span>
     </div>
@@ -9,7 +9,7 @@
         <el-tab-pane label="课程评价" name="eval" />
       </el-tabs>
     </div>
-    <div class="panel table-panel" style="height: calc(100% - 110px)">
+    <div class="panel table-panel tabs-fill">
       <div class="toolbar">
         <el-select v-if="tab === 'consult'" v-model="query.status" placeholder="回复状态" clearable style="width: 130px">
           <el-option label="待回复" :value="0" /><el-option label="已回复" :value="1" />

@@ -25,6 +25,8 @@ import java.util.Map;
 @RequiresPerm("edu:package")
 public class EduPackageController {
 
+    private final com.edu.mapper.EduCourseMapper courseMapper;
+
     private final EduPackageMapper packageMapper;
     private final com.edu.mapper.EduContractMapper contractMapper;
     private final com.edu.mapper.EduStudentMapper studentMapper;
@@ -120,6 +122,13 @@ public class EduPackageController {
                 && pkg.getEndDate() != null
                 && pkg.getEndDate().isBefore(java.time.LocalDate.now())) {
             return Result.error("截止日期已过，不能启用");
+        }
+        // 已下架的课程不能再被套餐关联（历史已关联的保留展示，保存时拦截换绑）
+        if (pkg.getCourseId() != null) {
+            com.edu.entity.EduCourse c = courseMapper.selectById(pkg.getCourseId());
+            if (c == null) return Result.error("关联课程不存在");
+            if (c.getStatus() == null || c.getStatus() != 1)
+                return Result.error("课程「" + c.getName() + "」已下架，不能关联");
         }
         if (pkg.getId() != null) packageMapper.updateById(pkg);
         else {

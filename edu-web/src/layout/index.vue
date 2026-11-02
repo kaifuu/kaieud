@@ -4,8 +4,7 @@
     <el-aside :width="collapsed ? '64px' : '224px'" class="aside" :class="{ collapsed }">
       <div class="logo">
         <img v-if="logoUrl" :src="logoUrl" class="logo-img" @error="logoUrl = ''" />
-        <div v-else class="logo-mark">E</div>
-        <span v-if="!collapsed" class="logo-text">智教云课</span>
+        <BrandLogo v-else :size="34" :show-text="!collapsed" name="智教云课" sub="KaiEdu · 教务平台" />
       </div>
       <el-menu :default-active="route.path" router unique-opened class="menu"
                 :collapse="collapsed" :collapse-transition="false" popper-class="dark-menu-popper">
@@ -19,7 +18,7 @@
             <el-menu-item v-for="c in m.children" :key="c.id" :index="'/' + c.path">
               <el-icon><component :is="c.icon || 'Document'" /></el-icon>
               <span>{{ c.name }}</span>
-              <span v-if="c.path === 'notify' && noticeCount" class="menu-badge">{{ noticeCount }}</span>
+              <span v-if="c.path === 'notify' && unreadCount" class="menu-badge">{{ unreadCount }}</span>
             </el-menu-item>
           </el-sub-menu>
           <!-- 顶级菜单 -->
@@ -50,24 +49,29 @@
             <i class="role-pill">{{ typeName }}</i>
           </span>
           <span class="v-divider"></span>
-          <!-- 系统通知铃铛 -->
-          <el-popover placement="bottom-end" width="320" trigger="click" @show="loadNotices">
+          <!-- 系统通知铃铛：先弹简述列表，点击通知/查看全部跳转通知管理 -->
+          <el-popover placement="bottom-end" width="360" trigger="click" popper-class="notice-popper" @show="loadNotices">
             <template #reference>
-              <el-badge :value="notices.length" :hidden="!notices.length" :max="9" class="bell">
-                <el-icon :size="19"><Bell /></el-icon>
-              </el-badge>
+              <div class="bell" title="查看通知">
+                <el-badge :value="unreadCount" :hidden="!unreadCount" :max="99">
+                  <el-icon :size="19"><Bell /></el-icon>
+                </el-badge>
+              </div>
             </template>
             <div class="notice-pop">
-              <div class="notice-head">系统通知</div>
+              <div class="notice-head">
+                <span>系统通知</span>
+                <el-link type="primary" :underline="false" @click="goNotify">查看全部</el-link>
+              </div>
               <el-empty v-if="!notices.length" description="暂无通知" :image-size="60" />
-              <div v-for="n in notices" :key="n.id" class="notice-item">
+              <div v-for="n in notices" :key="n.id" class="notice-item" @click="goNotify">
                 <div class="n-title">
                   <el-tag size="small" :type="['info', 'warning', 'danger'][n.level]" effect="light">
                     {{ ['普通', '重要', '紧急'][n.level] }}
                   </el-tag>
-                  {{ n.title }}
+                  <span class="n-txt" :title="n.title">{{ n.title }}</span>
                 </div>
-                <div class="n-content">{{ n.content }}</div>
+                <div class="n-content" :title="n.content">{{ n.content }}</div>
                 <div class="n-time">{{ (n.publishTime || '').replace('T', ' ').slice(0, 16) }}</div>
               </div>
             </div>
@@ -157,7 +161,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../store/user'
 import api from '../api'
-import logoAsset from '../assets/logo.png'
+import BrandLogo from '../components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -181,6 +185,7 @@ const crumb = computed(() => {
 })
 
 onMounted(async () => {
+  window.addEventListener('notice-read', loadNotices)
   // 系统Logo
   try { await loadLogo() } catch (e) { /* ignore */ }
   // 顶栏头像
@@ -213,21 +218,28 @@ const saving = ref(false)
 const pwd = ref({ oldPassword: '', newPassword: '' })
 const pwdVisible = ref(false)
 
-/* ===== 系统Logo：基础设置上传的优先，否则用内置资产 ===== */
-const logoUrl = ref(logoAsset)
+/* ===== 系统Logo：基础设置上传的优先，否则用内置学士帽徽标 ===== */
+const logoUrl = ref('')
 async function loadLogo() {
   try {
     const cfg = (await api.configPublic()) || {}
     if (cfg.logo_url) logoUrl.value = cfg.logo_url + '?t=' + Date.now()
-  } catch (e) { /* 忽略，用内置资产 */ }
+  } catch (e) { /* 忽略，用内置徽标 */ }
 }
 
-/* ===== 系统通知 ===== */
+/* ===== 系统通知：铃铛弹简述列表，角标 = 未读数（已读后实时减少，全读则隐藏） ===== */
 const notices = ref([])
-const noticeCount = ref(0)
+const unreadCount = ref(0)
 async function loadNotices() {
-  notices.value = (await api.noticeRecent(8)) || []
-  noticeCount.value = notices.value.length
+  try {
+    [notices.value, unreadCount.value] = await Promise.all([
+      api.noticeRecent(8).then((d) => d || []),
+      api.noticeUnreadCount().then((d) => d || 0)
+    ])
+  } catch (e) { /* 忽略 */ }
+}
+function goNotify() {
+  router.push('/system/notify')
 }
 
 /* ===== 界面密度（紧凑/宽松，全局记忆） ===== */
@@ -324,12 +336,11 @@ const changePwd = async () => {
   pointer-events: none;
 }
 
-/* Logo区：白色字标 + 半透白分隔线 */
+/* Logo区：白色字标 + 半透白分隔线；左留空隙避免贴边 */
 .logo {
   display: flex; align-items: center; justify-content: flex-start; gap: 10px;
-  padding-left: 18px;
   white-space: nowrap;
-  padding: 20px 0 16px;
+  padding: 20px 12px 16px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 .logo-img {
@@ -338,16 +349,9 @@ const changePwd = async () => {
   background: #fff; padding: 2px;
   box-shadow: 0 2px 8px rgba(9, 30, 66, 0.25);
 }
-.logo-mark {
-  width: 34px; height: 34px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 19px; font-weight: 800; color: #fff;
-  background: rgba(255, 255, 255, 0.18);
-}
-.logo-text { color: #ffffff; font-size: 17px; font-weight: 700; letter-spacing: 2px; }
 
 /* ===== 菜单：亮蓝底 + 圆角项 + 白色胶囊激活态 ===== */
-.aside.collapsed .logo { justify-content: center; padding-left: 0; }
+.aside.collapsed .logo { justify-content: center; padding-left: 0; padding-right: 0; }
 .menu { flex: 1; border-right: none; background: transparent; padding: 8px 10px; overflow-y: auto; }
 .menu :deep(.el-menu-item),
 .menu :deep(.el-sub-menu__title) {
@@ -458,4 +462,30 @@ const changePwd = async () => {
 
 /* ===== 内容区：纯白 ===== */
 .main { background: #ffffff; padding: 14px 18px; }
+</style>
+
+<!-- 通知铃铛弹窗（popover 传送至 body，样式须全局） -->
+<style>
+.notice-popper { padding: 6px 4px; }
+.notice-pop { max-height: 420px; overflow-y: auto; }
+.notice-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 10px 10px; border-bottom: 1px solid #eef2f7;
+  font-size: 14px; font-weight: 600; color: #344054;
+}
+.notice-item {
+  padding: 10px 12px; margin: 2px 4px; border-radius: 10px;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.notice-item:hover { background: #f0f6ff; }
+.notice-item .n-title { display: flex; align-items: center; gap: 8px; }
+.notice-item .n-txt {
+  flex: 1; font-size: 13.5px; color: #1f3049; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notice-item .n-content {
+  margin-top: 4px; font-size: 12.5px; color: #667085;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notice-item .n-time { margin-top: 4px; font-size: 12px; color: #98a2b3; }
 </style>

@@ -21,6 +21,15 @@ public class LoginUser {
     private Set<String> perms;
 
     public boolean isSuperAdmin() { return userType != null && userType == 1; }
+
+    /**
+     * 平台管理员：user_type=1 且归属平台租户（tenant_id=0）。
+     * 租户管理员（user_type=1 但 tenant_id>0）不算平台身份——租户行级拦截器对其照常生效。
+     */
+    public boolean isPlatformAdmin() {
+        return isSuperAdmin() && (tenantId == null || tenantId == 0);
+    }
+
     public boolean hasPerm(String perm) {
         return isSuperAdmin() || (perm != null && perms != null && perms.contains(perm));
     }

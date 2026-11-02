@@ -39,10 +39,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">查看</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button link :type="row.status === 1 ? 'warning' : 'success'" @click="toggleStatus(row)">
+              {{ row.status === 1 ? '下架' : '上架' }}
+            </el-button>
             <el-popconfirm title="确认删除该课程?" @confirm="remove(row.id)">
               <template #reference>
                 <el-button link type="danger">删除</el-button>
@@ -115,9 +118,9 @@ const detailVisible = ref(false)
 const detailRow = ref({})
 const detailFields = [
       { prop: 'name', label: '课程名称' },
-      { prop: 'category', label: '课程分类', fmt: (v) => dictStore.label('course_category', v) },
-      { prop: 'classType', label: '班型', fmt: (v) => dictStore.label('class_type', v) },
-
+      { prop: 'category', label: '课程分类', formatter: (v) => dictStore.label('course_category', v) },
+      { prop: 'classType', label: '班型', formatter: (v) => dictStore.label('class_type', v) },
+      { prop: 'durationMinutes', label: '标准时长(分)' },
       { prop: 'status', label: '状态', map: { 1: '上架', 0: '下架' } }, { prop: 'remark', label: '备注' }
     ]
 function openDetail(row) {
@@ -142,6 +145,13 @@ async function save() {
 async function remove(id) {
   await api.courseDel(id)
   ElMessage.success('已删除')
+  load()
+}
+
+/** 上下架切换：已绑定套餐的课程通过下架停售（删除被后端限制） */
+async function toggleStatus(row) {
+  await api.courseUpdate({ id: row.id, status: row.status === 1 ? 0 : 1 })
+  ElMessage.success(row.status === 1 ? '已下架' : '已上架')
   load()
 }
 

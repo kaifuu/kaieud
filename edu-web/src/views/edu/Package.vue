@@ -56,6 +56,13 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="detail" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
+                    <span class="mi-txt">
+                      <b>查看详情</b>
+                      <i>套餐完整信息</i>
+                    </span>
+                  </el-dropdown-item>
                   <el-dropdown-item command="edit" class="more-item">
                     <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
                     <span class="mi-txt">
@@ -95,8 +102,10 @@
         <el-form-item label="套餐名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="关联课程" required>
           <el-select v-model="form.courseId" filterable style="width: 100%"
-                     placeholder="输入关键字查询课程" @change="onCourseChange">
-            <el-option v-for="c in courses" :key="c.id" :label="c.name" :value="c.id" />
+                     placeholder="输入关键字查询课程（仅上架课程可关联）" @change="onCourseChange">
+            <el-option v-for="c in courseOptions" :key="c.id"
+                       :label="`${c.name}（${c.status === 1 ? '上架' : '已下架'}）`"
+                       :value="c.id" :disabled="c.status !== 1" />
           </el-select>
         </el-form-item>
         <el-form-item label="班型">
@@ -150,6 +159,9 @@
         </el-table-column>
       </el-table>
     </el-drawer>
+
+    <!-- 套餐详情抽屉：完整套餐信息（更多-查看详情） -->
+    <DetailDrawer v-model="detailVisible" title="套餐详情" :fields="detailFields" :data="detailRow" />
   </div>
 </template>
 
@@ -161,6 +173,7 @@ import api from '../../api'
 import { usePage } from '../../composables/usePage'
 import { exportXlsx } from '../../utils/export'
 import { useDictStore } from '../../store/dict'
+import DetailDrawer from '../../components/DetailDrawer.vue'
 
 const dictStore = useDictStore()
 const dicts = computed(() => dictStore.dicts)
@@ -217,6 +230,12 @@ function isExpired(row) {
 
 /** 选中课程：联动班型/标准时长（仅展示，不可编辑） */
 const selectedCourse = computed(() => courses.value.find((c) => c.id === Number(form.value.courseId)))
+/** 可关联课程：仅上架可新选；编辑回显时原课程已下架则钉入展示（禁选，防误清空） */
+const courseOptions = computed(() => {
+  const list = courses.value.filter((c) => c.status === 1)
+  const cur = courses.value.find((c) => c.id === Number(form.value.courseId))
+  return cur && cur.status !== 1 ? [cur, ...list] : list
+})
 const courseDuration = computed(() =>
   selectedCourse.value ? (selectedCourse.value.durationMinutes || 60) + ' 分钟' : '-')
 function onCourseChange() {
@@ -236,10 +255,36 @@ const refVisible = ref(false)
 const refContracts = ref([])
 const refLoading = ref(false)
 const refRow = ref({})
+/* ===== 查看详情抽屉 ===== */
+const detailVisible = ref(false)
+const detailRow = ref({})
+const detailFields = [
+  { prop: 'name', label: '套餐名称' },
+  { prop: 'courseId', label: '关联课程', formatter: courseName },
+  { prop: 'classType', label: '班型', formatter: (v) => dictText('class_type', v) },
+  { prop: 'unitPrice', label: '单价(元/课时)', formatter: (v) => Number(v || 0).toFixed(2) },
+  { prop: 'hours', label: '购买课时' },
+  { prop: 'giftHours', label: '赠送课时' },
+  { prop: '__total', label: '套餐总课时' },
+  { prop: 'validDays', label: '有效期(天)' },
+  { prop: 'startDate', label: '生效日期' },
+  { prop: 'endDate', label: '截止日期' },
+  { prop: '__state', label: '状态' }
+]
 function onRowCommand(cmd, row) {
-  if (cmd === 'edit') openEdit(row)
+  if (cmd === 'detail') openDetail(row)
+  else if (cmd === 'edit') openEdit(row)
   else if (cmd === 'ref') openContractRef(row)
   else if (cmd === 'del') remove(row)
+}
+/** 详情展示字段（套餐总课时/状态在打开时预计算，DetailDrawer 只做单值渲染） */
+function openDetail(row) {
+  detailRow.value = {
+    ...row,
+    __total: Number(row.hours || 0) + Number(row.giftHours || 0),
+    __state: isExpired(row) ? '已过期' : (row.enabled === 1 ? '启用' : '停用')
+  }
+  detailVisible.value = true
 }
 
 async function openContractRef(row) {
@@ -265,6 +310,8 @@ function openEdit(row) {
 }
 async function save() {
   if (!form.value.name || !form.value.courseId) return ElMessage.warning('名称与课程为必填项')
+  if (selectedCourse.value && selectedCourse.value.status !== 1)
+    return ElMessage.error('关联课程已下架，不能保存，请重新选择上架课程')
   if (!form.value.startDate) return ElMessage.warning('请选择生效日期')
   if (Number(form.value.enabled) === 1 && formExpired.value) {
     ElMessage.error('截止日期已过，不能启用')
@@ -286,7 +333,9 @@ async function remove(id) {
 }
 onMounted(async () => {
   load()
-  courses.value = (await api.courseList()) || []
+  // 全量课程（含下架）：下拉按状态标注并禁选下架项；列表/详情解析课程名也依赖它
+  const d = await api.coursePage({ page: 1, size: 500 })
+  courses.value = d.records || []
   dictStore.load(true)
 })
 </script>

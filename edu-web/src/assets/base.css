@@ -23,6 +23,14 @@ html, body, #app {
 /* 页面容器 */
 .page { height: 100%; overflow: auto; padding: 16px; }
 
+/* TAB页一屏化：整页不滚动，页头/TAB固定、内容面板弹性填充，
+   表格区内部滚动、分页常驻一屏内（替代各页 calc(100% - Npx) 魔法数） */
+.page.tabs-page { display: flex; flex-direction: column; overflow: hidden; }
+.page.tabs-page > .page-header { flex: none; }
+.page.tabs-page > .el-tabs { flex: none; }
+.page.tabs-page > .el-tabs .el-tabs__header { margin-bottom: 8px; }
+.page.tabs-page .tabs-fill { flex: 1; min-height: 0; height: auto; }
+
 /* 页头：标题 + 操作按钮 */
 .page-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -649,6 +657,7 @@ body { background: #ffffff; }
   flex-shrink: 0; color: #fff;
 }
 .more-dropdown .mi-blue { background: linear-gradient(135deg, #155EEF, #4FA8FF); }
+.more-dropdown .mi-green { background: linear-gradient(135deg, #12b76a, #7ccf9c); }
 .more-dropdown .mi-red  { background: linear-gradient(135deg, #f04438, #f97066); }
 .more-dropdown .mi-txt { display: flex; flex-direction: column; line-height: 1.2; }
 .more-dropdown .mi-txt b { font-weight: 600; font-size: 13px; color: #344054; }

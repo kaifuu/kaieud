@@ -64,6 +64,11 @@
         </el-table-column>
         <el-table-column prop="operator" label="操作人" width="90" />
         <el-table-column prop="createTime" label="扣课时间" width="170" />
+        <el-table-column label="操作" width="70" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openDetail(row)">查看</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <div class="pager-row">
         <el-pagination background layout="total, sizes, prev, pager, next" :total="pager.total"
@@ -71,6 +76,9 @@
                        :page-sizes="[10, 20, 50, 100]" @current-change="load" @size-change="onSizeChange" />
       </div>
     </div>
+
+    <!-- 扣课详情抽屉：单条扣课记录完整信息 -->
+    <DetailDrawer v-model="detailVisible" title="扣课详情" :fields="detailFields" :data="detailRow" />
   </div>
 </template>
 
@@ -78,6 +86,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { exportXlsx } from '../../utils/export'
+import DetailDrawer from '../../components/DetailDrawer.vue'
 
 const sources = ['到课', '旷课', '签到消课', '消课']
 const sourceMeta = {
@@ -110,6 +119,33 @@ async function load() {
 }
 function doSearch() { pager.page = 1; load() }
 function onSizeChange() { pager.page = 1; load() }
+
+/* ===== 查看详情抽屉：单条扣课记录完整信息 ===== */
+const detailVisible = ref(false)
+const detailRow = ref({})
+const detailFields = [
+  { prop: 'consumeNo', label: '扣课单号' },
+  { prop: 'studentName', label: '学员' },
+  { prop: 'courseName', label: '课程' },
+  { prop: 'teacherName', label: '教师' },
+  { prop: 'classTime', label: '上课时间', formatter: (v) => v || '-' },
+  { prop: 'hours', label: '扣课课时' },
+  { prop: '__range', label: '扣前→扣后剩余' },
+  { prop: 'source', label: '来源' },
+  { prop: 'remark', label: '扣课说明', formatter: (v) => v || '-' },
+  { prop: 'auditStatus', label: '审核状态', map: ['待审核', '已审核', '已驳回'] },
+  { prop: '__canceled', label: '撤销状态' },
+  { prop: 'operator', label: '操作人' },
+  { prop: 'createTime', label: '扣课时间' }
+]
+function openDetail(row) {
+  detailRow.value = {
+    ...row,
+    __range: `${row.beforeHours} → ${row.afterHours}`,
+    __canceled: row.canceled === 1 ? '已撤销' : '正常'
+  }
+  detailVisible.value = true
+}
 
 function doExport() {
   exportXlsx('课时扣课记录', [

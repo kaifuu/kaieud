@@ -28,6 +28,13 @@
       <div class="panel table-panel" style="flex: 1">
         <div class="toolbar">
           <el-tag effect="light">{{ currentNode?.name || '全部菜单' }}</el-tag>
+          <!-- 选中节点（含一级菜单）本身的编辑/删除入口 -->
+          <template v-if="currentNode">
+            <el-button link type="primary" @click="openEdit(currentNode, null)">编辑{{ currentNode.type === 'M' ? '目录' : '菜单' }}</el-button>
+            <el-popconfirm title="确认删除该菜单及其全部下级?" @confirm="remove(currentNode.id)">
+              <template #reference><el-button link type="danger">删除</el-button></template>
+            </el-popconfirm>
+          </template>
           <el-input v-model="filter.keyword" placeholder="名称 / 路由 / 权限标识" clearable
                     style="width: 200px" @keyup.enter="filter.page = 1">
             <template #prefix><el-icon><Search /></el-icon></template>
@@ -55,7 +62,7 @@
             <template #default="{ row }">
               <el-button link type="primary" @click="openEdit(null, row)">新增下级</el-button>
               <el-button link type="primary" @click="openEdit(row, null)">编辑</el-button>
-              <el-popconfirm title="确认删除该菜单及其下级?" @confirm="remove(row.id)">
+              <el-popconfirm title="确认删除该菜单及其全部下级?" @confirm="remove(row.id)">
                 <template #reference><el-button link type="danger">删除</el-button></template>
               </el-popconfirm>
             </template>
@@ -71,6 +78,12 @@
     <!-- 编辑抽屉 -->
     <el-drawer v-model="visible" :title="form.id ? '编辑菜单' : '新增菜单'" size="440px">
       <el-form :model="form" label-width="90px">
+        <el-form-item label="上级菜单">
+          <el-tree-select v-model="form.parentId" :data="parentOptions" check-strictly
+                          default-expand-all :render-after-expand="false" clearable
+                          placeholder="根节点（一级菜单）" style="width: 100%" />
+          <div class="form-tip">选「根节点」即为一级菜单；编辑时不能把自己或自己的下级设为上级</div>
+        </el-form-item>
         <el-form-item label="类型">
           <el-radio-group v-model="form.type">
             <el-radio value="M">目录</el-radio>
@@ -138,6 +151,7 @@ function onNodeClick(data) {
 const load = async () => {
   loading.value = true
   try {
+    // 菜单树由后端按登录租户自动隔离（企业管自己的菜单，平台运营不进企业内部）
     tree.value = (await api.menuTree()) || []
     if (currentNode.value) {
       // 刷新后按ID找回选中节点
@@ -153,10 +167,21 @@ const openEdit = (row, parent) => {
   visible.value = true
 }
 
+/** 上级菜单候选：根节点(0) + 现有菜单树；编辑时排除自己的子树（防环） */
+const parentOptions = computed(() => {
+  const mapTree = (nodes) => (nodes || [])
+    .filter((n) => n.id !== form.value.id)
+    .map((n) => ({ value: n.id, label: n.name, children: mapTree(n.children) }))
+  return [{ value: 0, label: '根节点（一级菜单）', children: mapTree(tree.value) }]
+})
+
 const save = async () => {
   if (!form.value.name) return ElMessage.warning('名称不能为空')
-  if (form.value.id) await api.menuUpdate(form.value)
-  else await api.menuSave(form.value)
+  // 上级菜单清空 = 根节点（一级菜单）；归属租户由后端按登录身份决定
+  const payload = { ...form.value, parentId: form.value.parentId ?? 0 }
+  delete payload.children
+  if (payload.id) await api.menuUpdate(payload)
+  else await api.menuSave(payload)
   ElMessage.success('保存成功')
   visible.value = false
   load()
@@ -173,4 +198,5 @@ onMounted(load)
 
 <style scoped>
 .tree-node { display: inline-flex; align-items: center; }
+.form-tip { font-size: 12px; color: #8fa8c4; line-height: 1.5; margin-top: 4px; }
 </style>

@@ -114,21 +114,19 @@ const visible = ref(false)
 const saving = ref(false)
 const form = ref({})
 
-// 字典类型中文名：优先本地映射，其次 dict_type_labels（后端可扩展），最后回退英文标识
-const typeNameMap = reactive({
-  class_type: '班型', course_category: '课程分类',
-  pay_channel: '缴费方式', student_status: '学员状态',
-  contract_status: '合同状态', campus: '所属校区',
-  log_type: '日志类型'
-})
-const typeName = (t) => typeNameMap[t] || t
+// 字典类型中文名：从后端 sys_dict_type 取（持久化），未配置时回退英文标识
+const typeNames = ref({})
+const typeName = (t) => typeNames.value[t] || t
 
 const currentItems = computed(() => dicts.value[currentType.value] || [])
 
 function selectType(t) { currentType.value = t }
 async function reload() {
-  await dictStore.load(true)
+  await Promise.all([dictStore.load(true), loadTypeNames()])
   ElMessage.success('字典缓存已刷新，全站生效')
+}
+async function loadTypeNames() {
+  typeNames.value = (await api.dictTypeNames()) || {}
 }
 
 /* ===== 字典类型新增/重命名/删除 ===== */
@@ -144,7 +142,7 @@ function openAddType() {
 }
 function openRenameType(type) {
   renameForm.oldType = type
-  renameForm.name = typeNameMap[type] && typeNameMap[type] !== type ? typeNameMap[type] : ''
+  renameForm.name = typeNames.value[type] || ''
   renameForm.type = type
   renameVisible.value = true
 }
@@ -154,11 +152,10 @@ async function saveType() {
   typeSaving.value = true
   try {
     await api.dictTypeSave({ type: typeForm.type.trim(), label: typeForm.name.trim() || typeForm.type.trim() })
-    if (typeForm.name.trim()) typeNameMap[typeForm.type.trim()] = typeForm.name.trim()
     ElMessage.success('字典类型已创建')
     typeVisible.value = false
     currentType.value = typeForm.type.trim()
-    await dictStore.load(true)
+    await Promise.all([dictStore.load(true), loadTypeNames()])
   } finally { typeSaving.value = false }
 }
 
@@ -166,13 +163,13 @@ async function saveRename() {
   if (!renameForm.type.trim()) return ElMessage.warning('请输入类型标识')
   typeSaving.value = true
   try {
-    await api.dictTypeRename({ oldType: renameForm.oldType, newType: renameForm.type.trim() })
-    delete typeNameMap[renameForm.oldType]
-    if (renameForm.name.trim()) typeNameMap[renameForm.type.trim()] = renameForm.name.trim()
+    await api.dictTypeRename({
+      oldType: renameForm.oldType, newType: renameForm.type.trim(), name: renameForm.name.trim()
+    })
     ElMessage.success('字典类型已重命名')
     renameVisible.value = false
     currentType.value = renameForm.type.trim()
-    await dictStore.load(true)
+    await Promise.all([dictStore.load(true), loadTypeNames()])
   } finally { typeSaving.value = false }
 }
 
@@ -181,10 +178,9 @@ async function removeType(type) {
     `确认删除字典类型「${typeName(type)}」？该类型下所有字典项将一并删除，全站引用将回退为原始值。`,
     '删除字典类型', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
   await api.dictTypeDel(type)
-  delete typeNameMap[type]
   ElMessage.success('字典类型已删除')
   currentType.value = Object.keys(dictStore.dicts || {})[0] || 'class_type'
-  await dictStore.load(true)
+  await Promise.all([dictStore.load(true), loadTypeNames()])
 }
 
 /* ===== 字典项 CRUD ===== */
@@ -206,7 +202,7 @@ async function remove(id) {
   ElMessage.success('已删除')
   await dictStore.load(true)
 }
-onMounted(() => dictStore.load(true))
+onMounted(() => { dictStore.load(true); loadTypeNames() })
 </script>
 
 <style scoped>

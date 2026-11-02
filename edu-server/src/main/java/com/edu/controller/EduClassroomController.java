@@ -55,6 +55,7 @@ public class EduClassroomController {
     @PostMapping
     @Log("新增教室")
     public Result<Void> save(@RequestBody EduClassroom room) {
+        if (room.getOrgId() == null) return Result.error("所属校区为必填项");
         room.setTenantId(AuthContext.get().getTenantId());
         room.setDeleted(0);
         classroomMapper.insert(room);
@@ -64,6 +65,7 @@ public class EduClassroomController {
     @PutMapping
     @Log("修改教室")
     public Result<Void> update(@RequestBody EduClassroom room) {
+        if (room.getOrgId() == null) return Result.error("所属校区为必填项");
         classroomMapper.updateById(room);
         return Result.ok();
     }

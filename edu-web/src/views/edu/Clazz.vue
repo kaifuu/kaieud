@@ -71,8 +71,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="班主任">
-          <el-select v-model="form.classTeacherId" clearable style="width: 100%">
-            <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+          <el-select v-model="form.classTeacherUserId" clearable filterable style="width: 100%"
+                     placeholder="输入姓名搜索员工">
+            <el-option v-for="c in staffCandidates" :key="c.userId" :label="c.name" :value="c.userId">
+              <span>{{ c.name }}</span>
+              <el-tag size="small" effect="plain" style="margin-left: 8px">{{ STAFF_NAMES[c.userType] || '员工' }}</el-tag>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="容量"><el-input-number v-model="form.capacity" :min="1" /></el-form-item>
@@ -108,8 +112,14 @@ const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
 
 const courses = ref([])
 const teachers = ref([])
+/* 班主任候选：用户管理中类型为员工的在职人员（保存时后端按 userId 解析教师档案） */
+const staffCandidates = ref([])
+const STAFF_NAMES = { 2: '教务人员', 3: '班主任', 6: '校区校长', 7: '校区咨询师', 8: '校区学管师' }
 const courseName = (id) => courses.value.find((c) => c.id === id)?.name || '-'
-const teacherName = (id) => teachers.value.find((t) => t.id === id)?.name || '-'
+const teacherName = (id) => {
+  const cand = staffCandidates.value.find((c) => c.teacherId === id)
+  return cand?.name || teachers.value.find((t) => t.id === id)?.name || '-'
+}
 
 const allColumns = [
   { prop: 'name', label: '班级名称' }, { prop: 'courseId', label: '课程' },
@@ -138,16 +148,25 @@ function openDetail(row) {
 }
 function openEdit(row) {
   form.value = row ? { ...row } : { capacity: 20, status: 1 }
+  // 已有班主任（教师档案ID）回显为对应员工 userId
+  if (row?.classTeacherId) {
+    const cand = staffCandidates.value.find((c) => c.teacherId === row.classTeacherId)
+    form.value.classTeacherUserId = cand ? cand.userId : undefined
+  }
   visible.value = true
 }
 async function save() {
   if (!form.value.name) return ElMessage.warning('班级名称不能为空')
+  // 后端仅按 classTeacherUserId 解析班主任；清空选择时须把原教师档案ID一并置空
+  if (!form.value.classTeacherUserId) form.value.classTeacherId = null
   saving.value = true
   try {
     if (form.value.id) await api.clazzUpdate(form.value)
     else await api.clazzSave(form.value)
     ElMessage.success('已保存')
     visible.value = false
+    // 班主任可能在保存时才补建教师档案，刷新映射表避免列表显示 '-'
+    await refreshTeacherMaps()
     load()
   } finally { saving.value = false }
 }
@@ -175,9 +194,15 @@ async function batchRemove() {
   load()
 }
 
+/** 刷新班主任名称映射（候选员工 + 教师档案，列表/详情按 classTeacherId 反查姓名） */
+async function refreshTeacherMaps() {
+  staffCandidates.value = (await api.clazzTeacherCandidates()) || []
+  teachers.value = (await api.teacherList()) || []
+}
+
 onMounted(async () => {
   load()
   courses.value = (await api.courseList()) || []
-  teachers.value = (await api.teacherList()) || []
+  await refreshTeacherMaps()
 })
 </script>

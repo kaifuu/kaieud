@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page tabs-page">
     <div class="page-header">
       <span class="page-title">排课管理</span>
       <div class="actions">
@@ -10,6 +10,7 @@
           <el-option v-for="r in classrooms" :key="r.id" :label="r.name" :value="r.id" />
         </el-select>
         <el-button type="primary" @click="openCreate">新增排课</el-button>
+        <el-button @click="openFreeTime">教师空闲</el-button>
       </div>
     </div>
 
@@ -23,46 +24,65 @@
     </el-tabs>
 
     <!-- ========== 日/周/月日历视图：双击日期看当日详情，拖拽调时，框选新增 ========== -->
-    <div v-show="isCalView" class="panel cal-panel"
-         style="height: calc(100% - 90px); padding: 12px"
+    <div v-show="isCalView" class="panel cal-panel tabs-fill"
+         style="padding: 12px"
          title="双击日期查看当日课次详情"
          @dblclick="onCalDblClick">
       <FullCalendar ref="calRef" :options="calOptions" />
     </div>
 
-    <!-- ========== 课次清单抽屉：日/周视图折叠汇总块、月视图「+N 节」、双击日期 三处共用；
-         操作与列表TAB一致（调时/取消/到课/教师请假/学生请假/旷课/补课/删除） ========== -->
+    <!-- ========== 课次清单抽屉：多教室折叠汇总块、月视图「+N 节」、双击日期、单课次点击 四处共用；
+         操作仅保留 调时/删除（取消与删除功能重复已移除；到课/请假/旷课/补课登记仍在列表TAB） ========== -->
     <el-drawer v-model="slotVisible" :title="slotTitle" size="520px">
-      <div v-for="r in slotRows" :key="r.id" class="panel slot-item">
+      <div v-for="r in pagedSlotRows" :key="r.id" class="panel slot-item">
         <div class="slot-head">
           <el-tag effect="dark" size="small" type="info">{{ fmtHM(r.startTime) }}~{{ fmtHM(r.endTime) }}</el-tag>
           <el-tag size="small" :type="r.clazzId ? 'primary' : 'warning'" effect="plain">
             {{ r.clazzId ? '班课' : '一对一' }}</el-tag>
-          <span class="slot-name">{{ r.clazzId ? clazzName(r.clazzId) : studentName(r.studentId) }}</span>
+          <!-- 点击课名展开/收缩 教师、班级、上课学生信息 -->
+          <span class="slot-name slot-toggle" @click="toggleSlot(r)">
+            <el-icon class="slot-arrow" :class="{ open: r._open }"><ArrowRight /></el-icon>
+            {{ r.clazzId ? clazzName(r.clazzId) : studentName(r.studentId) }}
+          </span>
           <el-tag size="small" :type="SCH_STATUS[r.status]?.type || 'info'" effect="light">
             {{ SCH_STATUS[r.status]?.label || '-' }}</el-tag>
         </div>
         <div class="slot-meta">
           {{ teacherName(r.teacherId) }}<template v-if="r.classroom"> · 📍{{ r.classroom }}</template>
         </div>
+        <!-- 展开区：教师信息 / 班级信息 / 上课学生信息 -->
+        <div v-if="r._open" class="slot-detail">
+          <div class="sd-row"><span class="sd-label">教师</span>{{ teacherInfo(r.teacherId) }}</div>
+          <template v-if="r.clazzId">
+            <div class="sd-row">
+              <span class="sd-label">班级</span>
+              {{ courseNameOf(r.clazzId) }} · 班主任 {{ clazzTeacherOf(r.clazzId) }}
+            </div>
+            <div class="sd-row">
+              <span class="sd-label">上课学生</span>
+              <template v-if="(clazzStudentsCache[r.clazzId] || []).length">
+                <el-tag v-for="s in clazzStudentsCache[r.clazzId]" :key="s.studentId"
+                        size="small" effect="plain" class="sd-stu" :title="s.phone || ''">{{ s.name }}</el-tag>
+              </template>
+              <span v-else class="sd-muted">暂无在读学员</span>
+            </div>
+          </template>
+          <div v-else class="sd-row"><span class="sd-label">学生</span>{{ studentInfo(r.studentId) }}</div>
+        </div>
         <div class="slot-acts">
-          <!-- 未开始：调时/取消（与列表TAB口径一致） -->
-          <template v-if="r.status === 0 && !isDoneRow(r)">
-            <el-button v-if="canAdjustRow(r)" link type="primary" size="small" @click="slotAction(r, openAdjust)">调时</el-button>
-            <el-button link type="danger" size="small" @click="slotAction(r, doCancel)">取消</el-button>
-          </template>
-          <!-- 已下课未登记：到课/请假/旷课 -->
-          <template v-if="r.status === 0 && isDoneRow(r)">
-            <el-button link type="success" size="small" @click="slotAction(r, openAttend)">到课</el-button>
-            <el-button link type="warning" size="small" @click="slotAction(r, doLeave, 3)">教师请假</el-button>
-            <el-button link type="warning" size="small" @click="slotAction(r, doLeave, 4)">学生请假</el-button>
-            <el-button link type="danger" size="small" @click="slotAction(r, doAbsent)">旷课</el-button>
-          </template>
-          <el-button v-if="r.status === 2" link type="warning" size="small" @click="slotAction(r, openCompensate)">补课</el-button>
-          <el-button v-if="r.status === 0 || r.status === 2" link type="danger" size="small" @click="slotDelete(r)">删除</el-button>
+          <!-- 课次详情仅提供 调时/删除 两项操作 -->
+          <el-button v-if="r.status === 0 && canAdjustRow(r)" link type="primary" size="small"
+                     @click="slotAction(r, openAdjust)">调时</el-button>
+          <el-button v-if="r.status === 0 || r.status === 2" link type="danger" size="small"
+                     @click="slotDelete(r)">删除</el-button>
         </div>
       </div>
       <el-empty v-if="!slotRows.length" description="无课次" :image-size="60" />
+      <!-- 时段课次多于 10 节：分页展示 -->
+      <div v-if="slotRows.length > SLOT_PAGE_SIZE" class="pager-row" style="margin-top: 4px">
+        <el-pagination background small layout="total, prev, pager, next" :total="slotRows.length"
+                       v-model:current-page="slotPage" :page-size="SLOT_PAGE_SIZE" />
+      </div>
     </el-drawer>
 
     <!-- ========== 列表 TAB：4个阶段子TAB（徽标数与拆分一致） ========== -->
@@ -82,7 +102,7 @@
         </el-tab-pane>
       </el-tabs>
     </div>
-    <div v-show="viewTab === 'list'" class="panel table-panel" style="height: calc(100% - 136px)">
+    <div v-show="viewTab === 'list'" class="panel table-panel tabs-fill">
       <div class="toolbar">
         <el-select v-model="filters.teacherId" placeholder="教师" clearable filterable style="width: 140px" @change="onFilterChange">
           <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
@@ -158,7 +178,7 @@
     </div>
 
     <!-- ========== 排课历史 TAB：只读操作记录 ========== -->
-    <div v-show="viewTab === 'history'" class="panel" style="padding: 12px 16px; height: calc(100% - 90px); display: flex; flex-direction: column">
+    <div v-show="viewTab === 'history'" class="panel tabs-fill" style="padding: 12px 16px; display: flex; flex-direction: column">
       <div class="toolbar">
         <el-select v-model="filters.teacherId" placeholder="教师" clearable filterable style="width: 140px" @change="onHistoryFilter">
           <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
@@ -260,6 +280,43 @@
       </template>
     </el-drawer>
 
+    <!-- 教师共同空闲查询（原"教师空闲查询"菜单收编）：多师交集 + 禁排时段感知，点空闲段直接带入排课 -->
+    <el-drawer v-model="freeVisible" title="教师共同空闲查询" size="640px">
+      <div class="ft-bar">
+        <el-date-picker v-model="freeRange" type="daterange" value-format="YYYY-MM-DD"
+                        range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期"
+                        style="width: 260px" />
+        <el-select v-model="freeTeacherIds" multiple collapse-tags filterable
+                   placeholder="选择多位教师（取共同空闲）" style="width: 260px">
+          <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+        </el-select>
+        <el-select v-model="freePeriod" placeholder="时段" clearable style="width: 100px">
+          <el-option label="上午" :value="1" /><el-option label="下午" :value="2" /><el-option label="晚上" :value="3" />
+        </el-select>
+        <el-button type="primary" :loading="freeLoading" @click="queryFree">查询</el-button>
+      </div>
+      <el-alert type="info" :closable="false" style="margin: 10px 0"
+                title="空闲 = 工作时段(08:00-21:00) - 教师固定禁排时段 - 已有排课；结果为所选教师的共同空闲交集" />
+      <el-table :data="freeRows" v-loading="freeLoading" stripe size="small">
+        <el-table-column type="index" label="序号" width="55" />
+        <el-table-column prop="date" label="空闲日期" width="110" />
+        <el-table-column label="空闲时段" width="130">
+          <template #default="{ row }">
+            <el-tag effect="light" size="small">{{ row.start }} ~ {{ row.end }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="空闲教师" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ (row.teachers || []).join('、') }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="applyFree(row)">排到此处</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!freeRows.length && !freeLoading" description="选择教师后查询共同空闲" :image-size="70" />
+    </el-drawer>
+
     <!-- 调时/补课 -->
     <el-dialog v-model="timeVisible" :title="timeMode === 'adjust' ? '调整上课时间' : '安排补课'" width="430px">
       <el-form label-width="90px">
@@ -335,11 +392,29 @@ const counts = reactive({ tobe: 0, today: 0, ongoing: 0, done: 0 })
 const teachers = ref([])
 const clazzes = ref([])
 const students = ref([])
+const courses = ref([])
 const orgList = ref([])
 const classrooms = ref([])
 const teacherName = (id) => teachers.value.find((t) => t.id === id)?.name || '-'
 const clazzName = (id) => clazzes.value.find((c) => c.id === id)?.name || '-'
 const studentName = (id) => students.value.find((s) => s.id === id)?.name || '-'
+/** 教师信息（课次展开用）：姓名 + 联系电话 */
+const teacherInfo = (id) => {
+  const t = teachers.value.find((x) => x.id === id)
+  return t ? t.name + (t.phone ? `（${t.phone}）` : '') : '-'
+}
+/** 学生信息（一对一课次展开用）：姓名 + 家长电话 */
+const studentInfo = (id) => {
+  const s = students.value.find((x) => x.id === id)
+  return s ? s.name + (s.parentPhone ? `（家长 ${s.parentPhone}）` : '') : '-'
+}
+/** 班级信息（课次展开用）：课程 / 班主任 */
+const courseNameOf = (clazzId) => {
+  const c = clazzes.value.find((x) => x.id === clazzId)
+  return (c && courses.value.find((x) => x.id === c.courseId)?.name) || '-'
+}
+const clazzTeacherOf = (clazzId) =>
+  teacherName(clazzes.value.find((x) => x.id === clazzId)?.classTeacherId)
 
 /* ===== 列表 TAB（4个阶段子TAB，后端 phase 过滤保持一致） ===== */
 const listQuery = reactive({ keyword: '', page: 1 })
@@ -378,6 +453,45 @@ function goSchedule(row) {
   if (row.teacherId) filters.teacherId = row.teacherId
   viewTab.value = 'week'
   ElMessage.info('已在周视图中，点击/拖选时间段即可排课')
+}
+
+/* ===== 教师共同空闲查询（原独立菜单收编为排课辅助工具） ===== */
+const freeVisible = ref(false)
+const freeLoading = ref(false)
+const freeRange = ref([new Date().toISOString().slice(0, 10),
+  new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10)])
+const freeTeacherIds = ref([])
+const freePeriod = ref(null)
+const freeRows = ref([])
+
+function openFreeTime() { freeVisible.value = true }
+
+async function queryFree() {
+  if (!freeTeacherIds.value.length) return ElMessage.warning('请至少选择一名教师')
+  if (!freeRange.value || freeRange.value.length !== 2) return ElMessage.warning('请选择日期范围')
+  freeLoading.value = true
+  try {
+    freeRows.value = (await api.teacherFreeTime({
+      begin: freeRange.value[0], end: freeRange.value[1],
+      period: freePeriod.value, teacherIds: freeTeacherIds.value
+    })) || []
+    if (!freeRows.value.length) ElMessage.info('所选时间段内没有共同空闲时段')
+  } finally { freeLoading.value = false }
+}
+
+/** 排到此处：日历定位到该日期，新增排课抽屉带入 时间段+教师（单师时） */
+function applyFree(row) {
+  freeVisible.value = false
+  if (viewTab.value !== 'day' && viewTab.value !== 'week' && viewTab.value !== 'month') viewTab.value = 'week'
+  nextTick(() => calRef.value?.getApi?.()?.gotoDate(row.date))
+  form.value = {
+    mode: 'clazz',
+    startTime: `${row.date} ${row.start}:00`,
+    endTime: `${row.date} ${row.end}:00`,
+    teacherId: (row.teacherIds || []).length === 1 ? row.teacherIds[0] : undefined
+  }
+  createVisible.value = true
+  ElMessage.success('已带入空闲时段，选择班级/学生与教室后保存')
 }
 
 async function loadPhaseCounts() {
@@ -486,11 +600,9 @@ function toCalEvent(r) {
 }
 
 /**
- * 时段折叠：同一天内时间上连通重叠（含部分重叠的阶梯链）的课次为一组，
- * 组内数量超过分道上限（周视图列窄3路/日视图单列宽5路）则折叠为汇总块，
- * 避免 10+ 教室并排把每道挤成不可读窄条。
+ * 时段成链：同一天内时间上连通重叠（含部分重叠的阶梯链）的课次为一组。
  */
-function groupOverlapChains(records, limit) {
+function groupOverlapChains(records) {
   const byDay = new Map()
   for (const r of records) {
     const d = String(r.startTime || '').slice(0, 10)
@@ -502,7 +614,7 @@ function groupOverlapChains(records, limit) {
     arr.sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
     let chain = [], chainEnd = ''
     const flush = () => {
-      if (chain.length) groups.push({ chain, folded: chain.length > limit })
+      if (chain.length) groups.push({ chain })
       chain = []; chainEnd = ''
     }
     for (const r of arr) {
@@ -529,44 +641,47 @@ async function loadCalEvents(info, successCallback, failureCallback) {
     const room = classrooms.value.find((x) => x.id === roomFilter.value)
     const shown = room ? records.filter((r) => r.classroomId === room.id || r.classroom === room.name) : records
     shownSchedules.value = shown
-    // 折叠阈值：日视图单列约1400px可容5道；周视图每列约200px容3道；月视图由 dayMaxEvents 处理
-    // （本版 FullCalendar 的 fetchInfo 不带 view，从日历 API 取当前视图，viewTab 兜底）
-    const viewType = calRef.value?.getApi?.()?.view?.type
-      || ({ day: 'timeGridDay', week: 'timeGridWeek', month: 'dayGridMonth' })[viewTab.value]
-    const laneLimit = viewType === 'timeGridDay' ? 5
-                    : viewType === 'timeGridWeek' ? 3 : 0
-    const groups = laneLimit ? groupOverlapChains(shown, laneLimit)
-                             : shown.map((r) => ({ chain: [r], folded: false }))
+    // 折叠规则：日/周/月统一 —— 本时段只涉及 1 间教室时按原逻辑逐节直显；
+    // 涉及多间教室则整段折叠为「已排 N 间教室」提示块（深灰蓝中性色，不可拖拽），
+    // 点击开课次清单抽屉展示该时段全部课次的教室/教师等信息
     const evts = []
-    for (const g of groups) {
-      if (!g.folded) { for (const r of g.chain) evts.push(toCalEvent(r)); continue }
-      // 折叠汇总块：深灰蓝中性色区分于状态色，不可拖拽，点击开课次清单抽屉
+    for (const g of groupOverlapChains(shown)) {
+      const rooms = [...new Set(g.chain.map((r) => r.classroom).filter(Boolean))]
+      if (rooms.length <= 1) {
+        for (const r of g.chain) evts.push(toCalEvent(r))
+        continue
+      }
       const chain = g.chain
       const maxEnd = chain.reduce((m, r) => (String(r.endTime || '') > m ? String(r.endTime || '') : m), '')
-      const rooms = [...new Set(chain.map((r) => r.classroom).filter(Boolean))]
-      const roomsText = !rooms.length ? '多间教室'
-        : rooms.length > 3 ? rooms.slice(0, 3).join('、') + ` 等${rooms.length}间` : rooms.join('、')
       evts.push({
         id: 'b' + evts.length,
-        title: `${chain.length} 节课`,
+        title: `已排 ${rooms.length} 间教室`,
         start: chain[0].startTime, end: maxEnd,
         backgroundColor: '#475469', borderColor: 'transparent', editable: false,
         extendedProps: {
-          status: null, // 不挂删除按钮、不进调时
+          status: null, // 汇总块不可拖拽、不进调时，点击只开清单抽屉
           bundle: chain,
           range: [chain[0].startTime, maxEnd],
-          name: `${chain.length} 节课`,
-          meta: roomsText
+          name: `已排 ${rooms.length} 间教室`,
+          meta: `${chain.length} 节课 · 点击查看教室/教师`
         }
       })
     }
     successCallback(evts)
-    console.log('[caldebug] vt=%s limit=%s rec=%s folded=%s singles=%s', viewType, laneLimit, records.length,
-      evts.filter((e) => e.extendedProps.bundle).length, evts.filter((e) => !e.extendedProps.bundle).length)
   } catch (e) { console.error('日历课次加载失败:', e); failureCallback(e) }
 }
 
-/** 色块两行式内容：行1 时间+班级/学生（时间弱化），行2 📍教室 · 教师；窄块省略号截断不换行 */
+/** 根据色块底色亮度选数字高亮色：深底用亮金、浅底用深橙，保证任何底色下对比突出 */
+function numHighlightOn(bg) {
+  const m = String(bg || '').replace('#', '')
+  if (m.length < 6) return '#FFD666'
+  const r = parseInt(m.slice(0, 2), 16), g = parseInt(m.slice(2, 4), 16), b = parseInt(m.slice(4, 6), 16)
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return lum < 0.5 ? '#FFD666' : '#F79009'
+}
+
+/** 色块两行式内容：行1 时间+班级/学生（时间弱化），行2 📍教室 · 教师；窄块省略号截断不换行。
+    折叠汇总块的教室数按底色亮度用高亮色呈现（深底亮金/浅底深橙） */
 function renderEventContent(arg) {
   const p = arg.event.extendedProps
   const box = document.createElement('div')
@@ -577,7 +692,18 @@ function renderEventContent(arg) {
   t.className = 'ev2-t'
   t.textContent = (arg.timeText || '') + ' '
   line1.appendChild(t)
-  line1.appendChild(document.createTextNode(p.name || arg.event.title))
+  const m = /^已排 (\d+) 间教室$/.exec(p.name || '')
+  if (m) {
+    line1.appendChild(document.createTextNode('已排 '))
+    const num = document.createElement('span')
+    num.className = 'ev2-num'
+    num.textContent = m[1]
+    num.style.color = numHighlightOn(arg.event.backgroundColor)
+    line1.appendChild(num)
+    line1.appendChild(document.createTextNode(' 间教室'))
+  } else {
+    line1.appendChild(document.createTextNode(p.name || arg.event.title))
+  }
   const line2 = document.createElement('div')
   line2.className = 'ev2-m'
   line2.textContent = p.meta || ''
@@ -640,12 +766,11 @@ function onEventClick(info) {
   const p = info.event.extendedProps
   // 折叠汇总块：打开该时段的课次清单抽屉
   if (p.bundle) return openSlotDrawer(p.bundle, `${fmtHM(p.range[0])}~${fmtHM(p.range[1])} 时段课次（${p.bundle.length} 节）`)
+  // 单个课次块：同样走课次抽屉（展示时间/班级/教师/教室 + 与列表一致的操作），
+  // 色块内不再挂悬停删除按钮，避免窄块/小屏下遮挡文字
   const raw = rawSchedules.value.find((r) => String(r.id) === info.event.id)
   if (!raw) return
-  // 已开始的课次：时间已过，不弹调时窗，仅提示（与日历灰色已过区域一致）
-  if (new Date(String(raw.startTime).replace(' ', 'T')).getTime() <= Date.now())
-    return ElMessage.warning('该课次时间已过，不能调整上课时间')
-  openAdjust(raw)
+  openSlotDrawer([raw], '课次详情')
 }
 
 /* ===== 课次清单抽屉：汇总块 / 月视图「+N 节」 / 双击日期 共用 ===== */
@@ -654,14 +779,29 @@ const slotTitle = ref('')
 const slotRows = ref([])
 const fmtHM = (s) => String(s || '').slice(11, 16)
 const toTs = (s) => new Date(String(s || '').replace(' ', 'T')).getTime()
-/** 已下课（结束时间已过）：清单里走 到课/请假/旷课 登记分支 */
-const isDoneRow = (r) => toTs(r.endTime) <= Date.now()
 /** 未开始（开始时间在未来）：可调时 */
 const canAdjustRow = (r) => toTs(r.startTime) > Date.now()
+
+/* 时段课次多于 10 节分页展示（每页 10 条） */
+const SLOT_PAGE_SIZE = 10
+const slotPage = ref(1)
+const pagedSlotRows = computed(() => {
+  const start = (slotPage.value - 1) * SLOT_PAGE_SIZE
+  return slotRows.value.slice(start, start + SLOT_PAGE_SIZE)
+})
+
+/* 班级在读学员缓存（点击课名展开时按班级懒加载一次） */
+const clazzStudentsCache = reactive({})
+async function toggleSlot(r) {
+  r._open = !r._open
+  if (r._open && r.clazzId && !clazzStudentsCache[r.clazzId])
+    clazzStudentsCache[r.clazzId] = (await api.scheduleClazzStudents(r.clazzId)) || []
+}
 
 function openSlotDrawer(rows, title) {
   slotRows.value = [...rows].sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
   slotTitle.value = title
+  slotPage.value = 1
   slotVisible.value = true
 }
 
@@ -671,10 +811,14 @@ function slotAction(r, fn, ...args) {
   fn(r, ...args)
 }
 
-/** 清单内删除：成功后就地移除该行（不关抽屉，便于连续处理） */
+/** 清单内删除：成功后就地移除该行（不关抽屉，便于连续处理），并回收越界页码 */
 async function slotDelete(r) {
   const ok = await doDeleteSchedule(r.id)
-  if (ok) slotRows.value = slotRows.value.filter((x) => x.id !== r.id)
+  if (ok) {
+    slotRows.value = slotRows.value.filter((x) => x.id !== r.id)
+    const maxPage = Math.max(1, Math.ceil(slotRows.value.length / SLOT_PAGE_SIZE))
+    if (slotPage.value > maxPage) slotPage.value = maxPage
+  }
 }
 
 /** 当日课次清单（月视图「+N 节」与双击日期入口），口径与日历当前展示一致 */
@@ -885,8 +1029,8 @@ async function saveTime() {
   refreshAll()
 }
 
-/* ===== 日历事件：颜色=状态，仅待上课可拖拽；点事件=调时；悬停右上角=删除；
-   同时段并发超阈值折叠为汇总块，点汇总块/「+N 节」/双击日期=课次清单抽屉 ===== */
+/* ===== 日历事件：颜色=状态，仅待上课可拖拽；点课次块/汇总块/「+N 节」/双击日期
+   统一打开课次清单抽屉（信息 + 调时/取消/删除/登记等操作） ===== */
 const calOptions = {
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
   initialView: 'timeGridWeek',
@@ -904,29 +1048,12 @@ const calOptions = {
   moreLinkText: (n) => `+${n} 节`,
   moreLinkClick: onMoreLinkClick,
   eventContent: renderEventContent,
-  eventDidMount: onEventDidMount,
   eventDrop: onEventDrop,
   eventClick: onEventClick,
   select: onSelect,
   datesSet: onDatesSet,
   eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
   slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false }
-}
-
-/** 事件块右上角挂删除按钮（仅待上课/已取消可删），点击不触发调时弹窗 */
-const TRASH_SVG = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
-function onEventDidMount(arg) {
-  const st = arg.event.extendedProps.status
-  if (st !== 0 && st !== 2) return
-  const btn = document.createElement('span')
-  btn.className = 'ev-del'
-  btn.title = '删除课次'
-  btn.innerHTML = TRASH_SVG
-  btn.addEventListener('click', (ev) => {
-    ev.stopPropagation()
-    doDeleteSchedule(Number(arg.event.id))
-  })
-  arg.el.appendChild(btn)
 }
 
 /** 日历/清单删除课次：确认后软删除（排课历史留痕）；返回是否真正删除 */
@@ -947,6 +1074,7 @@ onMounted(async () => {
   teachers.value = (await api.teacherList()) || []
   clazzes.value = (await api.clazzList()) || []
   students.value = (await api.studentList()) || []
+  courses.value = (await api.courseList()) || []
   classrooms.value = (await api.classroomList()) || []
   const tree = (await api.orgTree()) || []
   const orgs = []
@@ -964,6 +1092,8 @@ onMounted(async () => {
 .phase-tabs :deep(.el-tabs__item) { height: 40px; }
 .phase-badge { margin-left: 4px; }
 .tobe-hint { color: #98a2b3; font-size: 12px; margin-left: 4px; }
+/* 教师空闲查询抽屉：筛选条 */
+.ft-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .remain-tag { margin-left: 6px; }
 /* 日历文字与全站字号统一 */
 .cal-panel :deep(.fc) { font-size: 12.5px; }
@@ -976,7 +1106,7 @@ onMounted(async () => {
   border-color: transparent;
 }
 .cal-panel :deep(.fc .fc-event) { border-radius: 5px; border: none; cursor: pointer; }
-/* 两行式色块内容（eventContent 动态创建，同 .ev-del 须经 :deep 挂靠）：
+/* 两行式色块内容（eventContent 动态创建，须经 :deep 挂靠）：
    行1 时间+班级/学生，行2 📍教室 · 教师；窄块单行省略号截断，不再挤压换行 */
 .cal-panel :deep(.ev2) {
   display: flex; flex-direction: column; gap: 1px;
@@ -985,27 +1115,18 @@ onMounted(async () => {
 .cal-panel :deep(.ev2-n) {
   font-size: 11.5px; font-weight: 600; color: #fff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  padding-right: 14px; /* 右上角悬停删除按钮让位，避免遮字 */
 }
 .cal-panel :deep(.ev2-t) { font-size: 10px; font-weight: 400; opacity: 0.85; }
+/* 折叠汇总块的教室数高亮（颜色由 numHighlightOn 按底色亮度内联指定） */
+.cal-panel :deep(.ev2-num) {
+  font-size: 13.5px; font-weight: 700; padding: 0 1px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
 .cal-panel :deep(.ev2-m) {
   font-size: 10.5px; color: rgba(255, 255, 255, 0.92);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* 事件块右上角删除按钮（垃圾桶图标）。按钮为 eventDidMount 动态创建（无 data-v），
-   必须经 :deep(.cal-panel…) 挂靠，否则 scoped 规则匹配不上、图标不定位到右上角。
-   悬停色块才显现：高并发窄道下常态不占空间、不遮挡文字 */
-.cal-panel :deep(.fc .fc-event) { position: relative; }
-.cal-panel :deep(.ev-del) {
-  position: absolute; top: 1px; right: 2px; z-index: 2;
-  width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
-  color: rgba(255, 255, 255, 0.92); cursor: pointer;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
-  opacity: 0; transition: opacity 0.15s;
-}
-.cal-panel :deep(.fc-event:hover .ev-del),
-.cal-panel :deep(.ev-del:focus-visible) { opacity: 1; }
-.cal-panel :deep(.ev-del:hover) { color: #fff; background: rgba(0, 0, 0, 0.28); border-radius: 4px; }
+/* 课次块无内嵌按钮，整块即点击目标（开课次抽屉），不再有删除按钮遮挡问题 */
 .cal-panel :deep(.fc .fc-daygrid-day-number),
 .cal-panel :deep(.fc .fc-col-header-cell-cushion) { color: #475467; }
 /* 今天列底色（日/周/月视图的当日可用时段）：淡紫（渲染 ≈ #dac8fa），与白底/灰色对比明显 */
@@ -1025,4 +1146,19 @@ onMounted(async () => {
 .slot-meta { font-size: 12.5px; color: #667085; margin: 4px 0 2px; }
 .slot-acts { display: flex; flex-wrap: wrap; margin-top: 2px; }
 .slot-acts .el-button + .el-button { margin-left: 8px; }
+/* 点击课名展开/收缩：箭头随开合旋转 */
+.slot-toggle { cursor: pointer; display: inline-flex; align-items: center; gap: 2px; }
+.slot-toggle:hover { color: #155eef; }
+.slot-arrow { font-size: 12px; color: #98a2b3; transition: transform 0.2s; }
+.slot-arrow.open { transform: rotate(90deg); }
+/* 展开区：教师/班级/上课学生 */
+.slot-detail {
+  margin-top: 8px; padding: 8px 10px; background: #f8fafc;
+  border-radius: 6px; display: flex; flex-direction: column; gap: 5px;
+  font-size: 12.5px; color: #475467;
+}
+.sd-row { display: flex; align-items: center; flex-wrap: wrap; }
+.sd-label { color: #98a2b3; margin-right: 6px; white-space: nowrap; }
+.sd-stu { margin: 0 4px 2px 0; }
+.sd-muted { color: #98a2b3; }
 </style>

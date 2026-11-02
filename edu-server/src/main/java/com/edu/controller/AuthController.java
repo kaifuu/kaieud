@@ -28,7 +28,7 @@ public class AuthController {
     @PostMapping("/login")
     @Log(value = "登录系统", type = 1)
     public Result<LoginVO> login(@RequestBody LoginDTO dto) {
-        return Result.ok(authService.login(dto.getUsername(), dto.getPassword(),
+        return Result.ok(authService.login(dto.getTenantCode(), dto.getUsername(), dto.getPassword(),
                 dto.getCaptchaKey(), dto.getCaptchaCode()));
     }
 
@@ -63,11 +63,11 @@ public class AuthController {
         return Result.ok();
     }
 
-    /** 当前用户最新菜单树（侧栏动态刷新用） */
+    /** 当前用户最新菜单树（侧栏动态刷新用，按租户开通功能过滤） */
     @GetMapping("/menus")
     public Result<Object> menus() {
         LoginUser lu = AuthContext.get();
-        return Result.ok(authService.buildMenus(lu.getId(), lu.getUserType()));
+        return Result.ok(authService.buildMenus(lu.getId(), lu.getUserType(), lu.getTenantId()));
     }
 
     @PostMapping("/password")

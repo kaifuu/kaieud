@@ -18,6 +18,8 @@ public class EduClassroom {
     private Long orgId;
     private String name;
     private Integer capacity;
+    /** 备注（教室位置、设备、使用注意事项等） */
+    private String remark;
     private Integer deleted;
     private LocalDateTime createTime;
 }

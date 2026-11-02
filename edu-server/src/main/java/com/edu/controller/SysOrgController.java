@@ -32,10 +32,9 @@ public class SysOrgController {
 
     @GetMapping("/tree")
     public Result<List<OrgNode>> tree() {
-        Long tenantId = AuthContext.get().getTenantId();
-        boolean scoped = tenantId != null && tenantId != 0; // 超管查看全部
+        // 租户隔离由拦截器自动拼接（平台管理员看全部），此处只负责组树
         List<SysOrg> all = orgMapper.selectList(new LambdaQueryWrapper<SysOrg>()
-                .eq(scoped, SysOrg::getTenantId, tenantId).orderByAsc(SysOrg::getSort));
+                .orderByAsc(SysOrg::getSort));
         Map<Long, List<SysOrg>> byParent = all.stream()
                 .collect(Collectors.groupingBy(SysOrg::getParentId));
         return Result.ok(build(all, byParent, 0L));
@@ -57,7 +56,9 @@ public class SysOrgController {
     @PostMapping
     @Log("新增组织")
     public Result<Void> save(@RequestBody SysOrg org) {
-        org.setTenantId(AuthContext.get().getTenantId());
+        // 归属当前登录租户（不接受前端指定）
+        Long tid = AuthContext.get().getTenantId();
+        org.setTenantId(tid == null ? 0L : tid);
         orgMapper.insert(org);
         return Result.ok();
     }

@@ -11,6 +11,8 @@ import lombok.Data;
 public class SysDict {
     @TableId(type = IdType.AUTO)
     private Long id;
+    /** 租户ID：0=平台模板；各企业自维护一套 */
+    private Long tenantId;
     private String dictType;
     private String label;
     private String value;

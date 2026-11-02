@@ -12,7 +12,7 @@
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
         <el-select v-model="query.orgId" placeholder="校区" clearable filterable style="width: 140px">
-          <el-option v-for="d in dictStore.options('campus')" :key="d.value" :label="d.label" :value="Number(d.value)" />
+          <el-option v-for="o in orgOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <div style="flex: 1"></div>
@@ -22,7 +22,10 @@
         <el-table-column prop="name" label="教室名称" min-width="150" />
         <el-table-column prop="capacity" label="可容纳人数" width="110" />
         <el-table-column label="校区" min-width="130">
-          <template #default="{ row }">{{ dictStore.label('campus', row.orgId) }}</template>
+          <template #default="{ row }">{{ orgName(row.orgId) }}</template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
@@ -41,15 +44,19 @@
       </div>
     </div>
 
-    <!-- 新增/编辑教室 -->
+    <!-- 新增/编辑教室：所属校区必填，置于教室名称之前 -->
     <el-drawer v-model="visible" :title="form.id ? '编辑教室' : '新增教室'" size="440px">
       <el-form :model="form" label-width="100px">
+        <el-form-item label="所属校区" required>
+          <el-select v-model="form.orgId" placeholder="请选择所属校区" style="width: 100%">
+            <el-option v-for="o in orgOptions" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="教室名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="可容纳人数"><el-input-number v-model="form.capacity" :min="0" style="width: 100%" /></el-form-item>
-        <el-form-item label="所属校区">
-          <el-select v-model="form.orgId" clearable style="width: 100%">
-            <el-option v-for="d in dictStore.options('campus')" :key="d.value" :label="d.label" :value="Number(d.value)" />
-          </el-select>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="500" show-word-limit
+                    placeholder="教室位置、设备、使用注意事项等" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -93,9 +100,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
-const dictStore = useDictStore()
 import { usePage } from '../../composables/usePage'
-import { useDictStore } from '../../store/dict'
 
 const query = reactive({ keyword: '', orgId: null })
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
@@ -115,6 +120,7 @@ function openEdit(row) {
   visible.value = true
 }
 async function save() {
+  if (!form.value.orgId) return ElMessage.warning('所属校区为必填项')
   if (!form.value.name) return ElMessage.warning('教室名称不能为空')
   saving.value = true
   try {
@@ -145,8 +151,21 @@ async function loadOcc() {
   })) || {}
 }
 
-onMounted(() => {
+/* 校区来源：本企业组织树（拍平为 父/子 层级名） */
+const orgOptions = ref([])
+const orgMap = ref({})
+const orgName = (id) => orgMap.value[id] || '-'
+
+onMounted(async () => {
   load()
-  dictStore.load(true)
+  const tree = (await api.orgTree()) || []
+  const flat = {}
+  const walk = (nodes, parentName) => nodes.forEach((n) => {
+    flat[n.id] = parentName ? `${parentName}/${n.name}` : n.name
+    walk(n.children || [], parentName || n.name)
+  })
+  walk(tree, '')
+  orgMap.value = flat
+  orgOptions.value = Object.keys(flat).map((id) => ({ value: Number(id), label: flat[id] }))
 })
 </script>

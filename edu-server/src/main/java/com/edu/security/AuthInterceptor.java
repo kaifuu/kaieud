@@ -30,6 +30,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private final SysMenuMapper menuMapper;
     private final EduTeacherMapper teacherMapper;
     private final EduStudentMapper studentMapper;
+    private final SysTenantMapper tenantMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -41,13 +42,33 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (userId == null) throw new BizException("401");
 
         LoginUser lu = loadUser(userId);
-        AuthContext.set(lu);
 
-        HandlerMethod hm = (HandlerMethod) handler;
-        RequiresPerm rp = hm.getMethodAnnotation(RequiresPerm.class);
-        if (rp == null) rp = hm.getBeanType().getAnnotation(RequiresPerm.class);
-        if (rp != null && !lu.hasPerm(rp.value())) throw new BizException("403");
-        return true;
+        // ---- 租户状态实时校验：禁用/过期的租户，其所有用户立即踢下线（防旧token残留）----
+        if (lu.getTenantId() != null && lu.getTenantId() > 0) {
+            SysTenant tenant = tenantMapper.selectById(lu.getTenantId());
+            if (tenant == null || !tenant.usable())
+                throw new BizException("401", "租户已停用或已过期，请联系平台");
+        }
+
+        // ---- 平台管理员切换目标租户视角：X-Target-Tenant 仅平台身份生效（租户用户传了也忽略）----
+        String target = request.getHeader("X-Target-Tenant");
+        if (target != null && lu.isPlatformAdmin()) {
+            try { lu.setTenantId(Long.valueOf(target.trim())); } catch (NumberFormatException ignore) { }
+        }
+
+        try {
+            HandlerMethod hm = (HandlerMethod) handler;
+            RequiresPerm rp = hm.getMethodAnnotation(RequiresPerm.class);
+            if (rp == null) rp = hm.getBeanType().getAnnotation(RequiresPerm.class);
+            if (rp != null && !lu.hasPerm(rp.value())) throw new BizException("403");
+            // 上下文只在成功路径写入：preHandle 抛异常时 Spring 不会回调本拦截器的
+            // afterCompletion，提前 set 会把租户信息泄漏到线程池（污染后续请求，含登录）
+            AuthContext.set(lu);
+            return true;
+        } catch (Exception e) {
+            AuthContext.clear();
+            throw e;
+        }
     }
 
     @Override

@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class EduCourseController {
 
     private final EduCourseMapper courseMapper;
+    private final com.edu.mapper.EduPackageMapper packageMapper;
 
     @GetMapping("/page")
     public Result<PageResult<EduCourse>> page(@RequestParam(defaultValue = "1") long page,
@@ -70,6 +71,12 @@ public class EduCourseController {
     @DeleteMapping("/{id}")
     @Log("删除课程")
     public Result<Void> delete(@PathVariable Long id) {
+        // 已绑定套餐的课程不能删除（保护套餐/合同引用完整性），只能下架停售
+        long bound = packageMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduPackage>()
+                .eq(com.edu.entity.EduPackage::getCourseId, id)
+                .eq(com.edu.entity.EduPackage::getDeleted, 0));
+        if (bound > 0)
+            return Result.error("该课程已绑定 " + bound + " 个课时套餐，不能删除，只能下架停售");
         courseMapper.deleteById(id);
         return Result.ok();
     }

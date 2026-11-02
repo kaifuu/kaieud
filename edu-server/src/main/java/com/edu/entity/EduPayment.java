@@ -28,6 +28,8 @@ public class EduPayment {
     private Integer payType;
     private LocalDateTime payTime;
     private String operator;
+    /** 操作人（最后新增/修改人，留痕） */
+    private String updateBy;
     private String remark;
     private Long orgId;
     private LocalDateTime createTime;

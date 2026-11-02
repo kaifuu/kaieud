@@ -23,6 +23,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,24 @@ public class EduScheduleController {
     private final com.edu.mapper.EduEnrollMapper enrollMapper;
     private final com.edu.mapper.EduClazzMapper clazzMapper;
     private final com.edu.mapper.EduScheduleLogMapper opLogMapper;
+
+    /** 班级在读学员（课次抽屉展开"上课学生"用）：姓名 + 家长联系电话 */
+    @GetMapping("/clazz-students")
+    public Result<List<Map<String, Object>>> clazzStudents(@RequestParam Long clazzId) {
+        List<EduEnroll> enrolls = enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, clazzId).eq(EduEnroll::getStatus, 1));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (EduEnroll e : enrolls) {
+            EduStudent s = e.getStudentId() == null ? null : studentMapper.selectById(e.getStudentId());
+            Map<String, Object> m = new HashMap<>();
+            m.put("studentId", e.getStudentId());
+            m.put("name", s == null ? "-" : s.getName());
+            m.put("phone", s == null ? null
+                    : (s.getParentPhone() != null ? s.getParentPhone() : s.getBackupPhone()));
+            result.add(m);
+        }
+        return Result.ok(result);
+    }
 
     @GetMapping("/page")
     public Result<PageResult<EduSchedule>> page(@RequestParam(defaultValue = "1") long page,

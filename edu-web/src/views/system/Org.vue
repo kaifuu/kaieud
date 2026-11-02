@@ -26,6 +26,13 @@
       <div class="panel table-panel" style="flex: 1">
         <div class="toolbar">
           <el-tag effect="light">{{ currentNode?.name || '全部组织' }}</el-tag>
+          <!-- 选中节点（含一级组织）本身的编辑/删除入口 -->
+          <template v-if="currentNode">
+            <el-button link type="primary" @click="openEdit(currentNode, null)">编辑{{ currentNode.parentId === 0 ? '一级组织' : '组织' }}</el-button>
+            <el-popconfirm title="确认删除该组织（含下级将无法删除）?" @confirm="remove(currentNode.id)">
+              <template #reference><el-button link type="danger">删除</el-button></template>
+            </el-popconfirm>
+          </template>
           <el-input v-model="filter.keyword" placeholder="名称 / 负责人 / 电话" clearable
                     style="width: 200px" @keyup.enter="filter.page = 1">
             <template #prefix><el-icon><Search /></el-icon></template>

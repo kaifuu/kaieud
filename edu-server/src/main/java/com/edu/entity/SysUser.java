@@ -68,6 +68,9 @@ public class SysUser {
     /** 兼任教师（非表字段）：非教师/学生类型账号勾选后创建教师档案，可上课、可用教师中心 */
     @TableField(exist = false)
     private Boolean asTeacher;
+    /** 兼任学生（非表字段）：非学生类型账号勾选后创建学生档案，可用学生中心（如超管体验学生端） */
+    @TableField(exist = false)
+    private Boolean asStudent;
 
     /** 角色ID集合(非表字段) */
     @TableField(exist = false)

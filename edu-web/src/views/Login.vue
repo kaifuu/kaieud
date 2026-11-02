@@ -127,7 +127,7 @@
         <div class="login-card card-in">
           <div class="card-head">
             <img v-if="cfg.logo_url" :src="cfg.logo_url" class="brand-mark brand-img" alt="logo" />
-            <div v-else class="brand-mark">E</div>
+            <BrandLogo v-else :size="46" dark :show-text="false" />
             <div>
               <h2>欢迎登录</h2>
               <p>EDU COURSE MANAGEMENT SYSTEM</p>
@@ -135,6 +135,12 @@
           </div>
 
           <el-form ref="formRef" :model="form" :rules="rules" @keyup.enter="onLogin">
+            <!-- 企业编码=登录域：企业用户填本企业编码，平台运营留空 -->
+            <el-form-item prop="tenantCode">
+              <el-input v-model="form.tenantCode" placeholder="企业编码（平台运营留空）" size="large" clearable>
+                <template #prefix><el-icon><OfficeBuilding /></el-icon></template>
+              </el-input>
+            </el-form-item>
             <el-form-item prop="username">
               <el-input v-model="form.username" placeholder="用户名" size="large" clearable>
                 <template #prefix><el-icon><User /></el-icon></template>
@@ -173,6 +179,7 @@ import { ElMessage } from 'element-plus'
 import api from '../api'
 import { useUserStore } from '../store/user'
 import { buildDynamicRoutes } from '../router'
+import BrandLogo from '../components/BrandLogo.vue'
 
 const router = useRouter()
 const store = useUserStore()
@@ -183,7 +190,7 @@ const loading = ref(false)
 const captchaCode = ref('') // Canvas当前验证码答案（仅前端校验）
 const cfg = ref({ logo_url: '', login_title: '', company_name: '', icp_no: '' })
 
-const form = ref({ username: 'admin', password: '123456', captchaCode: '' })
+const form = ref({ tenantCode: '', username: 'admin', password: '123456', captchaCode: '' })
 
 /** 表单校验：非空 + 验证码比对，提示柔和 */
 const rules = {
@@ -252,7 +259,12 @@ const onLogin = () => {
     if (!valid) return
     loading.value = true
     try {
-      await store.login({ username: form.value.username, password: form.value.password })
+      // 企业编码=登录域：企业用户填本企业编码，平台运营留空
+      await store.login({
+        tenantCode: form.value.tenantCode?.trim() || '',
+        username: form.value.username,
+        password: form.value.password
+      })
       buildDynamicRoutes(store.menus)
       router.push('/home')
     } catch (e) {

@@ -32,6 +32,9 @@ public class SysNotifyConfigController {
     @PostMapping
     @Log("新增/修改通知配置")
     public Result<Void> save(@RequestBody SysNotifyConfig config) {
+        // 必填校验：避免空表单直接插入触发数据库非空异常
+        if (config == null || !org.springframework.util.StringUtils.hasText(config.getName()))
+            return Result.error("配置名称不能为空");
         config.setTenantId(AuthContext.get().getTenantId());
         if (config.getId() != null) configMapper.updateById(config);
         else configMapper.insert(config);

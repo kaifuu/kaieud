@@ -21,10 +21,19 @@ export default {
   packageContracts: (id) => get(`/edu/package/${id}/contracts`),
   contractPage: (p) => get('/edu/contract/page', p),
   contractSave: (d) => post('/edu/contract', d),
+  contractUpdate: (d) => put('/edu/contract', d),
   contractDetail: (id) => get(`/edu/contract/${id}`),
   contractDel: (id) => del(`/edu/contract/${id}`),
   contractStudentSummary: (studentId) => get('/edu/contract/student-summary', { studentId }),
+  // 咨询顾问候选：用户管理中非学生/非系统用户的在职账号（租户内）
+  contractAdvisorCandidates: () => get('/edu/contract/advisor-candidates'),
   contractRefund: (id, d) => post(`/edu/contract/${id}/refund`, d),
+  contractRefundInfo: (id) => get(`/edu/contract/${id}/refund-info`),
+  // 学生账户：充值管理（教务）+ 学生中心账户
+  accountPage: (p) => get('/edu/account/page', p),
+  accountSummary: (p) => get('/edu/account/summary', p),
+  accountRecharge: (d) => post('/edu/account/recharge', d),
+  portalMyAccount: () => get('/portal/my-account'),
   consumePage: (p) => get('/edu/consume/page', p),
   consumeManual: (d) => post('/edu/consume/manual', d),
   consumeSign: (scheduleId, hours) => post(`/edu/consume/sign/${scheduleId}?hours=${hours}`),
@@ -43,6 +52,7 @@ export default {
   configPublic: () => get('/sys/config/public'),
   // 系统字典
   dictAll: () => get('/sys/dict/all'),
+  dictTypeNames: () => get('/sys/dict/type-names'),
   dictSave: (d) => post('/sys/dict', d),
   dictDel: (id) => del(`/sys/dict/${id}`),
   dictTypeSave: (d) => post('/sys/dict/type', d),
@@ -50,12 +60,22 @@ export default {
   dictTypeDel: (type) => del(`/sys/dict/type/${encodeURIComponent(type)}`),
   // 通知
   noticePage: (p) => get('/sys/notice/page', p),
+  // 消息历史：全部已发布通知全量记录（只读，任何登录用户可查）
+  noticeHistory: (p) => get('/sys/notice/history', p),
+  // 通知已读状态：已读ID集合 / 标记已读（点击查看内容时）/ 全部已读
+  noticeReadIds: () => get('/sys/notice/read-ids'),
+  noticeUnreadCount: () => get('/sys/notice/unread-count'),
+  noticeRead: (id) => post('/sys/notice/read', { id }),
+  noticeReadAll: () => post('/sys/notice/read-all'),
+  // 平台公告管理（平台运营TAB）：tenant_id=0 的通知（系统升级公告等），仅平台运营
+  noticePlatformPage: (p) => get('/sys/notice/platform-page', p),
   noticeRecent: (limit) => get('/sys/notice/recent', { limit }),
   noticeSave: (d) => post('/sys/notice', d),
   noticePublish: (id) => post(`/sys/notice/${id}/publish`),
   noticeDel: (id) => del(`/sys/notice/${id}`),
   configList: (p) => get('/sys/notify-config/list', p),
-  configSave: (d) => post('/sys/notify-config', d),
+  // 注意：通知配置保存（曾与基础设置的 configSave 重名互相覆盖，导致基础设置保存误插 sys_notify_config）
+  notifyConfigSave: (d) => post('/sys/notify-config', d),
   configToggle: (id, enabled) => post(`/sys/notify-config/${id}/toggle?enabled=${enabled}`),
   configDel: (id) => del(`/sys/notify-config/${id}`),
   updateProfile: (d) => put('/auth/profile', d),
@@ -68,6 +88,16 @@ export default {
   tenantSave: (d) => post('/sys/tenant', d),
   tenantUpdate: (d) => put('/sys/tenant', d),
   tenantDel: (id) => del(`/sys/tenant/${id}`),
+  // 启用/禁用租户（禁用后该租户所有用户立即无法访问）
+  tenantToggle: (id, enable) => post(`/sys/tenant/${id}/toggle?enable=${enable}`),
+  // 回收站与恢复：软删除的租户可一键恢复（用户重新启用，默认数据幂等补齐）
+  tenantRecycle: () => get('/sys/tenant/recycle'),
+  tenantRestore: (id) => post(`/sys/tenant/${id}/restore`),
+  // 物理删除企业数据（需超级秘钥，审计留痕）；清除历史（审计记录）
+  tenantPurge: (id, secret) => post(`/sys/tenant/${id}/purge`, { secret }),
+  tenantPurgeLogs: () => get('/sys/tenant/purge-logs'),
+  // 存量租户补开通（复制平台模板菜单/角色 + 生成租户管理员）
+  tenantProvision: (id) => post(`/sys/tenant/${id}/provision`),
   orgTree: () => get('/sys/org/tree'),
   orgSave: (d) => post('/sys/org', d),
   orgUpdate: (d) => put('/sys/org', d),
@@ -80,7 +110,7 @@ export default {
   userResetPwd: (id) => post(`/sys/user/${id}/reset-password`),
   userProfile: (id) => get(`/sys/user/${id}/profile`),
     userAvatarUpload: (id, fd) => request.post(`/sys/user/${id}/avatar-upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  menuTree: () => get('/sys/menu/tree'),
+  menuTree: (params) => get('/sys/menu/tree', params),
   menuSave: (d) => post('/sys/menu', d),
   menuUpdate: (d) => put('/sys/menu', d),
   menuDel: (id) => del(`/sys/menu/${id}`),
@@ -110,12 +140,15 @@ export default {
   courseUpdate: (d) => put('/edu/course', d),
   courseDel: (id) => del(`/edu/course/${id}`),
   clazzPage: (p) => get('/edu/clazz/page', p),
+  // 班主任候选：用户管理中类型为员工的在职人员（含教师档案ID）
+  clazzTeacherCandidates: () => get('/edu/clazz/teacher-candidates'),
   clazzList: () => get('/edu/clazz/list'),
   clazzSave: (d) => post('/edu/clazz', d),
   clazzUpdate: (d) => put('/edu/clazz', d),
   clazzDel: (id) => del(`/edu/clazz/${id}`),
 
   enrollPage: (p) => get('/edu/enroll/page', p),
+  scheduleClazzStudents: (clazzId) => get('/edu/schedule/clazz-students', { clazzId }),
   enrollSubscribe: (d) => post('/edu/enroll/subscribe', d),
   enrollUnsubscribe: (id) => post(`/edu/enroll/${id}/unsubscribe`),
   enrollAssignTeacher: (id, teacherId) => post(`/edu/enroll/${id}/assign-teacher`, { teacherId }),
@@ -130,8 +163,6 @@ export default {
   schedulePhaseCounts: (p) => get('/edu/schedule/phase-counts', p),
   scheduleHistory: (p) => get('/edu/schedule/history', p),
   scheduleDayDetail: (p) => get('/edu/schedule/day-detail', p),
-  schedulePhaseCounts: (p) => get('/edu/schedule/phase-counts', p),
-  scheduleHistory: (p) => get('/edu/schedule/history', p),
     scheduleCreate: (d) => post('/edu/schedule', d),
   scheduleAdjust: (id, d) => post(`/edu/schedule/${id}/adjust`, d),
   scheduleCancel: (id, d) => post(`/edu/schedule/${id}/cancel`, d),
@@ -148,7 +179,13 @@ export default {
   absenceReject: (id, remark) => post(`/edu/absence/${id}/reject`, { remark }),
   hoursRecords: (p) => get('/edu/hours/records', p),
   paymentPage: (p) => get('/edu/payment/page', p),
+  // 缴费操作记录：新增/修改/删除全量留痕（只读，支持类型/学生/单号/操作人/时间段筛选）
+  paymentLogPage: (p) => get('/edu/payment/logs', p),
+  // 合同缴费汇总：已缴=缴费记录求和（修改时排除本条），待缴=合同金额-已缴
+  paymentContractSummary: (p) => get('/edu/payment/contract-summary', p),
   paymentSave: (d) => post('/edu/payment', d),
+  paymentUpdate: (d) => put('/edu/payment', d),
+  paymentDel: (id) => del(`/edu/payment/${id}`),
   leavePage: (p) => get('/edu/leave/page', p),
   leaveApply: (d) => post('/edu/leave/apply', d),
   leaveApprove: (id, pass) => post(`/edu/leave/${id}/approve?pass=${pass}`),
@@ -158,15 +195,33 @@ export default {
   // 学生端
   portalCourses: () => get('/portal/courses'),
   portalSubscribe: (d) => post('/portal/subscribe', d),
-  portalMySchedule: () => get('/portal/my-schedule'),
+  // 我的课表：日/周/月日历数据（附课程/班级/老师名称）
+  portalMySchedule: (p) => get('/portal/my-schedule', p),
+  // 我的记录TAB：本人全部排课记录（分页/筛选/排序，含班课按班级归属）
+  portalScheduleRecords: (p) => get('/portal/my-schedule-records', p),
+  // 我的签约班级：咨询入口（按老师+班级/课程去重）
+  portalMyClasses: () => get('/portal/my-classes'),
   portalMyTeachers: () => get('/portal/my-teachers'),
   portalMyEnrolls: () => get('/portal/my-enrolls'),
   portalConsult: (d) => post('/portal/consult', d),
+  // 咨询追问：同一咨询下多次发问（对话流）
+  portalConsultAsk: (id, content) => post(`/portal/consult/${id}/ask`, { content }),
+  portalConsultMessages: (id) => get(`/portal/consult/${id}/messages`),
   portalEvaluation: (d) => post('/portal/evaluation', d),
-  portalMyConsults: () => get('/portal/my-consults'),
+  // 我的咨询记录（分页，可按老师筛选）
+  portalMyConsults: (p) => get('/portal/my-consults', p),
   // 教师端
   teachSchedule: (p) => get('/teach/my-schedule', p),
+  // 我的记录TAB：教师本人全部排课记录（分页/筛选/排序）
+  teachScheduleRecords: (p) => get('/teach/my-schedule-records', p),
+  // 教师端课次登记（仅限本人课次）：请假限未开始、到课/旷课限已下课
+  teachScheduleAttendInfo: (id) => get(`/teach/schedule/${id}/attend-info`),
+  teachScheduleAttend: (id, hours, remark) => post(`/teach/schedule/${id}/attend`, { hours, remark }),
+  teachScheduleLeave: (id, type) => post(`/teach/schedule/${id}/leave?type=${type}`),
+  teachScheduleAbsent: (id, reason) => post(`/teach/schedule/${id}/absent`, { reason }),
   teachStudents: () => get('/teach/my-students'),
+  // 学生基本信息（教师端）：仅限本人所带学生，手机号接口层脱敏（前3后4）
+  teachStudentInfo: (studentId) => get(`/teach/student-info/${studentId}`),
   teachEvaluations: () => get('/teach/my-evaluations'),
   teachConsults: () => get('/teach/my-consults'),
   teachReply: (id, reply) => post(`/teach/consult/${id}/reply`, { reply }),

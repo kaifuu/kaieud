@@ -35,13 +35,17 @@ public class SysUserController {
     private final SysUserRoleMapper userRoleMapper;
     private final com.edu.mapper.EduStudentMapper studentMapper;
     private final com.edu.mapper.EduTeacherMapper teacherMapper;
+    private final com.edu.mapper.SysRoleMapper roleMapper;
     private final com.edu.service.DataScopeService dataScopeService;
-    /** 取消"兼任教师"时校验档案是否已被业务引用 */
+    /** 取消"兼任教师/学生"时校验档案是否已被业务引用 */
     private final com.edu.mapper.EduScheduleMapper scheduleMapper;
     private final com.edu.mapper.EduEnrollMapper enrollMapper;
     private final com.edu.mapper.EduConsumeMapper consumeMapper;
     private final com.edu.mapper.EduEvaluationMapper evaluationMapper;
     private final com.edu.mapper.EduConsultMapper consultMapper;
+    private final com.edu.mapper.EduLeaveMapper leaveMapper;
+    private final com.edu.mapper.EduPaymentMapper paymentMapper;
+    private final com.edu.mapper.EduContractMapper contractMapper;
 
     @GetMapping("/page")
     public Result<PageResult<Map<String, Object>>> page(@RequestParam(defaultValue = "1") long page,
@@ -57,16 +61,17 @@ public class SysUserController {
                         .like(SysUser::getUsername, keyword)
                         .or().like(SysUser::getRealName, keyword)
                         .or().like(SysUser::getPhone, keyword))
+                // 租户隔离由 TenantLineInnerInterceptor 自动拼接，此处不再手写
                 .eq(userType != null, SysUser::getUserType, userType)
                 .in(StringUtils.hasText(userTypes), SysUser::getUserType,
-                        java.util.Arrays.stream(userTypes.split(","))
-                                .map(Integer::valueOf).collect(Collectors.toList()))
+                        userTypes == null ? java.util.Collections.emptyList()
+                                : java.util.Arrays.stream(userTypes.split(","))
+                                        .map(Integer::valueOf).collect(Collectors.toList()))
                 .eq(status != null, SysUser::getStatus, status)
                 .last(SafeSort.order(sortBy, direction, "id", "id", "username", "realName", "userType", "createTime", "lastLoginTime"));
         Page<SysUser> p = userMapper.selectPage(new Page<>(page, size), qw);
-        // 学生用户合并学员档案字段（年级/学校/家长电话等），供学生TAB展示
+        // 学生档案按整页用户查询：学生用户合并学籍字段，非学生用户标注"兼任学生"
         List<Long> stuUserIds = p.getRecords().stream()
-                .filter(u -> u.getUserType() != null && u.getUserType() == 5)
                 .map(SysUser::getId).collect(Collectors.toList());
         Map<Long, com.edu.entity.EduStudent> stuMap = stuUserIds.isEmpty()
                 ? new HashMap<>()
@@ -98,6 +103,9 @@ public class SysUserController {
             m.put("lastLoginTime", u.getLastLoginTime());
             m.put("createTime", u.getCreateTime());
             m.put("asTeacher", teacherUserMap.containsKey(u.getId()));
+            // 非学生账号标注"兼任学生"（有学生档案即可用学生中心）
+            if (u.getUserType() == null || u.getUserType() != 5)
+                m.put("asStudent", stuMap.containsKey(u.getId()));
             com.edu.entity.EduStudent st = stuMap.get(u.getId());
             if (st != null) {
                 m.put("grade", st.getGrade());
@@ -119,26 +127,60 @@ public class SysUserController {
         // 必填校验（user_type列非空无默认，缺参会插库失败）
         if (user.getUserType() == null) return Result.error("用户类型不能为空");
         if (!StringUtils.hasText(user.getRealName())) return Result.error("姓名不能为空");
-        if (user.getTenantId() == null) user.setTenantId(1L); // 缺省归属默认租户
+        // 租户归属：一律归属当前登录租户（平台账号→平台0），不接受前端指定，跨租户创建走租户开通流程
+        Long myTenant = com.edu.security.AuthContext.get().getTenantId();
+        user.setTenantId(myTenant == null ? 0L : myTenant);
         user.setId(null);
         user.setPassword(DigestUtils.md5DigestAsHex(("123456" + AuthService_SALT()).getBytes()));
         userMapper.insert(user);
         // 按用户类型联动建档：学生 -> edu_student；教师 -> edu_teacher
         createUserProfile(user);
-        if (user.getRoleIds() != null) {
+        // 角色分配：录入时不再手选角色（与用户类型重复），按类型自动绑定本企业默认角色
+        if (user.getRoleIds() != null && !user.getRoleIds().isEmpty()) {
             for (Long roleId : user.getRoleIds()) {
                 SysUserRole ur = new SysUserRole();
                 ur.setUserId(user.getId()); ur.setRoleId(roleId);
+                userRoleMapper.insert(ur);
+            }
+        } else {
+            Long defaultRole = defaultRoleByType(user.getTenantId(), user.getUserType());
+            if (defaultRole != null) {
+                SysUserRole ur = new SysUserRole();
+                ur.setUserId(user.getId()); ur.setRoleId(defaultRole);
                 userRoleMapper.insert(ur);
             }
         }
         return Result.ok(user); // 返回含新ID的实体，供前端保存后补传照片
     }
 
+    /** 用户类型 -> 默认角色编码（本企业内按 code 匹配；未匹配到不绑定，后续可在编辑里补选） */
+    private Long defaultRoleByType(Long tenantId, Integer userType) {
+        if (userType == null) return null;
+        String code;
+        switch (userType) {
+            case 1: case 9: code = "SUPER_ADMIN"; break;
+            case 2: code = "EDU_ADMIN"; break;
+            case 3: code = "CLASS_TEACHER"; break;
+            case 4: code = "TEACHER"; break;
+            case 5: code = "STUDENT"; break;
+            default: return null;
+        }
+        Long tid = tenantId == null ? 0L : tenantId;
+        com.edu.entity.SysRole role = roleMapper.selectOne(
+                new LambdaQueryWrapper<com.edu.entity.SysRole>()
+                        .eq(com.edu.entity.SysRole::getTenantId, tid)
+                        .eq(com.edu.entity.SysRole::getCode, code)
+                        .last("LIMIT 1"));
+        return role == null ? null : role.getId();
+    }
+
     @PutMapping
     @Log("修改用户")
     public Result<Void> update(@RequestBody SysUser user) {
+        // 租户归属校验：租户管理员不能改其他租户的用户
+        if (!mayTouch(user.getId())) return Result.error("不能操作其他租户的用户");
         user.setPassword(null); // 不通过此接口改密码
+        user.setTenantId(null); // 归属不可改
         // 先同步档案（取消兼任可能被拒），再更新用户主档，避免半更新
         syncUserProfile(user);
         userMapper.updateById(user);
@@ -185,6 +227,27 @@ public class SysUserController {
         } else if (type == 4 || Boolean.TRUE.equals(user.getAsTeacher())) {
             createTeacherProfile(user, tenantId);
         }
+        // 兼任学生：非学生类型账号勾选后创建学生档案，可用学生中心（如超管体验学生端）
+        if (type != 5 && Boolean.TRUE.equals(user.getAsStudent())) {
+            createStudentProfile(user, tenantId);
+        }
+    }
+
+    /** 从用户表单字段创建学生档案（勾选"兼任学生"的账号用） */
+    private void createStudentProfile(SysUser user, Long tenantId) {
+        com.edu.entity.EduStudent st = new com.edu.entity.EduStudent();
+        st.setTenantId(tenantId);
+        st.setUserId(user.getId());
+        st.setName(user.getRealName());
+        st.setGender(user.getGender() == null ? 1 : user.getGender());
+        st.setBirthDate(user.getBirthDate());
+        st.setGrade(user.getGrade());
+        st.setSchool(user.getSchool());
+        st.setParentName(user.getParentName());
+        st.setParentPhone(user.getParentPhone());
+        st.setStatus(1);
+        st.setDeleted(0);
+        studentMapper.insert(st);
     }
 
     /** 从用户表单字段创建教师档案（教师账号 / 勾选"兼任教师"的账号共用） */
@@ -215,7 +278,13 @@ public class SysUserController {
             com.edu.entity.EduStudent st = studentMapper.selectOne(
                     new LambdaQueryWrapper<com.edu.entity.EduStudent>()
                             .eq(com.edu.entity.EduStudent::getUserId, user.getId()).last("LIMIT 1"));
-            if (st != null) {
+            if (st == null) {
+                // 补建学生档案：历史/外部导入的学生账号可能未建档
+                // （角色只管菜单权限，档案决定学生中心可用性），编辑保存一次即自愈
+                SysUser dbUser = userMapper.selectById(user.getId());
+                if (user.getTenantId() == null && dbUser != null) user.setTenantId(dbUser.getTenantId());
+                createUserProfile(user);
+            } else {
                 if (StringUtils.hasText(user.getRealName())) st.setName(user.getRealName());
                 if (user.getGender() != null) st.setGender(user.getGender());
                 if (StringUtils.hasText(user.getGrade())) st.setGrade(user.getGrade());
@@ -246,6 +315,25 @@ public class SysUserController {
                 // 取消兼任：教师档案已被业务引用则拒绝，避免排课/消课记录失去归属
                 removeTeacherProfile(t);
             }
+            // "兼任学生"开关：学生档案的建立/同步/移除（非学生账号，如超管体验学生中心）
+            com.edu.entity.EduStudent st = studentMapper.selectOne(
+                    new LambdaQueryWrapper<com.edu.entity.EduStudent>()
+                            .eq(com.edu.entity.EduStudent::getUserId, user.getId()).last("LIMIT 1"));
+            boolean wantStudent = Boolean.TRUE.equals(user.getAsStudent());
+            if (wantStudent && st == null) {
+                // 新勾选"兼任学生"：补建学生档案（租户取库中用户主档）
+                SysUser dbUser = userMapper.selectById(user.getId());
+                createStudentProfile(user, dbUser == null || dbUser.getTenantId() == null ? 1L : dbUser.getTenantId());
+            } else if (wantStudent) {
+                if (StringUtils.hasText(user.getRealName())) st.setName(user.getRealName());
+                if (user.getGender() != null) st.setGender(user.getGender());
+                if (StringUtils.hasText(user.getGrade())) st.setGrade(user.getGrade());
+                if (StringUtils.hasText(user.getSchool())) st.setSchool(user.getSchool());
+                studentMapper.updateById(st);
+            } else if (st != null) {
+                // 取消兼任：学生档案已被业务引用则拒绝，避免排课/报名/咨询记录失去归属
+                removeStudentProfile(st);
+            }
         }
     }
 
@@ -267,18 +355,57 @@ public class SysUserController {
         teacherMapper.deleteById(tid); // @TableLogic 软删，登录时不再解析档案
     }
 
+    /** 取消"兼任学生"：无排课/报名/消课/请假/评价/咨询/缴费/合同引用时删除学生档案 */
+    private void removeStudentProfile(com.edu.entity.EduStudent st) {
+        Long sid = st.getId();
+        long refs = scheduleMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduSchedule>()
+                        .eq(com.edu.entity.EduSchedule::getStudentId, sid))
+                + enrollMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduEnroll>()
+                        .eq(com.edu.entity.EduEnroll::getStudentId, sid))
+                + consumeMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduConsume>()
+                        .eq(com.edu.entity.EduConsume::getStudentId, sid))
+                + leaveMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduLeave>()
+                        .eq(com.edu.entity.EduLeave::getStudentId, sid))
+                + evaluationMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduEvaluation>()
+                        .eq(com.edu.entity.EduEvaluation::getStudentId, sid))
+                + consultMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduConsult>()
+                        .eq(com.edu.entity.EduConsult::getStudentId, sid))
+                + paymentMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduPayment>()
+                        .eq(com.edu.entity.EduPayment::getStudentId, sid))
+                + contractMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduContract>()
+                        .eq(com.edu.entity.EduContract::getStudentId, sid));
+        if (refs > 0) throw new com.edu.common.exception.BizException(
+                "该账号的学生档案已有排课/报名/缴费等业务记录，不能取消兼任学生");
+        studentMapper.deleteById(sid); // 登录时不再解析学生档案
+    }
+
+    /** 租户归属校验：平台账号可操作所有用户；租户账号仅限本租户用户 */
+    private boolean mayTouch(Long userId) {
+        Long tid = com.edu.security.AuthContext.get().getTenantId();
+        if (tid == null || tid == 0) return true;
+        SysUser target = userMapper.selectById(userId);
+        return target != null && tid.equals(target.getTenantId());
+    }
+
     @DeleteMapping("/{id}")
     @Log("删除用户")
     public Result<Void> delete(@PathVariable Long id) {
         if (id == 1L) return Result.error("超级管理员不允许删除");
+        if (!mayTouch(id)) return Result.error("不能操作其他租户的用户");
         userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, id));
         userMapper.deleteById(id);
+        // 联动软删学生档案：已删除学生不再出现在合同管理/充值管理等业务列表
+        com.edu.entity.EduStudent gone = new com.edu.entity.EduStudent();
+        gone.setDeleted(1);
+        studentMapper.update(gone, new LambdaQueryWrapper<com.edu.entity.EduStudent>()
+                .eq(com.edu.entity.EduStudent::getUserId, id));
         return Result.ok();
     }
 
     @PostMapping("/{id}/reset-password")
     @Log("重置用户密码")
     public Result<Void> resetPassword(@PathVariable Long id) {
+        if (!mayTouch(id)) return Result.error("不能操作其他租户的用户");
         SysUser user = new SysUser();
         user.setId(id);
         user.setPassword(DigestUtils.md5DigestAsHex(("123456" + AuthService_SALT()).getBytes()));
@@ -326,6 +453,11 @@ public class SysUserController {
                 m.put("classTypes", t.getClassTypes());
                 m.put("intro", t.getIntro());
             }
+            // 学生档案回显："兼任学生"开关状态（非学生账号可用学生中心）
+            com.edu.entity.EduStudent st = studentMapper.selectOne(
+                    new LambdaQueryWrapper<com.edu.entity.EduStudent>()
+                            .eq(com.edu.entity.EduStudent::getUserId, id).last("LIMIT 1"));
+            m.put("asStudent", st != null);
         }
         return Result.ok(m);
     }

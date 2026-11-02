@@ -31,21 +31,24 @@ public class SysConfigController {
         return Result.ok(result);
     }
 
-    /** 公开配置：登录页渲染用（仅返回安全白名单键），无需登录 */
+    /** 公开配置：登录页/首页渲染用（仅返回安全白名单键），无需登录 */
     @GetMapping("/public")
     public Result<Map<String, String>> publicConfig() {
         Map<String, String> result = new HashMap<>();
         configMapper.selectList(new LambdaQueryWrapper<SysConfig>().in(SysConfig::getConfigKey,
-                Arrays.asList("company_name", "icp_no", "login_title", "logo_url")))
+                Arrays.asList("company_name", "icp_no", "login_title", "logo_url",
+                        "home_banners", "home_banner_enabled")))
                 .forEach((c) -> result.put(c.getConfigKey(), c.getConfigValue()));
         return Result.ok(result);
     }
 
-    /** 批量保存（基础设置页面整体提交） */
+    /** 批量保存（基础设置页面整体提交）：品牌/登录页/首页广告属平台级配置，仅平台运营可改 */
     @PostMapping("/save")
     @RequiresPerm("sys:config")
     @Log("保存基础设置")
     public Result<Void> save(@RequestBody Map<String, String> configs) {
+        Long tid = com.edu.security.AuthContext.get().getTenantId();
+        if (tid != null && tid != 0) return Result.error("品牌与广告等平台配置由平台运营统一维护");
         for (Map.Entry<String, String> e : configs.entrySet()) {
             SysConfig exist = configMapper.selectOne(new LambdaQueryWrapper<SysConfig>()
                     .eq(SysConfig::getConfigKey, e.getKey()));

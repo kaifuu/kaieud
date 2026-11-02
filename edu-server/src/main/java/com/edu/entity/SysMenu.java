@@ -9,6 +9,8 @@ import lombok.Data;
 public class SysMenu {
     @TableId
     private Long id;
+    /** 租户ID：NULL=平台模板；租户自有菜单各租户隔离 */
+    private Long tenantId;
     private Long parentId;
     private String name;
     private String path;
@@ -18,5 +20,7 @@ public class SysMenu {
     /** M目录 C菜单 */
     private String type;
     private Integer sort;
+    /** 菜单范围：0=租户模板（租户可见/复制） 1=平台专属（仅平台运营可见） */
+    private Integer scope;
     private Integer visible;
 }

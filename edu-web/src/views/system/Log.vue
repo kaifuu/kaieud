@@ -24,7 +24,6 @@
       <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
         <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column type="index" label="序号" width="60" :index="seq" />
         <el-table-column v-if="cols.logType" label="类型" width="100" sortable="custom">
           <template #default="{ row }">
             <el-tag size="small" :type="row.logType === 1 ? 'primary' : 'info'" effect="plain">

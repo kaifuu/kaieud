@@ -21,6 +21,12 @@ public class SysNotice {
     private Integer level;
     /** 目标角色: ALL/EDU_ADMIN/CLASS_TEACHER/TEACHER/STUDENT */
     private String target;
+    /** 指定接收用户ID（逗号分隔，用户级定向：如"需A教务审批"只发A教务） */
+    private String targetUsers;
+    /** 创建人用户ID（本人的草稿与发布记录始终可见，便于维护） */
+    private Long createUserId;
+    /** 创建人姓名（消息历史展示） */
+    private String createBy;
     /** 0草稿 1已发布 */
     private Integer status;
     private LocalDateTime publishTime;

@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page tabs-page">
     <div class="page-header">
       <span class="page-title">用户管理</span>
       <div class="actions">
@@ -14,16 +14,14 @@
       <el-tab-pane label="员工" name="staff" />
       <el-tab-pane label="系统" name="system" />
     </el-tabs>
-    <div class="panel table-panel">
+    <div class="panel table-panel tabs-fill">
       <div class="toolbar">
         <el-input v-model="query.keyword" placeholder="用户名 / 姓名 / 手机号" clearable style="width: 210px"
                   @keyup.enter="search">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
         <el-select v-if="tab === 'staff'" v-model="query.userType" placeholder="员工类型" clearable style="width: 140px">
-          <el-option label="教务人员" :value="2" /><el-option label="班主任" :value="3" />
-          <el-option label="校区校长" :value="6" /><el-option label="校区咨询师" :value="7" />
-          <el-option label="校区学管师" :value="8" />
+          <el-option v-for="o in staffTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
         <el-select v-model="query.status" placeholder="状态" clearable style="width: 110px">
           <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
@@ -54,10 +52,12 @@
         <el-table-column v-if="cols.userType && (tab === 'staff' || tab === 'system')" label="类型" width="150" sortable="custom">
           <template #default="{ row }">
             <el-tag size="small" :type="row.userType === 1 ? 'danger' : 'primary'" effect="light">
-              {{ typeNames[row.userType] }}
+              {{ typeNames[row.userType] || row.userType }}
             </el-tag>
-            <el-tag v-if="tab === 'staff' && row.asTeacher" size="small" type="warning" effect="light"
+            <el-tag v-if="(tab === 'staff' || tab === 'system') && row.asTeacher" size="small" type="warning" effect="light"
                     style="margin-left: 4px">兼教师</el-tag>
+            <el-tag v-if="(tab === 'staff' || tab === 'system') && row.asStudent" size="small" type="success" effect="light"
+                    style="margin-left: 4px">兼学生</el-tag>
           </template>
         </el-table-column>
         <el-table-column v-if="cols.phone" prop="phone" label="手机号" width="135" />
@@ -102,8 +102,8 @@
         <el-form-item label="姓名" prop="realName" required><el-input v-model="form.realName" /></el-form-item>
       <el-form-item label="归属校区">
         <el-select v-model="form.orgId" clearable style="width: 100%"
-                   placeholder="校区级角色必选，总部账号可不选">
-          <el-option v-for="d in dictStore.options('campus')" :key="d.value" :label="d.label" :value="Number(d.value)" />
+                   placeholder="选择所属组织（校区级角色必选，总部可不选）">
+          <el-option v-for="o in orgOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="照片">
@@ -120,6 +120,11 @@
         <el-form-item v-if="canAdjunct" label="兼任教师">
           <el-switch v-model="form.asTeacher" />
           <span class="u-tip" style="margin-left: 8px">开启后创建教师档案，可排课上课</span>
+        </el-form-item>
+        <!-- 兼任学生：非学生账号开启后创建学生档案，可用学生中心（如超管体验学生端） -->
+        <el-form-item v-if="canAdjunctStudent" label="兼任学生">
+          <el-switch v-model="form.asStudent" />
+          <span class="u-tip" style="margin-left: 8px">开启后创建学生档案，可用学生中心</span>
         </el-form-item>
         <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="邮箱"><el-input v-model="form.email" /></el-form-item>
@@ -157,10 +162,14 @@
           <el-form-item label="简介"><el-input v-model="form.intro" type="textarea" /></el-form-item>
         </template>
 
-        <el-form-item label="角色">
+        <!-- 角色：新增时按用户类型自动分配默认角色（类型与角色重复，录入只选类型）；编辑可微调 -->
+        <el-form-item v-if="!!form.id" label="角色">
           <el-select v-model="form.roleIds" multiple style="width: 100%">
             <el-option v-for="r in roles" :key="r.id" :label="r.name" :value="r.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-else label="角色">
+          <div class="form-tip">按所选用户类型自动分配默认角色，保存后可在编辑中调整</div>
         </el-form-item>
         <el-form-item label="状态"><el-switch v-model="form.status" :active-value="1" :inactive-value="0" active-text="启用" /></el-form-item>
         <el-alert v-if="!form.id" title="初始密码为 123456，请登录后尽快修改" type="info" :closable="false" />
@@ -174,7 +183,7 @@
       <template #avatarUrl="{ value }">
         <img v-if="value" :src="value" class="detail-photo" title="双击放大查看"
              @dblclick="openPhotoViewer(value)" />
-        <span v-else style="color: #98a2b3">未上传</span>
+        <span v-else style="color: #98a2b3">无</span>
       </template>
     </DetailDrawer>
 
@@ -204,13 +213,18 @@ import { useDictStore } from '../../store/dict'
 const dictStore = useDictStore()
 import PhotoUpload from '../../components/PhotoUpload.vue' 
 
-const typeNames = {
-  1: '运营总负责人', 2: '教务人员', 3: '班主任', 4: '教师', 5: '学生',
-  6: '校区校长', 7: '校区咨询师', 8: '校区学管师', 9: '系统用户'
-}
+// 用户类型：系统字典 user_type 取数（字典管理可维护名称），加载完成前为空对象
+const typeNames = computed(() => {
+  const m = {}
+  dictStore.options('user_type').forEach((o) => { m[o.value] = o.label })
+  return m
+})
 const tab = ref('student')
 // TAB -> 用户类型集合（学生/教师/员工/系统）
 const tabTypes = { student: [5], teacher: [4], staff: [2, 3, 6, 7, 8], system: [1, 9] }
+// 员工类型筛选项：字典中属于员工TAB的类型
+const staffTypeOptions = computed(() =>
+  dictStore.options('user_type').filter((o) => tabTypes.staff.includes(o.value)))
 
 // 各TAB的列定义（列设置按TAB独立记忆）
 const tabColumnDefs = {
@@ -251,6 +265,8 @@ watch(rows, (rs) => {
 const roles = ref([])
 const orgTree = ref([])
 const orgMap = ref({})
+/** 归属组织候选：本企业组织树拍平（层级展示），替代原 campus 字典 */
+const orgOptions = ref([])
 const formRef = ref(null)
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -259,7 +275,7 @@ const rules = {
 }
 const allColumns = [
   { prop: 'username', label: '用户名' }, { prop: 'realName', label: '姓名' },
-  { prop: 'userType', label: '类型' }, { prop: 'orgId', label: '所属校区', fmt: (v) => dictStore.label('campus', v) || '总部' },
+  { prop: 'userType', label: '类型' }, { prop: 'orgId', label: '所属组织', fmt: (v) => orgMap.value[v] || '总部' },
   { prop: 'grade', label: '年级' }, { prop: 'school', label: '学校' },
   { prop: 'parentPhone', label: '家长电话' }, { prop: 'advisor', label: '归属顾问' },
   { prop: 'phone', label: '手机号' },
@@ -281,6 +297,11 @@ const canAdjunct = computed(() => {
   const t = form.value.userType
   return t !== null && t !== '' && t !== undefined && ![4, 5].includes(Number(t))
 })
+// 兼任学生开关可见：已选定非学生的用户类型（学生天然有档案）
+const canAdjunctStudent = computed(() => {
+  const t = form.value.userType
+  return t !== null && t !== '' && t !== undefined && Number(t) !== 5
+})
 // 教师信息区块可见：教师账号 或 勾选了兼任教师
 const teacherSection = computed(() => Number(form.value.userType) === 4 || !!form.value.asTeacher)
 const detailVisible = ref(false)
@@ -289,10 +310,12 @@ const detailFields = computed(() => {
   const fields = [
     { prop: 'avatarUrl', label: '照片' },
     { prop: 'username', label: '用户名' }, { prop: 'realName', label: '姓名' },
-    { prop: 'userType', label: '类型', map: typeNames }
+    { prop: 'userType', label: '类型', map: typeNames.value }
   ]
   if (tab.value === 'staff' || tab.value === 'teacher')
     fields.push({ prop: 'asTeacher', label: '教师档案', map: { true: '已关联（可上课）', false: '未关联' } })
+  if (tab.value === 'staff' || tab.value === 'system')
+    fields.push({ prop: 'asStudent', label: '学生档案', map: { true: '已关联（可用学生中心）', false: '未关联' } })
   fields.push(
     { prop: 'phone', label: '手机号' }, { prop: 'email', label: '邮箱' },
     { prop: 'status', label: '状态', map: { 1: '启用', 0: '停用' } },
@@ -344,8 +367,9 @@ async function openEdit(row) {
     form.value.intro = p.intro
     form.value.classTypes = p.classTypes
     form.value.asTeacher = !!p.asTeacher
+    form.value.asStudent = !!p.asStudent
   } else {
-    form.value = { status: 1, roleIds: [], userType: null, asTeacher: false }
+    form.value = { status: 1, roleIds: [], userType: null, asTeacher: false, asStudent: false }
     avatarPreview.value = ''
   }
   classTypeArr.value = (form.value.classTypes || '2').split(',').filter(Boolean)
@@ -354,9 +378,10 @@ async function openEdit(row) {
 const avatarPreview = ref('')
 const pendingPhoto = ref(null) // 新增用户时暂存的照片文件，随保存统一上传
 const classTypeArr = ref(['2'])
-// 切到学生类型时复位兼任开关（教师类型天然有档案，无需开关）
+// 切到学生类型时复位兼任开关（教师/学生类型天然有档案，无需开关）
 watch(() => form.value.userType, (t) => {
   if ([4, 5].includes(Number(t))) form.value.asTeacher = false
+  if (Number(t) === 5) form.value.asStudent = false
 })
 function onPhotoUploaded(url) {
   avatarPreview.value = url
@@ -437,6 +462,8 @@ async function batchRemove() {
 
 onMounted(async () => {
   load()
+  // 用户类型字典化后需强制刷新（本地缓存可能是未含 user_type 的旧字典）
+  dictStore.load(true)
   roles.value = (await api.roleList()) || []
   const tree = (await api.orgTree()) || []
   orgTree.value = tree
@@ -447,6 +474,7 @@ onMounted(async () => {
   })
   walk(tree, '')
   orgMap.value = flat
+  orgOptions.value = Object.keys(flat).map((id) => ({ value: Number(id), label: flat[id] }))
 })
 </script>
 
@@ -497,4 +525,8 @@ onMounted(async () => {
   font-weight: 600;
   font-size: 22px;
 }
+</style>
+
+<style scoped>
+.form-tip { font-size: 12px; color: #8fa8c4; line-height: 1.5; }
 </style>
