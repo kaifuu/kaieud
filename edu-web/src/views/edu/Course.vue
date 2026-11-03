@@ -21,18 +21,18 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="course" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
         <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.name" prop="name" label="课程名称" min-width="170" sortable="custom" />
-        <el-table-column v-if="cols.category" label="课程分类" width="100">
+        <el-table-column v-if="cols.name" prop="name" label="课程名称" min-width="170" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.category" label="课程分类" width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ dictStore.label('course_category', row.category) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.classType" label="班型" width="90">
+        <el-table-column v-if="cols.classType" label="班型" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ dictStore.label('class_type', row.classType) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.durationMinutes" prop="durationMinutes" label="标准时长(分)" width="110" sortable="custom" />
-        <el-table-column v-if="cols.status" label="状态" width="80">
+        <el-table-column v-if="cols.durationMinutes" prop="durationMinutes" label="标准时长(分)" width="110" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="80" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'" effect="plain">
               {{ row.status === 1 ? '上架' : '下架' }}

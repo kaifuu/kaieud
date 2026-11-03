@@ -32,3 +32,7 @@ edu:
       crypto-key: "Edu2026TenantPurge3Des!!"
       # 超级秘钥密文（DESede/ECB/PKCS5Padding + Base64）
       secret-cipher: "1wIQOwJtyNGCpwa8b6EHUqeW96jUeOHf"
+
+  # 容器管理：项目根目录缺省取运行目录上级（edu-server父目录），特殊布局可覆盖
+  deploy:
+    project-root: ""

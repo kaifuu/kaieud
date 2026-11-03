@@ -23,7 +23,7 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="payment" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
         <el-table-column v-if="cols.paymentNo" prop="paymentNo" label="缴费单号" width="185" sortable="custom" show-overflow-tooltip />
         <el-table-column v-if="cols.studentId" label="学生" width="95" show-overflow-tooltip>
@@ -32,7 +32,7 @@
         <el-table-column v-if="cols.courseId" label="课程" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ courseName(row.courseId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.amount" prop="amount" label="实缴金额" width="105" sortable="custom" />
+        <el-table-column v-if="cols.amount" prop="amount" label="实缴金额" width="105" sortable="custom"  show-overflow-tooltip/>
         <el-table-column v-if="cols.contractAmount" label="合同金额" width="105" show-overflow-tooltip>
           <template #default="{ row }">{{ contractAmount(row.contractId) }}</template>
         </el-table-column>
@@ -41,7 +41,7 @@
         </el-table-column>
         <el-table-column v-if="cols.operator" prop="operator" label="经办人" width="95" show-overflow-tooltip />
         <el-table-column v-if="cols.updateBy" prop="updateBy" label="操作人" width="95" show-overflow-tooltip />
-        <el-table-column v-if="cols.payTime" label="缴费时间" width="165" sortable="custom">
+        <el-table-column v-if="cols.payTime" label="缴费时间" width="165" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.payTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -80,9 +80,9 @@
                         @change="onLogDate" />
         <el-button type="primary" @click="logSearch">查询</el-button>
       </div>
-      <el-table :data="logRows" v-loading="logLoading" stripe height="100%" @sort-change="onLogSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="logRows" v-loading="logLoading" stripe height="100%" @sort-change="onLogSort">
         <el-table-column type="index" label="序号" width="60" :index="logSeq" />
-        <el-table-column label="操作类型" width="90">
+        <el-table-column label="操作类型" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" effect="light"
                     :type="row.action === 1 ? 'success' : row.action === 2 ? 'warning' : 'danger'">
@@ -94,15 +94,15 @@
         <el-table-column label="学生" width="95" show-overflow-tooltip>
           <template #default="{ row }">{{ studentName(row.studentId) }}</template>
         </el-table-column>
-        <el-table-column label="变更前金额" width="105">
+        <el-table-column label="变更前金额" width="105" show-overflow-tooltip>
           <template #default="{ row }">{{ row.amountBefore == null ? '-' : row.amountBefore }}</template>
         </el-table-column>
-        <el-table-column prop="amount" label="实缴金额" width="95" sortable="custom">
+        <el-table-column prop="amount" label="实缴金额" width="95" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ row.amount == null ? '-' : row.amount }}</template>
         </el-table-column>
         <el-table-column prop="detail" label="变更明细" min-width="200" show-overflow-tooltip />
         <el-table-column prop="operator" label="操作人" width="95" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="操作时间" width="165" sortable="custom">
+        <el-table-column prop="createTime" label="操作时间" width="165" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
       </el-table>

@@ -22,24 +22,24 @@
           当前筛选合计扣课：<b>{{ sumHours }}</b> 节
         </el-tag>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column prop="consumeNo" label="扣课单号" width="170" />
-        <el-table-column prop="studentName" label="学员" width="100" />
-        <el-table-column prop="courseName" label="课程" min-width="150" />
-        <el-table-column prop="teacherName" label="教师" width="90" />
-        <el-table-column prop="classTime" label="上课时间" width="170">
+        <el-table-column prop="consumeNo" label="扣课单号" width="170"  show-overflow-tooltip/>
+        <el-table-column prop="studentName" label="学员" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="courseName" label="课程" min-width="150"  show-overflow-tooltip/>
+        <el-table-column prop="teacherName" label="教师" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="classTime" label="上课时间" width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ row.classTime || '-' }}</template>
         </el-table-column>
-        <el-table-column label="扣课课时" width="90" align="center">
+        <el-table-column label="扣课课时" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <b :class="row.canceled === 1 ? 'hours-canceled' : 'hours-ok'">{{ row.hours }}</b>
           </template>
         </el-table-column>
-        <el-table-column label="扣前→扣后剩余" width="130" align="center">
+        <el-table-column label="扣前→扣后剩余" width="130" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.beforeHours }} → {{ row.afterHours }}</template>
         </el-table-column>
-        <el-table-column label="来源" width="100" align="center">
+        <el-table-column label="来源" width="100" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="sourceMeta[row.source]?.type || 'info'" effect="light">
               {{ row.source }}
@@ -49,21 +49,21 @@
         <el-table-column label="扣课说明" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
-        <el-table-column label="审核" width="85" align="center">
+        <el-table-column label="审核" width="85" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['warning', 'success', 'danger'][row.auditStatus] || 'info'" effect="plain">
               {{ ['待审核', '已审核', '已驳回'][row.auditStatus] || '-' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="撤销" width="80" align="center">
+        <el-table-column label="撤销" width="80" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="row.canceled === 1" size="small" type="info" effect="plain">已撤销</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="operator" label="操作人" width="90" />
-        <el-table-column prop="createTime" label="扣课时间" width="170" />
+        <el-table-column prop="operator" label="操作人" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="createTime" label="扣课时间" width="170"  show-overflow-tooltip/>
         <el-table-column label="操作" width="70" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">查看</el-button>

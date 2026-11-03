@@ -65,10 +65,10 @@
       <el-col :span="24">
         <div class="panel" style="padding-bottom: 10px">
           <div class="panel-title">{{ t.title }}</div>
-          <el-table :data="t.rows" size="small" stripe max-height="320">
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="t.rows" size="small" stripe max-height="320">
             <el-table-column
               v-for="col in t.columns" :key="col.prop"
-              :prop="col.prop" :label="col.label" :min-width="col.width || 100" />
+              :prop="col.prop" :label="col.label" :min-width="col.width || 100"  show-overflow-tooltip/>
           </el-table>
         </div>
       </el-col>

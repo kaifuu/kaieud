@@ -33,44 +33,44 @@
         <el-button v-if="canManage" @click="doExport">导出</el-button>
         <span style="color: #8fa8c4; font-size: 13px">仅展示发送给您（按角色或指定用户）的通知</span>
       </div>
-      <el-table :data="nPage.rows.value" v-loading="nPage.loading.value" stripe height="100%" @sort-change="nPage.onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="nPage.rows.value" v-loading="nPage.loading.value" stripe height="100%" @sort-change="nPage.onSort">
         <el-table-column type="index" label="序号" width="60" :index="nPage.seq" />
         <el-table-column prop="title" label="标题" min-width="200" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <span :class="{ 'unread-title': !readSet.has(row.id) }">{{ row.title }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80">
+        <el-table-column label="状态" width="80" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="readSet.has(row.id) ? 'info' : 'danger'" effect="light">
               {{ readSet.has(row.id) ? '已读' : '未读' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="90">
+        <el-table-column label="类型" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ ['', '课程', '缴费'][row.noticeType] || '系统' }}</template>
         </el-table-column>
-        <el-table-column label="级别" width="90">
+        <el-table-column label="级别" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['info', 'warning', 'danger'][row.level]" effect="light">
               {{ ['普通', '重要', '紧急'][row.level] }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="接收对象" width="130">
+        <el-table-column label="接收对象" width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ targetName(row.target) }}</template>
         </el-table-column>
         <el-table-column label="指定用户" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.targetUsers ? `${row.targetUsers.split(',').filter(Boolean).length} 人` : '-' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'" effect="plain">
               {{ row.status === 1 ? '已发布' : '草稿' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="publishTime" label="发布时间" width="165" />
+        <el-table-column prop="publishTime" label="发布时间" width="165"  show-overflow-tooltip/>
         <el-table-column label="操作" :width="canManage ? 240 : 90" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="viewNotice(row)">查看</el-button>
@@ -96,24 +96,24 @@
       <div class="toolbar">
         <span style="color: #8fa8c4; font-size: 13px">配置各业务事件的站内/短信/邮件通知规则</span>
       </div>
-      <el-table :data="configs" v-loading="cLoading" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="configs" v-loading="cLoading" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" />
-        <el-table-column prop="name" label="配置名称" min-width="140" />
-        <el-table-column label="事件类型" width="150">
+        <el-table-column prop="name" label="配置名称" min-width="140"  show-overflow-tooltip/>
+        <el-table-column label="事件类型" width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ eventTypeText(row.eventType) }}</template>
         </el-table-column>
-        <el-table-column label="渠道" width="100">
+        <el-table-column label="渠道" width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ ['站内', '短信', '邮件'][row.channel] }}</template>
         </el-table-column>
-        <el-table-column label="接收对象" min-width="180">
+        <el-table-column label="接收对象" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ targetName(row.receivers) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-switch :model-value="row.enabled === 1" @change="(v) => toggleConfig(row, v)" />
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="160" />
+        <el-table-column prop="remark" label="备注" min-width="160"  show-overflow-tooltip/>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openConfig(row)">编辑</el-button>
@@ -141,25 +141,25 @@
         <el-button @click="doHistoryExport">导出</el-button>
         <span style="color: #8fa8c4; font-size: 13px">系统发出过的所有消息（只读，仅可查询与导出）</span>
       </div>
-      <el-table :data="hPage.rows.value" v-loading="hPage.loading.value" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="hPage.rows.value" v-loading="hPage.loading.value" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" :index="hPage.seq" />
         <el-table-column prop="title" label="标题" min-width="190" show-overflow-tooltip />
-        <el-table-column label="类型" width="90">
+        <el-table-column label="类型" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ ['', '课程', '缴费'][row.noticeType] || '系统' }}</template>
         </el-table-column>
-        <el-table-column label="级别" width="90">
+        <el-table-column label="级别" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['info', 'warning', 'danger'][row.level]" effect="light">
               {{ ['普通', '重要', '紧急'][row.level] }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="接收对象" width="130">
+        <el-table-column label="接收对象" width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ row.targetName }}</template>
         </el-table-column>
         <el-table-column prop="targetUserNames" label="指定用户" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="createBy" label="发布人" width="100" />
-        <el-table-column prop="publishTime" label="发布时间" width="165" />
+        <el-table-column prop="createBy" label="发布人" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="publishTime" label="发布时间" width="165"  show-overflow-tooltip/>
       </el-table>
       <div class="pager-row">
         <el-pagination background layout="total, sizes, prev, pager, next" :total="hPage.pager.total"

@@ -17,12 +17,12 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="role" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.name" prop="name" label="角色名称" min-width="140" sortable="custom" />
-        <el-table-column v-if="cols.code" prop="code" label="角色编码" min-width="140" sortable="custom" />
-        <el-table-column v-if="cols.remark" prop="remark" label="备注" min-width="180" />
-        <el-table-column v-if="cols.createTime" prop="createTime" label="创建时间" width="170" sortable="custom">
+        <el-table-column v-if="cols.name" prop="name" label="角色名称" min-width="140" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.code" prop="code" label="角色编码" min-width="140" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.remark" prop="remark" label="备注" min-width="180"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.createTime" prop="createTime" label="创建时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="210" fixed="right">

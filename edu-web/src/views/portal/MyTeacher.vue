@@ -46,15 +46,15 @@
       </div>
 
       <!-- 咨询记录：服务端分页 + 按老师筛选（切换条联动） -->
-      <el-table :data="consultRows" v-loading="consultLoading" stripe>
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="consultRows" v-loading="consultLoading" stripe>
         <el-table-column type="index" label="序号" width="60" :index="consultSeq" />
-        <el-table-column label="咨询班级/课程" min-width="150">
+        <el-table-column label="咨询班级/课程" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.className || '-' }}</template>
         </el-table-column>
-        <el-table-column label="老师" width="90">
+        <el-table-column label="老师" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ row.teacherName }}</template>
         </el-table-column>
-        <el-table-column label="咨询内容" min-width="200">
+        <el-table-column label="咨询内容" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="consult-cell">
               <span class="consult-txt">{{ row.lastMsg || row.consult.content }}</span>
@@ -68,7 +68,7 @@
             <el-tag v-else size="small" type="warning">待回复</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="咨询时间" width="170">
+        <el-table-column label="咨询时间" width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ fmtTime(row.consult.createTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="90">

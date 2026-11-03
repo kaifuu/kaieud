@@ -23,29 +23,29 @@
                         start-placeholder="开始日期" end-placeholder="结束日期" style="width: 250px" />
         <el-button type="primary" @click="search">查询</el-button>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column prop="consumeNo" label="消课编号" width="180" sortable="custom" />
-        <el-table-column label="学员" width="90">
+        <el-table-column prop="consumeNo" label="消课编号" width="180" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column label="学员" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ name(students, row.studentId) }}</template>
         </el-table-column>
-        <el-table-column label="课程" min-width="120">
+        <el-table-column label="课程" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ name(courses, row.courseId) }}</template>
         </el-table-column>
-        <el-table-column label="班型" width="80">
+        <el-table-column label="班型" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ dictStore.label('class_type', row.classType) }}</template>
         </el-table-column>
-        <el-table-column label="授课老师" width="95">
+        <el-table-column label="授课老师" width="95" show-overflow-tooltip>
           <template #default="{ row }">{{ name(teachers, row.teacherId) }}</template>
         </el-table-column>
-        <el-table-column prop="hours" label="消耗课时" width="95" sortable="custom" />
-        <el-table-column label="消课前/后" width="110">
+        <el-table-column prop="hours" label="消耗课时" width="95" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column label="消课前/后" width="110" show-overflow-tooltip>
           <template #default="{ row }">{{ row.beforeHours }} / {{ row.afterHours }}</template>
         </el-table-column>
-        <el-table-column label="类型" width="90">
+        <el-table-column label="类型" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ ['正常上课', '补课'][row.consumeType] }}</template>
         </el-table-column>
-        <el-table-column label="审核状态" width="100">
+        <el-table-column label="审核状态" width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['warning', 'success', 'danger'][(row.auditStatus ?? 1)]"
                     :effect="row.auditStatus === 0 ? 'light' : 'plain'">
@@ -53,15 +53,15 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.canceled === 1 ? 'info' : 'success'" effect="plain">
               {{ row.canceled === 1 ? '已撤销' : '有效' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="operator" label="操作人" width="90" />
-        <el-table-column label="消课时间" width="165" sortable="custom">
+        <el-table-column prop="operator" label="操作人" width="90"  show-overflow-tooltip/>
+        <el-table-column label="消课时间" width="165" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">

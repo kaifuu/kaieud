@@ -30,6 +30,26 @@ import java.util.Map;
 public class EduClassroomController {
 
     private final EduClassroomMapper classroomMapper;
+    private final com.edu.mapper.SysUserMapper sysUserMapper;
+
+    /** 教室联系人候选：本企业在职员工账号（含手机号，选中后联动回填联系电话） */
+    @GetMapping("/contact-candidates")
+    public Result<List<Map<String, Object>>> contactCandidates() {
+        List<com.edu.entity.SysUser> staff = sysUserMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.SysUser>()
+                        .in(com.edu.entity.SysUser::getUserType, java.util.Arrays.asList(2, 3, 4, 6, 7, 8))
+                        .eq(com.edu.entity.SysUser::getStatus, 1)
+                        .orderByAsc(com.edu.entity.SysUser::getRealName));
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (com.edu.entity.SysUser u : staff) {
+            Map<String, Object> m = new java.util.HashMap<>();
+            m.put("name", org.springframework.util.StringUtils.hasText(u.getRealName()) ? u.getRealName() : u.getUsername());
+            m.put("phone", u.getPhone());
+            m.put("userType", u.getUserType());
+            result.add(m);
+        }
+        return Result.ok(result);
+    }
     private final EduScheduleMapper scheduleMapper;
 
     @GetMapping("/page")

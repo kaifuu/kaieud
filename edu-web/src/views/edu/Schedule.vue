@@ -120,18 +120,18 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="schedule" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.startTime" label="上课时间" width="290" sortable="custom">
+        <el-table-column v-if="cols.startTime" label="上课时间" width="290" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <template v-if="row.phase === 'tobe'">{{ row.timeText || '待安排' }}<span class="tobe-hint">（待排）</span></template>
             <template v-else>{{ row.startTime }} ~ {{ row.endTime }}</template>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.teacherId" label="教师" width="100">
+        <el-table-column v-if="cols.teacherId" label="教师" width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.clazzId" label="班级/学生" min-width="140">
+        <el-table-column v-if="cols.clazzId" label="班级/学生" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.clazzId ? clazzName(row.clazzId) : studentName(row.studentId) + '(一对一)' }}
             <el-tag v-if="row.phase === 'tobe'" size="small" type="danger" effect="plain" class="remain-tag">
@@ -139,8 +139,8 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.classroom" prop="classroom" label="教室" width="95" />
-        <el-table-column v-if="cols.status" label="状态" width="135" sortable="custom">
+        <el-table-column v-if="cols.classroom" prop="classroom" label="教室" width="95"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="135" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="row.phase === 'done'" size="small" :type="outcomeMeta[row.status]?.type || 'info'" effect="plain">
               {{ outcomeMeta[row.status]?.label || '未登记' }}
@@ -198,34 +198,34 @@
         <div style="flex: 1"></div>
         <el-button @click="doExportHistory">导出历史</el-button>
       </div>
-      <el-table :data="historyRows" v-loading="historyLoading" stripe size="small" style="flex: 1; overflow-y: auto" @sort-change="onHistorySort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="historyRows" v-loading="historyLoading" stripe size="small" style="flex: 1; overflow-y: auto" @sort-change="onHistorySort">
         <el-table-column type="index" label="序号" width="60" :index="historySeq" />
-        <el-table-column label="操作类型" width="110">
+        <el-table-column label="操作类型" width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="opTypeTag(row.opType)" effect="light">{{ row.opType }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="teacherName" label="教师" width="90" />
-        <el-table-column prop="courseName" label="课程" min-width="150" />
-        <el-table-column prop="time" label="上课时间" width="170" sortable="custom">
+        <el-table-column prop="teacherName" label="教师" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="courseName" label="课程" min-width="150"  show-overflow-tooltip/>
+        <el-table-column prop="time" label="上课时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ row.time || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="studentName" label="学员" width="90">
+        <el-table-column prop="studentName" label="学员" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ row.studentName || '-' }}</template>
         </el-table-column>
-        <el-table-column label="课时" width="80">
+        <el-table-column label="课时" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ row.hours ?? '-' }}</template>
         </el-table-column>
-        <el-table-column prop="classroom" label="教室" width="90">
+        <el-table-column prop="classroom" label="教室" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ row.classroom || '-' }}</template>
         </el-table-column>
-        <el-table-column label="记录状态" width="100">
+        <el-table-column label="记录状态" width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ row.recordStatus || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="operator" label="操作人" width="90">
+        <el-table-column prop="operator" label="操作人" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ row.operator || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="opTime" label="操作时间" width="170" sortable="custom" />
+        <el-table-column prop="opTime" label="操作时间" width="170" sortable="custom"  show-overflow-tooltip/>
       </el-table>
       <div class="pager-row">
         <el-pagination background layout="total, sizes, prev, pager, next" :total="historyPager.total"
@@ -297,10 +297,10 @@
       </div>
       <el-alert type="info" :closable="false" style="margin: 10px 0"
                 title="空闲 = 工作时段(08:00-21:00) - 教师固定禁排时段 - 已有排课；结果为所选教师的共同空闲交集" />
-      <el-table :data="freeRows" v-loading="freeLoading" stripe size="small">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="freeRows" v-loading="freeLoading" stripe size="small">
         <el-table-column type="index" label="序号" width="55" />
-        <el-table-column prop="date" label="空闲日期" width="110" />
-        <el-table-column label="空闲时段" width="130">
+        <el-table-column prop="date" label="空闲日期" width="110"  show-overflow-tooltip/>
+        <el-table-column label="空闲时段" width="130" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag effect="light" size="small">{{ row.start }} ~ {{ row.end }}</el-tag>
           </template>

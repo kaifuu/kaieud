@@ -19,21 +19,21 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="leave" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.studentId" label="学生" width="110">
+        <el-table-column v-if="cols.studentId" label="学生" width="110" show-overflow-tooltip>
           <template #default="{ row }">{{ studentName(row.studentId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.scheduleId" prop="scheduleId" label="课次ID" width="90" sortable="custom" />
-        <el-table-column v-if="cols.reason" prop="reason" label="请假原因" min-width="200" />
-        <el-table-column v-if="cols.status" label="状态" width="95" sortable="custom">
+        <el-table-column v-if="cols.scheduleId" prop="scheduleId" label="课次ID" width="90" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.reason" prop="reason" label="请假原因" min-width="200"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="95" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['warning', 'success', 'danger'][row.status]" effect="plain">
               {{ ['待审批', '已同意', '已拒绝'][row.status] }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.createTime" label="申请时间" width="170" sortable="custom">
+        <el-table-column v-if="cols.createTime" label="申请时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">

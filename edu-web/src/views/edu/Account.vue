@@ -28,30 +28,30 @@
                         start-placeholder="开始日期" end-placeholder="结束日期" style="width: 250px" @change="doSearch" />
         <el-button type="primary" @click="doSearch">查询</el-button>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column prop="studentName" label="学生" width="100" />
-        <el-table-column label="类型" width="100">
+        <el-table-column prop="studentName" label="学生" width="100"  show-overflow-tooltip/>
+        <el-table-column label="类型" width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.type === 1 ? 'success' : 'warning'" effect="light">
               {{ row.type === 1 ? '补课充值' : '合同退费' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="金额(元)" width="110" align="right">
+        <el-table-column label="金额(元)" width="110" align="right" show-overflow-tooltip>
           <template #default="{ row }">
             <span :style="{ color: row.type === 1 ? '#12b76a' : '#f79009', fontWeight: 600 }">
               {{ row.type === 1 ? '+' : '' }}{{ row.amount }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="退费课时" width="90" align="center">
+        <el-table-column label="退费课时" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.hours != null ? row.hours : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="contractNo" label="关联合同" width="150" />
+        <el-table-column prop="contractNo" label="关联合同" width="150"  show-overflow-tooltip/>
         <el-table-column prop="remark" label="原因备注" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="operator" label="操作人" width="100" />
-        <el-table-column prop="createTime" label="操作时间" width="165" />
+        <el-table-column prop="operator" label="操作人" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="createTime" label="操作时间" width="165"  show-overflow-tooltip/>
       </el-table>
       <div class="pager-row">
         <el-pagination background layout="total, sizes, prev, pager, next" :total="pager.total"

@@ -34,6 +34,8 @@ export default {
   accountSummary: (p) => get('/edu/account/summary', p),
   accountRecharge: (d) => post('/edu/account/recharge', d),
   portalMyAccount: () => get('/portal/my-account'),
+  // 全部学生充值记录（企业管理员/财务，本租户范围，仅查询）
+  portalAccountRecords: (p) => get('/portal/account-records', p),
   consumePage: (p) => get('/edu/consume/page', p),
   consumeManual: (d) => post('/edu/consume/manual', d),
   consumeSign: (scheduleId, hours) => post(`/edu/consume/sign/${scheduleId}?hours=${hours}`),
@@ -155,6 +157,8 @@ export default {
   enrollCompensateHours: (id, hours) => post(`/edu/enroll/${id}/compensate-hours`, { hours }),
   schedulePage: (p) => get('/edu/schedule/page', p),
   classroomPage: (p) => get('/edu/classroom/page', p),
+  // 教室联系人候选：本企业在职员工（含手机号，选中联动回填）
+  classroomContactCandidates: () => get('/edu/classroom/contact-candidates'),
   classroomList: () => get('/edu/classroom/list'),
   classroomSave: (d) => post('/edu/classroom', d),
   classroomUpdate: (d) => put('/edu/classroom', d),
@@ -225,5 +229,18 @@ export default {
   teachEvaluations: () => get('/teach/my-evaluations'),
   teachConsults: () => get('/teach/my-consults'),
   teachReply: (id, reply) => post(`/teach/consult/${id}/reply`, { reply }),
-  teachIncome: () => get('/teach/my-income')
+  teachIncome: () => get('/teach/my-income'),
+  // 容器管理（平台运营）：打包发布 / 远程部署 / 服务操作 / 发布日志
+  deployTargets: () => get('/deploy/targets'),
+  deploySaveTarget: (d) => post('/deploy/targets', d),
+  deployDelTarget: (id) => del(`/deploy/targets/${id}`),
+  deployTestTarget: (id) => post(`/deploy/targets/${id}/test`),
+  deployTestDb: (id) => post(`/deploy/targets/${id}/test-db`),
+  deployInitDb: (id) => post(`/deploy/targets/${id}/init-db`),
+  deployBuild: (d) => post('/deploy/build', d),
+  deployDeploy: (buildId, d) => post(`/deploy/${buildId}/deploy`, d),
+  deployService: (id, action) => post(`/deploy/targets/${id}/service`, { action }),
+  deployRecords: (p) => get('/deploy/records', p),
+  deployRecord: (id) => get(`/deploy/records/${id}`),
+  deployDelRecord: (id) => del(`/deploy/records/${id}`),
 }

@@ -12,30 +12,30 @@
       <el-empty v-if="!groups.length" description="暂无学生" :image-size="50" />
     </div>
 
-    <el-table :data="activeItems" stripe v-loading="loading">
+    <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="activeItems" stripe v-loading="loading">
       <el-table-column type="index" label="序号" width="60" />
-      <el-table-column label="学生" width="110">
+      <el-table-column label="学生" width="110" show-overflow-tooltip>
         <template #default="{ row }">{{ row.student ? row.student.name : '-' }}</template>
       </el-table-column>
-      <el-table-column label="就读学校" width="140">
+      <el-table-column label="就读学校" width="140" show-overflow-tooltip>
         <template #default="{ row }">{{ row.student ? row.student.school : '-' }}</template>
       </el-table-column>
-      <el-table-column label="班级" width="130">
+      <el-table-column label="班级" width="130" show-overflow-tooltip>
         <template #default="{ row }">{{ row.clazz ? row.clazz.name : '一对一' }}</template>
       </el-table-column>
-      <el-table-column label="课程" min-width="150">
+      <el-table-column label="课程" min-width="150" show-overflow-tooltip>
         <template #default="{ row }">{{ row.course ? row.course.name : '-' }}</template>
       </el-table-column>
-      <el-table-column label="课时(已用/总)" width="120">
+      <el-table-column label="课时(已用/总)" width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ row.enroll.usedHours }} / {{ row.enroll.totalHours }}</template>
       </el-table-column>
-      <el-table-column label="折扣" width="90">
+      <el-table-column label="折扣" width="90" show-overflow-tooltip>
         <template #default="{ row }">{{ row.enroll.discount }}%</template>
       </el-table-column>
-      <el-table-column label="合同金额" width="110">
+      <el-table-column label="合同金额" width="110" show-overflow-tooltip>
         <template #default="{ row }">¥{{ row.enroll.totalAmount }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="90" show-overflow-tooltip>
         <template #default="{ row }">{{ ['', '在读', '已结课', '已退费'][row.enroll.status] }}</template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
@@ -81,17 +81,17 @@
         </el-descriptions>
 
         <div class="enroll-title">本教师名下报名</div>
-        <el-table :data="infoData.enrolls || []" size="small" border>
-          <el-table-column label="课程" min-width="120">
+        <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="infoData.enrolls || []" size="small" border>
+          <el-table-column label="课程" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">{{ row.courseName }}</template>
           </el-table-column>
-          <el-table-column label="班级" min-width="110">
+          <el-table-column label="班级" min-width="110" show-overflow-tooltip>
             <template #default="{ row }">{{ row.clazzName }}</template>
           </el-table-column>
-          <el-table-column label="课时(已用/总)" width="110">
+          <el-table-column label="课时(已用/总)" width="110" show-overflow-tooltip>
             <template #default="{ row }">{{ row.usedHours }} / {{ row.totalHours }}</template>
           </el-table-column>
-          <el-table-column label="状态" width="70">
+          <el-table-column label="状态" width="70" show-overflow-tooltip>
             <template #default="{ row }">{{ ['', '在读', '已结课', '已退费'][row.status] }}</template>
           </el-table-column>
         </el-table>

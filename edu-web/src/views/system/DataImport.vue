@@ -21,15 +21,15 @@
         <input type="file" accept=".xlsx,.xls" @change="onFile" style="margin-bottom: 16px" />
         <div v-if="parsedRows.length" style="margin-bottom: 16px">
           解析出 <b style="color:#155EEF">{{ parsedRows.length }}</b> 条学员数据，预览前5条：
-          <el-table :data="parsedRows.slice(0, 5)" size="small" stripe style="margin-top: 8px">
-            <el-table-column prop="name" label="姓名" />
-            <el-table-column prop="gender" label="性别">
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="parsedRows.slice(0, 5)" size="small" stripe style="margin-top: 8px">
+            <el-table-column prop="name" label="姓名"  show-overflow-tooltip/>
+            <el-table-column prop="gender" label="性别" show-overflow-tooltip>
               <template #default="{ row }">{{ row.gender === 2 ? '女' : '男' }}</template>
             </el-table-column>
-            <el-table-column prop="grade" label="年级" />
-            <el-table-column prop="school" label="学校" />
-            <el-table-column prop="parentPhone" label="家长电话" />
-            <el-table-column prop="advisor" label="归属顾问" />
+            <el-table-column prop="grade" label="年级"  show-overflow-tooltip/>
+            <el-table-column prop="school" label="学校"  show-overflow-tooltip/>
+            <el-table-column prop="parentPhone" label="家长电话"  show-overflow-tooltip/>
+            <el-table-column prop="advisor" label="归属顾问"  show-overflow-tooltip/>
           </el-table>
         </div>
         <el-button :disabled="!parsedRows.length" type="primary" :loading="importing" @click="doImport">开始导入</el-button>

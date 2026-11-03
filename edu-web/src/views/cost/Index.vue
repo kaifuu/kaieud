@@ -31,25 +31,25 @@
         <div style="flex: 1"></div>
         <el-button @click="doExport">导出明细</el-button>
       </div>
-      <el-table :data="detail" v-loading="loading" stripe max-height="360" size="small">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="detail" v-loading="loading" stripe max-height="360" size="small">
         <el-table-column type="index" label="序号" width="55" />
-        <el-table-column prop="consumeDate" label="消课日期" width="100" />
-        <el-table-column prop="studentName" label="学员" width="90" />
-        <el-table-column prop="courseName" label="课程" min-width="130" />
-        <el-table-column label="班型" width="80">
+        <el-table-column prop="consumeDate" label="消课日期" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="studentName" label="学员" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="courseName" label="课程" min-width="130"  show-overflow-tooltip/>
+        <el-table-column label="班型" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ dictStore.label('class_type', row.classType) }}</template>
         </el-table-column>
-        <el-table-column prop="teacherName" label="教师" width="90" />
-        <el-table-column prop="hours" label="课时" width="70" />
-        <el-table-column prop="revenue" label="营收(元)" width="95" />
-        <el-table-column prop="teacherCost" label="教师成本(元)" width="110" />
-        <el-table-column prop="profit" label="毛利(元)" width="95" />
-        <el-table-column label="成本占比" width="100">
+        <el-table-column prop="teacherName" label="教师" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="hours" label="课时" width="70"  show-overflow-tooltip/>
+        <el-table-column prop="revenue" label="营收(元)" width="95"  show-overflow-tooltip/>
+        <el-table-column prop="teacherCost" label="教师成本(元)" width="110"  show-overflow-tooltip/>
+        <el-table-column prop="profit" label="毛利(元)" width="95"  show-overflow-tooltip/>
+        <el-table-column label="成本占比" width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <span :style="row.costRatio > 50 ? 'color:#f56c6c' : ''">{{ row.costRatio }}%</span>
           </template>
         </el-table-column>
-        <el-table-column prop="contractNo" label="关联合同" width="160" />
+        <el-table-column prop="contractNo" label="关联合同" width="160"  show-overflow-tooltip/>
       </el-table>
     </div>
 
@@ -62,13 +62,13 @@
             <div style="flex: 1"></div>
             <el-button size="small" type="primary" @click="exportPayroll">导出薪酬核算单</el-button>
           </div>
-          <el-table :data="summaryTeacher" size="small" stripe max-height="300">
-            <el-table-column prop="name" label="教师" width="90" />
-            <el-table-column prop="totalHours" label="消课课时" width="90" />
-            <el-table-column prop="totalRevenue" label="营收" width="90" />
-            <el-table-column prop="totalCost" label="教师成本" width="90" />
-            <el-table-column prop="totalProfit" label="毛利" width="90" />
-            <el-table-column prop="avgCostRatio" label="成本占比%" />
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="summaryTeacher" size="small" stripe max-height="300">
+            <el-table-column prop="name" label="教师" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalHours" label="消课课时" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalRevenue" label="营收" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalCost" label="教师成本" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalProfit" label="毛利" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="avgCostRatio" label="成本占比%"  show-overflow-tooltip/>
           </el-table>
         </div>
       </el-col>
@@ -77,13 +77,13 @@
           <div class="toolbar">
             <span class="panel-title" style="padding: 0">按课程汇总</span>
           </div>
-          <el-table :data="summaryCourse" size="small" stripe max-height="300">
-            <el-table-column prop="name" label="课程" width="130" />
-            <el-table-column prop="totalHours" label="消课课时" width="90" />
-            <el-table-column prop="totalRevenue" label="营收" width="90" />
-            <el-table-column prop="totalCost" label="教师成本" width="90" />
-            <el-table-column prop="totalProfit" label="毛利" width="90" />
-            <el-table-column prop="avgCostRatio" label="成本占比%" />
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="summaryCourse" size="small" stripe max-height="300">
+            <el-table-column prop="name" label="课程" width="130"  show-overflow-tooltip/>
+            <el-table-column prop="totalHours" label="消课课时" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalRevenue" label="营收" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalCost" label="教师成本" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="totalProfit" label="毛利" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="avgCostRatio" label="成本占比%"  show-overflow-tooltip/>
           </el-table>
         </div>
       </el-col>

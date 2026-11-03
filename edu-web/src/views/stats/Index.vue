@@ -9,19 +9,19 @@
     <el-row :gutter="14">
       <el-col :span="12">
         <el-card><template #header>按学校维度收入</template>
-          <el-table :data="data.revenueBySchool" size="small" stripe max-height="320">
-            <el-table-column prop="name" label="学校" />
-            <el-table-column prop="payCount" label="缴费笔数" width="100" />
-            <el-table-column prop="income" label="收入(元)" width="120" />
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="data.revenueBySchool" size="small" stripe max-height="320">
+            <el-table-column prop="name" label="学校"  show-overflow-tooltip/>
+            <el-table-column prop="payCount" label="缴费笔数" width="100"  show-overflow-tooltip/>
+            <el-table-column prop="income" label="收入(元)" width="120"  show-overflow-tooltip/>
           </el-table>
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card><template #header>按学生维度收入</template>
-          <el-table :data="data.revenueByStudent" size="small" stripe max-height="320">
-            <el-table-column prop="name" label="学生" />
-            <el-table-column prop="school" label="学校" />
-            <el-table-column prop="income" label="收入(元)" width="120" />
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="data.revenueByStudent" size="small" stripe max-height="320">
+            <el-table-column prop="name" label="学生"  show-overflow-tooltip/>
+            <el-table-column prop="school" label="学校"  show-overflow-tooltip/>
+            <el-table-column prop="income" label="收入(元)" width="120"  show-overflow-tooltip/>
           </el-table>
         </el-card>
       </el-col>
@@ -30,10 +30,10 @@
     <el-row :gutter="14" style="margin-top: 14px">
       <el-col :span="12">
         <el-card><template #header>按教师维度收入</template>
-          <el-table :data="data.revenueByTeacher" size="small" stripe max-height="320">
-            <el-table-column prop="name" label="教师" />
-            <el-table-column prop="subject" label="科目" width="90" />
-            <el-table-column prop="income" label="收入(元)" width="110" />
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="data.revenueByTeacher" size="small" stripe max-height="320">
+            <el-table-column prop="name" label="教师"  show-overflow-tooltip/>
+            <el-table-column prop="subject" label="科目" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="income" label="收入(元)" width="110"  show-overflow-tooltip/>
           </el-table>
         </el-card>
       </el-col>
@@ -46,18 +46,18 @@
 
     <el-card style="margin-top: 14px">
       <template #header>教师投入量 / 闲置量</template>
-      <el-table :data="data.teacherLoad" stripe>
-        <el-table-column prop="name" label="教师" width="110" />
-        <el-table-column prop="subject" label="科目" width="90" />
-        <el-table-column prop="scheduleCount" label="排课次数" width="100" />
-        <el-table-column prop="scheduledHours" label="排课课时" width="100" />
-        <el-table-column prop="completedHours" label="已完成课时" width="110" />
-        <el-table-column label="投入率" min-width="200">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="data.teacherLoad" stripe>
+        <el-table-column prop="name" label="教师" width="110"  show-overflow-tooltip/>
+        <el-table-column prop="subject" label="科目" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="scheduleCount" label="排课次数" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="scheduledHours" label="排课课时" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="completedHours" label="已完成课时" width="110"  show-overflow-tooltip/>
+        <el-table-column label="投入率" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <el-progress :percentage="usageRate(row)" :color="usageRate(row) > 60 ? '#67c23a' : '#e6a23c'" />
           </template>
         </el-table-column>
-        <el-table-column label="闲置量(课时)" width="130">
+        <el-table-column label="闲置量(课时)" width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ idleHours(row) }}</template>
         </el-table-column>
       </el-table>

@@ -374,6 +374,11 @@ public class EduContractController {
     /** 咨询顾问候选：用户管理中非学生、非系统用户、非管理员的在职账号（按登录租户自动隔离） */
     @GetMapping("/advisor-candidates")
     public Result<List<Map<String, Object>>> advisorCandidates() {
+        return Result.ok(staffCandidates());
+    }
+
+    /** 员工候选（顾问/教室联系人等共用）：本企业在职员工账号，附手机号供联动回填 */
+    private List<Map<String, Object>> staffCandidates() {
         // 用户类型：2教管 3班主任 4教师 6校长 7咨询师 8学管师（排除 5学生/9系统用户/1管理员）
         List<com.edu.entity.SysUser> staff = sysUserMapper.selectList(
                 new LambdaQueryWrapper<com.edu.entity.SysUser>()
@@ -386,9 +391,10 @@ public class EduContractController {
             m.put("name", StringUtils.hasText(u.getRealName()) ? u.getRealName() : u.getUsername());
             m.put("username", u.getUsername());
             m.put("userType", u.getUserType());
+            m.put("phone", u.getPhone());
             result.add(m);
         }
-        return Result.ok(result);
+        return result;
     }
 
     /** 每日任务可将到期合同标记到期（也可查询时动态判断） */

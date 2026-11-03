@@ -12,38 +12,38 @@
     <!-- 班级收入明细：各班对应合同收入 + 课时/请假/旷课 -->
     <el-card style="margin-top: 14px">
       <template #header>班级收入明细（所带班级对应合同的收入与课时情况）</template>
-      <el-table :data="data.groups || []" stripe>
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="data.groups || []" stripe>
         <el-table-column type="index" label="序号" width="60" />
-        <el-table-column label="班级" min-width="150">
+        <el-table-column label="班级" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="课程" min-width="130">
+        <el-table-column label="课程" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ row.courseName || '-' }}</template>
         </el-table-column>
-        <el-table-column label="学生数" width="80" align="center">
+        <el-table-column label="学生数" width="80" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.studentCount }}</template>
         </el-table-column>
-        <el-table-column label="合同金额(元)" width="120" align="right">
+        <el-table-column label="合同金额(元)" width="120" align="right" show-overflow-tooltip>
           <template #default="{ row }">¥{{ row.totalAmount }}</template>
         </el-table-column>
-        <el-table-column label="已缴(元)" width="100" align="right">
+        <el-table-column label="已缴(元)" width="100" align="right" show-overflow-tooltip>
           <template #default="{ row }">¥{{ row.paidAmount }}</template>
         </el-table-column>
-        <el-table-column label="总课时" width="80" align="center">
+        <el-table-column label="总课时" width="80" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.totalHours }}</template>
         </el-table-column>
-        <el-table-column label="已上课时" width="90" align="center">
+        <el-table-column label="已上课时" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.usedHours }}</template>
         </el-table-column>
-        <el-table-column label="未完课时" width="90" align="center">
+        <el-table-column label="未完课时" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <span :class="{ 'remain-warn': row.remainHours > 0 }">{{ row.remainHours }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="请假(次)" width="90" align="center">
+        <el-table-column label="请假(次)" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.leaveCount }}</template>
         </el-table-column>
-        <el-table-column label="旷课(次)" width="90" align="center">
+        <el-table-column label="旷课(次)" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <span :class="{ 'absent-warn': row.absentCount > 0 }">{{ row.absentCount }}</span>
           </template>

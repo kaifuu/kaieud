@@ -43,13 +43,13 @@
           <div style="flex: 1"></div>
           <el-button v-if="currentNode" @click="currentNode = null">查看全部</el-button>
         </div>
-        <el-table :data="pagedChildren" v-loading="loading" stripe height="100%">
+        <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="pagedChildren" v-loading="loading" stripe height="100%">
           <el-table-column type="index" label="序号" width="60" :index="seq" />
-          <el-table-column prop="name" label="组织名称" min-width="160" />
-          <el-table-column prop="leader" label="负责人" width="130" />
-          <el-table-column prop="phone" label="电话" width="150" />
-          <el-table-column prop="sort" label="排序" width="80" />
-          <el-table-column label="状态" width="90">
+          <el-table-column prop="name" label="组织名称" min-width="160"  show-overflow-tooltip/>
+          <el-table-column prop="leader" label="负责人" width="130"  show-overflow-tooltip/>
+          <el-table-column prop="phone" label="电话" width="150"  show-overflow-tooltip/>
+          <el-table-column prop="sort" label="排序" width="80"  show-overflow-tooltip/>
+          <el-table-column label="状态" width="90" show-overflow-tooltip>
             <template #default="{ row }">
               <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'" effect="plain">
                 {{ row.status === 1 ? '启用' : '停用' }}

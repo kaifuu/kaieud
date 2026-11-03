@@ -21,22 +21,22 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="clazz" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
         <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.name" prop="name" label="班级名称" min-width="160" sortable="custom" />
-        <el-table-column v-if="cols.courseId" label="课程" min-width="140">
+        <el-table-column v-if="cols.name" prop="name" label="班级名称" min-width="160" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.courseId" label="课程" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ courseName(row.courseId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.classTeacherId" label="班主任" width="110">
+        <el-table-column v-if="cols.classTeacherId" label="班主任" width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="row.classTeacherId" size="small" effect="light">{{ teacherName(row.classTeacherId) }}</el-tag>
             <span v-else>未指定</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.capacity" prop="capacity" label="容量" width="80" sortable="custom" />
-        <el-table-column v-if="cols.startDate" prop="startDate" label="开课日期" width="115" sortable="custom" />
-        <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom">
+        <el-table-column v-if="cols.capacity" prop="capacity" label="容量" width="80" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.startDate" prop="startDate" label="开课日期" width="115" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['', 'primary', 'success', 'info'][row.status]" effect="light">
               {{ ['', '招生中', '开课中', '已结课'][row.status] }}

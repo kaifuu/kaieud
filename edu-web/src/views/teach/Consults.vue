@@ -32,18 +32,18 @@
 
     <!-- 卡片详情抽屉：该学生/班级的全部咨询列表，支持直接回复 -->
     <el-drawer v-model="visible" :title="`${view === 'student' ? '学生' : '班级'}咨询 — ${detail?.name || ''}`" size="560px">
-      <el-table :data="detail?.items || []" stripe>
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="detail?.items || []" stripe>
         <el-table-column type="index" label="序号" width="55" />
-        <el-table-column v-if="view === 'clazz'" label="学生" width="90">
+        <el-table-column v-if="view === 'clazz'" label="学生" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ row.student ? row.student.name : '-' }}</template>
         </el-table-column>
-        <el-table-column label="咨询内容" min-width="150">
+        <el-table-column label="咨询内容" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.consult.content }}</template>
         </el-table-column>
-        <el-table-column label="回复" min-width="150">
+        <el-table-column label="回复" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.consult.reply || '待回复' }}</template>
         </el-table-column>
-        <el-table-column prop="consult.createTime" label="时间" width="150" />
+        <el-table-column prop="consult.createTime" label="时间" width="150"  show-overflow-tooltip/>
         <el-table-column label="操作" width="70" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.consult.status === 0" link type="primary" @click="openReply(row)">回复</el-button>

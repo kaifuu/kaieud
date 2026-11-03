@@ -1,16 +1,16 @@
 <template>
-  <!-- 图标选择器：Element Plus 常用图标网格点选，支持关键字过滤与清除 -->
+  <!-- 图标选择器：默认展示教育/后台场景精选图标；输入关键字检索图标库全量 292 个 -->
   <el-popover placement="bottom-start" :width="320" trigger="click" popper-class="icon-picker-popper">
     <template #reference>
       <el-input :model-value="modelValue ? modelValue : ''" readonly placeholder="点击选择图标" class="icon-input">
         <template #prefix>
-          <el-icon v-if="modelValue"><component :is="modelValue" /></el-icon>
+          <el-icon v-if="modelValue && Icons[modelValue]"><component :is="modelValue" /></el-icon>
           <el-icon v-else><Grid /></el-icon>
         </template>
       </el-input>
     </template>
     <div class="picker-head">
-      <el-input v-model="keyword" placeholder="搜索图标" size="small" clearable :prefix-icon="Search" />
+      <el-input v-model="keyword" placeholder="搜索图标（可搜全量图标库）" size="small" clearable :prefix-icon="Search" />
       <el-button v-if="modelValue" link type="danger" size="small" @click="$emit('update:modelValue', '')">清除</el-button>
     </div>
     <div class="icon-grid">
@@ -36,10 +36,13 @@ const emit = defineEmits(['update:modelValue'])
 
 const keyword = ref('')
 
-// 常用图标清单（教育/后台场景精选）
+// 图标库全量名称（存在性校验后的真实集合）
+const allNames = Object.keys(Icons).filter((n) => typeof Icons[n] === 'object')
+
+// 常用图标清单（教育/后台场景精选；含存在性过滤，避免清单里出现包中不存在的名字渲染成空白）
 const iconNames = [
-  'HomeFilled', 'School', 'User', 'UserFilled', 'Avatar', 'Users',
-  'Reading', 'Notebook', 'NotebookPen', 'Collection', 'CollectionTag',
+  'HomeFilled', 'School', 'User', 'UserFilled', 'Avatar',
+  'Reading', 'Notebook', 'EditPen', 'Collection', 'CollectionTag',
   'Calendar', 'AlarmClock', 'Clock', 'Bell', 'BellFilled',
   'Setting', 'Tools', 'Operation', 'DataAnalysis', 'TrendCharts',
   'PieChart', 'Money', 'Wallet', 'CreditCard', 'Tickets',
@@ -49,13 +52,15 @@ const iconNames = [
   'Star', 'StarFilled', 'ChatDotRound', 'ChatLineRound', 'Message',
   'Picture', 'Camera', 'Upload', 'Download', 'Link',
   'Search', 'Edit', 'Delete', 'Plus', 'Finished',
-  'Checked', 'Stamp', 'Key', 'Lock', 'View'
-]
+  'Checked', 'Stamp', 'Key', 'Lock', 'View',
+  'Promotion', 'Suitcase', 'Guide', 'Histogram', 'Coin'
+].filter((n) => Icons[n])
 
 const filteredIcons = computed(() => {
   const k = keyword.value.trim().toLowerCase()
-  if (!k) return iconNames
-  return iconNames.filter((n) => n.toLowerCase().includes(k))
+  // 有关键字时检索全量图标库，无关键字时展示精选网格
+  const base = k ? allNames : iconNames
+  return base.filter((n) => n.toLowerCase().includes(k))
 })
 </script>
 

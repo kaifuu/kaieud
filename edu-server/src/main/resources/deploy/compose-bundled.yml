@@ -1,0 +1,45 @@
+services:
+  kaied-db:
+    image: mysql:8
+    container_name: kaied-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: edu_course
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+    restart: unless-stopped
+
+  kaied-app:
+    build: .
+    image: kaied-app:latest
+    container_name: kaied-app
+    env_file: .env
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    depends_on:
+      kaied-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kaied-web:
+    image: nginx:alpine
+    container_name: kaied-web
+    volumes:
+      - ./dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${WEB_PORT}:80"
+    depends_on:
+      - kaied-app
+    restart: unless-stopped
+
+volumes:
+  db-data:

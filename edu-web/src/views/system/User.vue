@@ -31,45 +31,53 @@
         <div style="flex: 1"></div>
         <ColumnSetting :storage-key="'user_' + tab" :columns="tabColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
         <el-table-column type="selection" width="42" />
-        <el-table-column label="照片" width="70">
+        <el-table-column label="照片" width="70" show-overflow-tooltip>
           <template #default="{ row }">
             <img v-if="row.avatarUrl" :src="row.avatarUrl" class="row-avatar" />
             <div v-else class="row-avatar row-avatar-empty">{{ row.realName?.charAt(0) }}</div>
           </template>
         </el-table-column>
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.username" prop="username" label="用户名" min-width="110" sortable="custom" />
-        <el-table-column v-if="cols.realName" prop="realName" label="姓名" width="100" sortable="custom" />
+        <el-table-column v-if="cols.username" prop="username" label="用户名" min-width="110" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.realName" prop="realName" label="姓名" width="100" sortable="custom"  show-overflow-tooltip/>
         <!-- 学生TAB专属列：学籍信息 -->
         <template v-if="tab === 'student'">
-          <el-table-column v-if="cols.grade" prop="grade" label="年级" width="90" />
-          <el-table-column v-if="cols.school" prop="school" label="学校" min-width="130" />
-          <el-table-column v-if="cols.parentPhone" prop="parentPhone" label="家长电话" width="135" />
-          <el-table-column v-if="cols.advisor" prop="advisor" label="归属顾问" width="100" />
+          <el-table-column v-if="cols.grade" prop="grade" label="年级" width="90"  show-overflow-tooltip/>
+          <el-table-column v-if="cols.school" prop="school" label="学校" min-width="130"  show-overflow-tooltip/>
+          <el-table-column v-if="cols.parentPhone" prop="parentPhone" label="家长电话" width="135"  show-overflow-tooltip/>
+          <el-table-column v-if="cols.advisor" prop="advisor" label="归属顾问" width="100"  show-overflow-tooltip/>
         </template>
-        <el-table-column v-if="cols.userType && (tab === 'staff' || tab === 'system')" label="类型" width="150" sortable="custom">
+        <el-table-column v-if="cols.userType && (tab === 'staff' || tab === 'system')" label="类型" width="110" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.userType === 1 ? 'danger' : 'primary'" effect="light">
               {{ typeNames[row.userType] || row.userType }}
             </el-tag>
-            <el-tag v-if="(tab === 'staff' || tab === 'system') && row.asTeacher" size="small" type="warning" effect="light"
-                    style="margin-left: 4px">兼教师</el-tag>
-            <el-tag v-if="(tab === 'staff' || tab === 'system') && row.asStudent" size="small" type="success" effect="light"
-                    style="margin-left: 4px">兼学生</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.phone" prop="phone" label="手机号" width="135" />
-        <el-table-column v-if="cols.email" prop="email" label="邮箱" min-width="140" />
-        <el-table-column v-if="cols.status" label="状态" width="80">
+        <el-table-column v-if="tab === 'staff' || tab === 'system'" label="兼任教师" width="90" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-tag v-if="row.asTeacher" size="small" type="warning" effect="light">兼教师</el-tag>
+            <span v-else style="color: #c0c8d4">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="tab === 'staff' || tab === 'system'" label="兼任学生" width="90" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-tag v-if="row.asStudent" size="small" type="success" effect="light">兼学生</el-tag>
+            <span v-else style="color: #c0c8d4">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="cols.phone" prop="phone" label="手机号" width="135"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.email" prop="email" label="邮箱" min-width="140"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="80" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'" effect="plain">
               {{ row.status === 1 ? '启用' : '停用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.lastLoginTime" prop="lastLoginTime" label="最近登录" width="165" sortable="custom">
+        <el-table-column v-if="cols.lastLoginTime" prop="lastLoginTime" label="最近登录" width="165" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.lastLoginTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
@@ -179,13 +187,86 @@
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-drawer>
-    <DetailDrawer v-model="detailVisible" title="用户详情" :fields="detailFields" :data="detailRow">
-      <template #avatarUrl="{ value }">
-        <img v-if="value" :src="value" class="detail-photo" title="双击放大查看"
-             @dblclick="openPhotoViewer(value)" />
-        <span v-else style="color: #98a2b3">无</span>
+    <!-- 用户详情：按用户类型分组展示 基本信息 / 学籍信息 / 教师信息 / 账号信息 -->
+    <el-drawer v-model="detailVisible" :title="'用户详情 · ' + (detailRow.realName || '')" size="520px">
+      <div class="detail-head">
+        <img v-if="detailRow.avatarUrl" :src="detailRow.avatarUrl" class="detail-photo"
+             title="双击放大查看" @dblclick="openPhotoViewer(detailRow.avatarUrl)" />
+        <div v-else class="detail-photo detail-photo-empty">{{ detailRow.realName?.charAt(0) }}</div>
+        <div class="detail-head-info">
+          <div class="d-name">
+            {{ detailRow.realName }}
+            <el-tag size="small" :type="detailRow.userType === 1 ? 'danger' : 'primary'" effect="light">
+              {{ typeNames[detailRow.userType] || detailRow.userType }}
+            </el-tag>
+            <el-tag v-if="detailRow.asTeacher" size="small" type="warning" effect="light">兼教师</el-tag>
+            <el-tag v-if="detailRow.asStudent" size="small" type="success" effect="light">兼学生</el-tag>
+          </div>
+          <div class="d-sub">{{ detailRow.username }} · {{ orgMap[detailRow.orgId] || '总部' }}</div>
+        </div>
+      </div>
+
+      <div class="d-section-title">基本信息</div>
+      <el-descriptions :column="2" border size="small">
+        <el-descriptions-item label="手机号">{{ detailRow.phone || '无' }}</el-descriptions-item>
+        <el-descriptions-item label="邮箱">{{ detailRow.email || '无' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag size="small" :type="detailRow.status === 1 ? 'success' : 'info'" effect="plain">
+            {{ detailRow.status === 1 ? '启用' : '停用' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="最近登录">{{ fmt(detailRow.lastLoginTime) }}</el-descriptions-item>
+      </el-descriptions>
+
+      <!-- 学籍信息：学生类型 或 兼任学生 -->
+      <template v-if="detailRow.userType === 5 || detailRow.asStudent">
+        <div class="d-section-title">学籍信息（学生档案）</div>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="年级">{{ detailRow.grade || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="出生日期">{{ detailRow.birthDate || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="就读学校" :span="2">{{ detailRow.school || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="家长姓名">{{ detailRow.parentName || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="家长电话">{{ detailRow.parentPhone || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="备用电话">{{ detailRow.backupPhone || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="归属顾问">{{ detailRow.advisor || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="学员标签" :span="2">
+            <template v-if="detailRow.tags">
+              <el-tag v-for="t in String(detailRow.tags).split(',')" :key="t" size="small"
+                      effect="plain" style="margin-right: 6px">{{ t }}</el-tag>
+            </template>
+            <span v-else>无</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="家庭住址" :span="2">{{ detailRow.address || '无' }}</el-descriptions-item>
+        </el-descriptions>
       </template>
-    </DetailDrawer>
+
+      <!-- 教师信息：教师类型 或 兼任教师 -->
+      <template v-if="detailRow.userType === 4 || detailRow.asTeacher">
+        <div class="d-section-title">教师信息（教师档案）</div>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="科目">{{ detailRow.subject || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="职称">{{ detailRow.title || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="一对一课时费">¥{{ detailRow.rateOne2one ?? '无' }}</el-descriptions-item>
+          <el-descriptions-item label="班课课时费">¥{{ detailRow.rateClass ?? '无' }}</el-descriptions-item>
+          <el-descriptions-item label="可授班型" :span="2">{{ classTypeText(detailRow.classTypes) }}</el-descriptions-item>
+          <el-descriptions-item label="简介" :span="2">{{ detailRow.intro || '无' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+
+      <!-- 账号信息：非学生展示角色 -->
+      <template v-if="detailRow.userType !== 5">
+        <div class="d-section-title">账号信息</div>
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="角色">
+            <template v-if="detailRow.roleNames && detailRow.roleNames.length">
+              <el-tag v-for="rn in detailRow.roleNames" :key="rn" size="small" effect="light"
+                      style="margin-right: 6px">{{ rn }}</el-tag>
+            </template>
+            <span v-else>未绑定（按用户类型默认权限）</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-drawer>
 
     <!-- 照片放大查看器（Element Plus 标准组件） -->
     <el-image-viewer
@@ -206,7 +287,6 @@ import api from '../../api'
 import { usePage } from '../../composables/usePage'
 import ColumnSetting from '../../components/ColumnSetting.vue'
 import { exportXlsx } from '../../utils/export'
-import DetailDrawer from '../../components/DetailDrawer.vue'
 import { fetchAvatarUrl, clearAvatarCache } from '../../utils/avatar'
 import { useDictStore } from '../../store/dict'
 
@@ -306,36 +386,35 @@ const canAdjunctStudent = computed(() => {
 const teacherSection = computed(() => Number(form.value.userType) === 4 || !!form.value.asTeacher)
 const detailVisible = ref(false)
 const detailRow = ref({})
-const detailFields = computed(() => {
-  const fields = [
-    { prop: 'avatarUrl', label: '照片' },
-    { prop: 'username', label: '用户名' }, { prop: 'realName', label: '姓名' },
-    { prop: 'userType', label: '类型', map: typeNames.value }
-  ]
-  if (tab.value === 'staff' || tab.value === 'teacher')
-    fields.push({ prop: 'asTeacher', label: '教师档案', map: { true: '已关联（可上课）', false: '未关联' } })
-  if (tab.value === 'staff' || tab.value === 'system')
-    fields.push({ prop: 'asStudent', label: '学生档案', map: { true: '已关联（可用学生中心）', false: '未关联' } })
-  fields.push(
-    { prop: 'phone', label: '手机号' }, { prop: 'email', label: '邮箱' },
-    { prop: 'status', label: '状态', map: { 1: '启用', 0: '停用' } },
-    { prop: 'lastLoginTime', label: '最近登录' }
-  )
-  return fields
-})
 const viewerVisible = ref(false)
 const viewerUrl = ref('')
 function openPhotoViewer(url) {
   viewerUrl.value = url
   viewerVisible.value = true
 }
-function openDetail(row) {
-  detailRow.value = { ...row }
+const classTypeText = (v) => {
+  if (!v) return '无'
+  const m = { 1: '一对一', 2: '班课' }
+  return String(v).split(',').map((x) => m[x.trim()] || x).join('、')
+}
+
+async function openDetail(row) {
+  detailRow.value = { ...row, roleNames: [] }
   detailVisible.value = true
   // 照片回显：无缓存时单独拉取
   if (!detailRow.value.avatarUrl) {
     fetchAvatarUrl(row.id).then((url) => { detailRow.value.avatarUrl = url || '' })
   }
+  // 拉取全量档案（学籍/教师字段按该用户类型填充）与角色名
+  try {
+    const p = (await api.userProfile(row.id)) || {}
+    Object.assign(detailRow.value, p)
+  } catch (e) { /* 忽略 */ }
+  try {
+    const ids = (await api.userRoles(row.id)) || []
+    detailRow.value.roleNames = roles.value
+      .filter((r) => ids.includes(r.id)).map((r) => r.name)
+  } catch (e) { /* 忽略 */ }
 }
 function onTab() {
   query.userType = null
@@ -529,4 +608,23 @@ onMounted(async () => {
 
 <style scoped>
 .form-tip { font-size: 12px; color: #8fa8c4; line-height: 1.5; }
+</style>
+
+<style scoped>
+.detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.detail-photo {
+  width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+  border: 1px solid #e4eaf2; cursor: zoom-in;
+}
+.detail-photo-empty {
+  display: flex; align-items: center; justify-content: center;
+  background: #e8effe; color: #155EEF; font-size: 22px; font-weight: 600;
+}
+.d-name { display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; color: #142a44; }
+.d-sub { font-size: 12.5px; color: #8fa8c4; margin-top: 5px; }
+.d-section-title {
+  font-size: 13.5px; font-weight: 600; color: #344054;
+  margin: 16px 0 10px; padding-left: 8px;
+  border-left: 3px solid #155EEF;
+}
 </style>

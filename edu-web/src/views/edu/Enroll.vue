@@ -19,30 +19,30 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="enroll" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.studentId" label="学生" width="100">
+        <el-table-column v-if="cols.studentId" label="学生" width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ studentName(row.studentId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.courseId" label="课程" min-width="150">
+        <el-table-column v-if="cols.courseId" label="课程" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ courseName(row.courseId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.clazzId" label="班级" width="150">
+        <el-table-column v-if="cols.clazzId" label="班级" width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.clazzId ? clazzName(row.clazzId) : '一对一' }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.teacherId" label="授课老师" width="110">
+        <el-table-column v-if="cols.teacherId" label="授课老师" width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="row.teacherId" size="small" effect="light">{{ teacherName(row.teacherId) }}</el-tag>
             <el-tag v-else size="small" type="danger" effect="light">未指派</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.usedHours" label="课时(已用/总)" width="125" sortable="custom" prop="usedHours">
+        <el-table-column v-if="cols.usedHours" label="课时(已用/总)" width="125" sortable="custom" prop="usedHours" show-overflow-tooltip>
           <template #default="{ row }">{{ row.usedHours }} / {{ row.totalHours }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.totalAmount" label="缴费(已缴/应收)" width="155" sortable="custom" prop="totalAmount">
+        <el-table-column v-if="cols.totalAmount" label="缴费(已缴/应收)" width="155" sortable="custom" prop="totalAmount" show-overflow-tooltip>
           <template #default="{ row }">{{ row.paidAmount }} / {{ row.totalAmount }}（{{ row.discount }}折）</template>
         </el-table-column>
-        <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom">
+        <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['', 'success', 'info', 'danger'][row.status]" effect="plain">
               {{ ['', '在读', '已结课', '已退费'][row.status] }}

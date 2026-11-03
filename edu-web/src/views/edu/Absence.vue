@@ -19,32 +19,32 @@
         <el-button type="primary" @click="search">查询</el-button>
         <div style="flex: 1"></div>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column label="学员/班级" min-width="130">
+        <el-table-column label="学员/班级" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ row.studentName || row.clazzName + '（整班）' }}</template>
         </el-table-column>
-        <el-table-column prop="courseName" label="课程" min-width="150" />
-        <el-table-column prop="teacherName" label="教师" width="90" />
-        <el-table-column prop="classTime" label="上课时间" width="170" />
-        <el-table-column prop="reason" label="旷课说明" min-width="140">
+        <el-table-column prop="courseName" label="课程" min-width="150"  show-overflow-tooltip/>
+        <el-table-column prop="teacherName" label="教师" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="classTime" label="上课时间" width="170"  show-overflow-tooltip/>
+        <el-table-column prop="reason" label="旷课说明" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.reason || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="applyTime" label="申请时间" width="170" />
-        <el-table-column label="审批截止" width="170">
+        <el-table-column prop="applyTime" label="申请时间" width="170"  show-overflow-tooltip/>
+        <el-table-column label="审批截止" width="170" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.deadline }}
             <el-tag v-if="row.status === 0 && isOverdue(row)" size="small" type="danger" effect="plain">即将自动扣课</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="150">
+        <el-table-column label="状态" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="absenceMeta[row.status]?.type" effect="plain">
               {{ absenceMeta[row.status]?.label }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审批人/时间" width="170">
+        <el-table-column label="审批人/时间" width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ row.approver ? row.approver + ' · ' + (row.approveTime || '') : '-' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">

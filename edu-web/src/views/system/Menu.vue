@@ -48,16 +48,16 @@
           <div style="flex: 1"></div>
           <el-button v-if="currentNode" @click="currentNode = null">查看全部</el-button>
         </div>
-        <el-table :data="pagedChildren" v-loading="loading" stripe height="100%" row-key="id" @sort-change="onSort">
+        <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="pagedChildren" v-loading="loading" stripe height="100%" row-key="id" @sort-change="onSort">
           <el-table-column type="index" label="序号" width="60" />
-          <el-table-column prop="name" label="名称" min-width="140" />
-          <el-table-column prop="path" label="路由" min-width="110" />
-          <el-table-column prop="component" label="组件" min-width="130" />
-          <el-table-column prop="perm" label="权限标识" width="120" />
-          <el-table-column label="类型" width="80">
+          <el-table-column prop="name" label="名称" min-width="140"  show-overflow-tooltip/>
+          <el-table-column prop="path" label="路由" min-width="110"  show-overflow-tooltip/>
+          <el-table-column prop="component" label="组件" min-width="130"  show-overflow-tooltip/>
+          <el-table-column prop="perm" label="权限标识" width="120"  show-overflow-tooltip/>
+          <el-table-column label="类型" width="80" show-overflow-tooltip>
             <template #default="{ row }">{{ row.type === 'M' ? '目录' : '菜单' }}</template>
           </el-table-column>
-          <el-table-column prop="sort" label="排序" width="70" />
+          <el-table-column prop="sort" label="排序" width="70"  show-overflow-tooltip/>
           <el-table-column label="操作" width="220" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEdit(null, row)">新增下级</el-button>

@@ -22,32 +22,32 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="contract" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.contractNo" prop="contractNo" label="合同编号" width="160" sortable="custom" />
-        <el-table-column v-if="cols.studentId" label="学员" width="90">
+        <el-table-column v-if="cols.contractNo" prop="contractNo" label="合同编号" width="160" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.studentId" label="学员" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ studentName(row.studentId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.courseId" label="课程" min-width="130">
+        <el-table-column v-if="cols.courseId" label="课程" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ courseName(row.courseId) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.classType" label="班型" width="80">
+        <el-table-column v-if="cols.classType" label="班型" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ dictText('class_type', row.classType) }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.purchasedHours" prop="purchasedHours" label="购买课时" width="95" sortable="custom" />
-        <el-table-column v-if="cols.giftHours" prop="giftHours" label="赠送课时" width="95" />
-        <el-table-column label="总/已消/剩余" width="130">
+        <el-table-column v-if="cols.purchasedHours" prop="purchasedHours" label="购买课时" width="95" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.giftHours" prop="giftHours" label="赠送课时" width="95"  show-overflow-tooltip/>
+        <el-table-column label="总/已消/剩余" width="130" show-overflow-tooltip>
           <template #default="{ row }">
             {{ remain(row).total }} / {{ Number(row.usedPurchased) + Number(row.usedGift) }} /
             <span :style="remain(row).left <= warnHours ? 'color:#f56c6c;font-weight:600' : ''">{{ remain(row).left }}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.unitPrice" prop="unitPrice" label="单价(元)" width="90" sortable="custom" />
-        <el-table-column v-if="cols.totalAmount" label="应收/已缴" width="130" sortable="custom" prop="totalAmount">
+        <el-table-column v-if="cols.unitPrice" prop="unitPrice" label="单价(元)" width="90" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.totalAmount" label="应收/已缴" width="130" sortable="custom" prop="totalAmount" show-overflow-tooltip>
           <template #default="{ row }">{{ row.totalAmount }} / {{ row.paidAmount }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.endDate" prop="endDate" label="到期日期" width="105" sortable="custom" />
-        <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom">
+        <el-table-column v-if="cols.endDate" prop="endDate" label="到期日期" width="105" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['info', 'warning', 'success', 'danger', 'danger'][row.status]" effect="plain">
               {{ statusText[row.status] }}
@@ -201,10 +201,10 @@
           </el-descriptions>
         </el-tab-pane>
         <el-tab-pane label="缴费记录" name="pay">
-          <el-table :data="detail.payments || []" size="small" stripe>
-            <el-table-column prop="paymentNo" label="缴费单号" min-width="150" />
-            <el-table-column prop="amount" label="金额" width="90" />
-            <el-table-column prop="payTime" label="时间" width="150" />
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="detail.payments || []" size="small" stripe>
+            <el-table-column prop="paymentNo" label="缴费单号" min-width="150"  show-overflow-tooltip/>
+            <el-table-column prop="amount" label="金额" width="90"  show-overflow-tooltip/>
+            <el-table-column prop="payTime" label="时间" width="150"  show-overflow-tooltip/>
           </el-table>
         </el-tab-pane>
       </el-tabs>

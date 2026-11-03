@@ -18,25 +18,25 @@
         <div style="flex: 1"></div>
         <el-button @click="doExport">导出</el-button>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column prop="name" label="套餐名称" min-width="160" sortable="custom" />
-        <el-table-column label="关联课程" min-width="140">
+        <el-table-column prop="name" label="套餐名称" min-width="160" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column label="关联课程" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ courseName(row.courseId) }}</template>
         </el-table-column>
-        <el-table-column label="班型" width="90">
+        <el-table-column label="班型" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ dictText('class_type', row.classType) }}</template>
         </el-table-column>
-        <el-table-column prop="unitPrice" label="单价(元/课时)" width="125" sortable="custom" />
-        <el-table-column prop="hours" label="购买课时" width="95" sortable="custom" />
-        <el-table-column prop="giftHours" label="赠送课时" width="95" />
-        <el-table-column label="套餐总课时" width="105">
+        <el-table-column prop="unitPrice" label="单价(元/课时)" width="125" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column prop="hours" label="购买课时" width="95" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column prop="giftHours" label="赠送课时" width="95"  show-overflow-tooltip/>
+        <el-table-column label="套餐总课时" width="105" show-overflow-tooltip>
           <template #default="{ row }">{{ Number(row.hours) + Number(row.giftHours || 0) }}</template>
         </el-table-column>
-        <el-table-column prop="validDays" label="有效期(天)" width="105" />
-        <el-table-column prop="startDate" label="生效日期" width="110" />
-        <el-table-column prop="endDate" label="截止日期" width="110" />
-        <el-table-column label="状态" width="80">
+        <el-table-column prop="validDays" label="有效期(天)" width="105"  show-overflow-tooltip/>
+        <el-table-column prop="startDate" label="生效日期" width="110"  show-overflow-tooltip/>
+        <el-table-column prop="endDate" label="截止日期" width="110"  show-overflow-tooltip/>
+        <el-table-column label="状态" width="80" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="isExpired(row)" size="small" type="danger" effect="plain">已过期</el-tag>
             <el-tag v-else size="small" :type="row.enabled === 1 ? 'success' : 'info'" effect="plain">
@@ -140,17 +140,17 @@
 
     <!-- 合同引用抽屉：查看引用该套餐的全部合同 -->
     <el-drawer v-model="refVisible" :title="`合同引用 — ${refRow.name || ''}`" size="720px">
-      <el-table :data="refContracts" v-loading="refLoading" stripe size="small">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="refContracts" v-loading="refLoading" stripe size="small">
         <el-table-column type="index" label="序号" width="55" />
-        <el-table-column prop="contractNo" label="合同编号" min-width="150" />
-        <el-table-column prop="studentName" label="学员" width="90" />
-        <el-table-column prop="purchasedHours" label="购买课时" width="90" />
-        <el-table-column prop="giftHours" label="赠送课时" width="90" />
-        <el-table-column prop="unitPrice" label="单价(元)" width="90" />
-        <el-table-column prop="totalAmount" label="合同金额" width="100" />
-        <el-table-column prop="startDate" label="生效日期" width="105" />
-        <el-table-column prop="endDate" label="截止日期" width="105" />
-        <el-table-column label="状态" width="90">
+        <el-table-column prop="contractNo" label="合同编号" min-width="150"  show-overflow-tooltip/>
+        <el-table-column prop="studentName" label="学员" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="purchasedHours" label="购买课时" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="giftHours" label="赠送课时" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="unitPrice" label="单价(元)" width="90"  show-overflow-tooltip/>
+        <el-table-column prop="totalAmount" label="合同金额" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="startDate" label="生效日期" width="105"  show-overflow-tooltip/>
+        <el-table-column prop="endDate" label="截止日期" width="105"  show-overflow-tooltip/>
+        <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['info', 'warning', 'success', 'danger', 'danger'][row.status]" effect="plain">
               {{ ['待缴费', '部分缴费', '已结清', '已退费', '已到期'][row.status] }}

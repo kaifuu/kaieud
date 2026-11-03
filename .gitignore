@@ -23,3 +23,6 @@ Thumbs.db
 edu-web/e2e-*.mjs
 .claude/
 docs/~$*
+
+# 容器管理本地构建产物（发布包，不入库）
+deploy-stage/

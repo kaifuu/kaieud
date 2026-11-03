@@ -16,6 +16,7 @@
         <el-tab-pane label="企业管理" name="corp" />
         <el-tab-pane label="品牌与广告" name="brand" />
         <el-tab-pane label="通知公告" name="notice" />
+
       </el-tabs>
     </div>
 
@@ -32,19 +33,19 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="tenant" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.name" prop="name" label="企业名称" min-width="150" sortable="custom" />
-        <el-table-column v-if="cols.code" prop="code" label="编码" min-width="110" sortable="custom" />
-        <el-table-column v-if="cols.adminUsername" label="管理员账号" width="130">
+        <el-table-column v-if="cols.name" prop="name" label="企业名称" min-width="150" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.code" prop="code" label="编码" min-width="110" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.adminUsername" label="管理员账号" width="130" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="row.adminUsername" size="small" effect="light">{{ row.adminUsername }}</el-tag>
             <el-tag v-else size="small" type="info" effect="plain">未开通</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.contactPerson" prop="contactPerson" label="联系人" width="110" />
-        <el-table-column v-if="cols.contactPhone" prop="contactPhone" label="联系电话" width="140" />
-        <el-table-column v-if="cols.createTime" prop="createTime" label="创建时间" width="170" sortable="custom">
+        <el-table-column v-if="cols.contactPerson" prop="contactPerson" label="联系人" width="110"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.contactPhone" prop="contactPhone" label="联系电话" width="140"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.createTime" prop="createTime" label="创建时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="250" fixed="right">
@@ -85,33 +86,33 @@
         <el-button type="primary" @click="noticePage.search()">查询</el-button>
         <span style="color: #8fa8c4; font-size: 13px">平台公告对全部企业的用户可见（铃铛/通知管理自动展示）</span>
       </div>
-      <el-table :data="noticePage.rows.value" v-loading="noticePage.loading.value" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="noticePage.rows.value" v-loading="noticePage.loading.value" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" :index="noticePage.seq" />
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
-        <el-table-column label="类型" width="90">
+        <el-table-column label="类型" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ ['', '课程', '缴费'][row.noticeType] || '系统' }}</template>
         </el-table-column>
-        <el-table-column label="级别" width="90">
+        <el-table-column label="级别" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['info', 'warning', 'danger'][row.level]" effect="light">
               {{ ['普通', '重要', '紧急'][row.level] }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="接收对象" width="110">
+        <el-table-column label="接收对象" width="110" show-overflow-tooltip>
           <template #default="{ row }">
             {{ (row.target || 'ALL').split(',').map((x) => ({ ALL: '全部', EDU_ADMIN: '教管人员', CLASS_TEACHER: '班主任',
               TEACHER: '教师', STUDENT: '学生' }[x.trim()] || x.trim())).join('、') }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'" effect="plain">
               {{ row.status === 1 ? '已发布' : '草稿' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="publishTime" label="发布时间" width="165" />
+        <el-table-column prop="publishTime" label="发布时间" width="165"  show-overflow-tooltip/>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openNotice(row)">编辑</el-button>
@@ -198,11 +199,11 @@
     <el-dialog v-model="recycleVisible" title="企业回收站" width="720px">
       <el-tabs v-model="recycleTab">
         <el-tab-pane label="已删除企业" name="list">
-          <el-table :data="recycleRows" v-loading="recycleLoading" size="small" stripe>
-            <el-table-column prop="id" label="ID" width="60" />
-            <el-table-column prop="name" label="企业名称" min-width="120" />
-            <el-table-column prop="code" label="编码" width="90" />
-            <el-table-column label="删除时间" width="150">
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="recycleRows" v-loading="recycleLoading" size="small" stripe>
+            <el-table-column prop="id" label="ID" width="60"  show-overflow-tooltip/>
+            <el-table-column prop="name" label="企业名称" min-width="120"  show-overflow-tooltip/>
+            <el-table-column prop="code" label="编码" width="90"  show-overflow-tooltip/>
+            <el-table-column label="删除时间" width="150" show-overflow-tooltip>
               <template #default="{ row }">{{ fmt(row.updateTime) }}</template>
             </el-table-column>
             <el-table-column label="操作" width="140">
@@ -215,12 +216,12 @@
           <el-empty v-if="!recycleRows.length && !recycleLoading" description="回收站为空" :image-size="60" />
         </el-tab-pane>
         <el-tab-pane label="清除历史" name="logs">
-          <el-table :data="purgeLogs" v-loading="purgeLogLoading" size="small" stripe>
-            <el-table-column prop="createTime" label="时间" width="160">
+          <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="purgeLogs" v-loading="purgeLogLoading" size="small" stripe>
+            <el-table-column prop="createTime" label="时间" width="160" show-overflow-tooltip>
               <template #default="{ row }">{{ fmt(row.createTime) }}</template>
             </el-table-column>
             <el-table-column prop="operator" label="操作人" width="140" show-overflow-tooltip />
-            <el-table-column label="企业" width="130">
+            <el-table-column label="企业" width="130" show-overflow-tooltip>
               <template #default="{ row }">{{ row.tenantName }}(#{{ row.tenantId }})</template>
             </el-table-column>
             <el-table-column prop="operation" label="操作" width="120" />

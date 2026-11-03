@@ -36,10 +36,10 @@
 
     <el-card style="margin-top: 16px">
       <template #header>我的课程</template>
-      <el-table :data="myEnrolls" stripe>
-        <el-table-column label="课程" min-width="160"><template #default="{ row }">{{ courseName(row.courseId) }}</template></el-table-column>
-        <el-table-column label="剩余课时" width="100"><template #default="{ row }">{{ row.totalHours - row.usedHours }}</template></el-table-column>
-        <el-table-column label="状态" width="90">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="myEnrolls" stripe>
+        <el-table-column label="课程" min-width="160" show-overflow-tooltip><template #default="{ row }">{{ courseName(row.courseId) }}</template></el-table-column>
+        <el-table-column label="剩余课时" width="100" show-overflow-tooltip><template #default="{ row }">{{ row.totalHours - row.usedHours }}</template></el-table-column>
+        <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ ['', '在读', '已结课', '已退费'][row.status] }}</el-tag>
           </template>

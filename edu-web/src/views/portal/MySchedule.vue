@@ -28,24 +28,24 @@
         <el-button type="primary" @click="recSearch">查询</el-button>
         <div style="flex: 1"></div>
       </div>
-      <el-table :data="recRows" v-loading="recLoading" stripe height="100%" @sort-change="onRecSort"
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="recRows" v-loading="recLoading" stripe height="100%" @sort-change="onRecSort"
                 @row-click="onRecRowClick">
         <el-table-column type="index" label="序号" width="60" :index="recSeq" />
-        <el-table-column prop="startTime" label="上课时间" width="290" sortable="custom">
+        <el-table-column prop="startTime" label="上课时间" width="290" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ row.start }} ~ {{ (row.end || '').slice(11) }}</template>
         </el-table-column>
-        <el-table-column prop="courseName" label="课程" min-width="140" />
-        <el-table-column label="形式" width="85">
+        <el-table-column prop="courseName" label="课程" min-width="140"  show-overflow-tooltip/>
+        <el-table-column label="形式" width="85" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.classType === '班课' ? 'primary' : 'warning'">{{ row.classType }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="班级" min-width="120">
+        <el-table-column label="班级" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column prop="teacherName" label="授课老师" width="100" />
-        <el-table-column prop="classroom" label="教室" width="95" />
-        <el-table-column prop="status" label="状态" width="120" sortable="custom">
+        <el-table-column prop="teacherName" label="授课老师" width="100"  show-overflow-tooltip/>
+        <el-table-column prop="classroom" label="教室" width="95"  show-overflow-tooltip/>
+        <el-table-column prop="status" label="状态" width="120" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>

@@ -33,11 +33,11 @@
           <div style="flex: 1"></div>
           <el-button @click="reload">刷新缓存</el-button>
         </div>
-        <el-table :data="currentItems" stripe height="100%">
+        <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="currentItems" stripe height="100%">
           <el-table-column type="index" label="序号" width="60" />
-          <el-table-column prop="label" label="标签" min-width="140" />
-          <el-table-column prop="value" label="值" width="110" />
-          <el-table-column prop="sort" label="排序" width="80" />
+          <el-table-column prop="label" label="标签" min-width="140"  show-overflow-tooltip/>
+          <el-table-column prop="value" label="值" width="110"  show-overflow-tooltip/>
+          <el-table-column prop="sort" label="排序" width="80"  show-overflow-tooltip/>
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEdit(row)">编辑</el-button>

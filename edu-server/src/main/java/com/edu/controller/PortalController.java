@@ -7,6 +7,8 @@ import com.edu.common.Result;
 import com.edu.common.SafeSort;
 import com.edu.common.exception.BizException;
 import com.edu.entity.*;
+import com.edu.entity.SysUserRole;
+import com.edu.entity.SysRole;
 import com.edu.mapper.*;
 import com.edu.security.AuthContext;
 import com.edu.security.LoginUser;
@@ -46,6 +48,9 @@ public class PortalController {
     private final EduConsultMsgMapper consultMsgMapper;
     private final com.edu.mapper.EduAccountLogMapper accountMapper;
     private final com.edu.mapper.EduContractMapper contractMapper;
+    private final com.edu.mapper.EduStudentMapper studentMapper;
+    private final com.edu.mapper.SysUserRoleMapper userRoleMapper;
+    private final com.edu.mapper.SysRoleMapper roleMapper;
 
     private Long studentId() {
         LoginUser lu = AuthContext.get();
@@ -408,5 +413,84 @@ public class PortalController {
         data.put("balance", recharge.add(refund));
         data.put("logs", rows);
         return Result.ok(data);
+    }
+
+    /**
+     * 全部学生充值记录（查询视角）：仅企业管理员与财务可查，
+     * 数据由租户拦截器限定在本企业内。学生本人请用 /portal/my-account。
+     */
+    @GetMapping("/account-records")
+    public Result<Map<String, Object>> accountRecords(@RequestParam(defaultValue = "1") long page,
+                                                      @RequestParam(defaultValue = "10") long size,
+                                                      @RequestParam(required = false) Long studentId,
+                                                      @RequestParam(required = false) Integer type,
+                                                      @RequestParam(required = false) String begin,
+                                                      @RequestParam(required = false) String end) {
+        LoginUser lu = AuthContext.get();
+        if (!lu.isSuperAdmin() && !hasRole(lu, "FINANCE"))
+            throw new BizException("403", "仅企业管理员与财务可查看全部学生充值记录");
+
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.edu.entity.EduAccountLog> qw =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.edu.entity.EduAccountLog>()
+                        .eq(studentId != null, com.edu.entity.EduAccountLog::getStudentId, studentId)
+                        .eq(type != null, com.edu.entity.EduAccountLog::getType, type)
+                        .ge(begin != null, com.edu.entity.EduAccountLog::getCreateTime, begin + " 00:00:00")
+                        .le(end != null, com.edu.entity.EduAccountLog::getCreateTime, end + " 23:59:59")
+                        .orderByDesc(com.edu.entity.EduAccountLog::getId);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.edu.entity.EduAccountLog> p =
+                accountMapper.selectPage(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size), qw);
+
+        // 汇总（同筛选口径）
+        java.math.BigDecimal recharge = java.math.BigDecimal.ZERO, refund = java.math.BigDecimal.ZERO;
+        for (com.edu.entity.EduAccountLog l : accountMapper.selectList(qw)) {
+            if (l.getAmount() == null) continue;
+            if (l.getType() != null && l.getType() == 1) recharge = recharge.add(l.getAmount());
+            if (l.getType() != null && l.getType() == 2) refund = refund.add(l.getAmount());
+        }
+        // 学生姓名 / 合同编号
+        java.util.Set<Long> sids = new java.util.HashSet<>();
+        java.util.Set<Long> cids = new java.util.HashSet<>();
+        for (com.edu.entity.EduAccountLog l : p.getRecords()) {
+            if (l.getStudentId() != null) sids.add(l.getStudentId());
+            if (l.getContractId() != null) cids.add(l.getContractId());
+        }
+        Map<Long, String> sName = new HashMap<>();
+        if (!sids.isEmpty())
+            for (com.edu.entity.EduStudent s : studentMapper.selectBatchIds(sids)) sName.put(s.getId(), s.getName());
+        Map<Long, String> cNo = new HashMap<>();
+        if (!cids.isEmpty())
+            for (com.edu.entity.EduContract c : contractMapper.selectBatchIds(cids)) cNo.put(c.getId(), c.getContractNo());
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (com.edu.entity.EduAccountLog l : p.getRecords()) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("studentName", sName.getOrDefault(l.getStudentId(), "-"));
+            m.put("type", l.getType());
+            m.put("amount", l.getAmount());
+            m.put("hours", l.getHours());
+            m.put("contractNo", cNo.getOrDefault(l.getContractId(), "-"));
+            m.put("remark", l.getRemark());
+            m.put("operator", l.getOperator());
+            m.put("createTime", l.getCreateTime());
+            rows.add(m);
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("total", p.getTotal());
+        data.put("records", rows);
+        data.put("rechargeTotal", recharge);
+        data.put("refundInTotal", refund);
+        data.put("balance", recharge.add(refund));
+        return Result.ok(data);
+    }
+
+    private boolean hasRole(LoginUser lu, String code) {
+        List<Long> roleIds = userRoleMapper.selectList(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysUserRole>()
+                                .eq(SysUserRole::getUserId, lu.getId()))
+                .stream().map(SysUserRole::getRoleId).collect(java.util.stream.Collectors.toList());
+        if (roleIds.isEmpty()) return false;
+        for (SysRole r : roleMapper.selectBatchIds(roleIds))
+            if (code.equals(r.getCode())) return true;
+        return false;
     }
 }

@@ -21,29 +21,29 @@
         <div style="flex: 1"></div>
         <ColumnSetting storage-key="log" :columns="allColumns" @change="onCols" />
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event">
         <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column v-if="cols.logType" label="类型" width="100" sortable="custom">
+        <el-table-column v-if="cols.logType" label="类型" width="100" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.logType === 1 ? 'primary' : 'info'" effect="plain">
               {{ row.logType === 1 ? '登录日志' : '操作日志' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.username" prop="username" label="操作人" width="110" sortable="custom" />
-        <el-table-column v-if="cols.operation" prop="operation" label="操作内容" width="150" sortable="custom" />
+        <el-table-column v-if="cols.username" prop="username" label="操作人" width="110" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.operation" prop="operation" label="操作内容" width="150" sortable="custom"  show-overflow-tooltip/>
         <el-table-column v-if="cols.method" prop="method" label="方法" min-width="200" show-overflow-tooltip />
-        <el-table-column v-if="cols.ip" prop="ip" label="IP" width="135" />
-        <el-table-column v-if="cols.duration" prop="duration" label="耗时(ms)" width="100" sortable="custom" />
-        <el-table-column v-if="cols.status" label="状态" width="80">
+        <el-table-column v-if="cols.ip" prop="ip" label="IP" width="135"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.duration" prop="duration" label="耗时(ms)" width="100" sortable="custom"  show-overflow-tooltip/>
+        <el-table-column v-if="cols.status" label="状态" width="80" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 0 ? 'success' : 'danger'" effect="plain">
               {{ row.status === 0 ? '成功' : '失败' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="cols.createTime" prop="createTime" label="时间" width="170" sortable="custom">
+        <el-table-column v-if="cols.createTime" prop="createTime" label="时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="90" fixed="right">

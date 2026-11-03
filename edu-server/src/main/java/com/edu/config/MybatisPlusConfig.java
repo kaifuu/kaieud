@@ -42,7 +42,9 @@ public class MybatisPlusConfig {
             "sys_role_menu",     // 角色-菜单关联（随角色隔离）
             "sys_user_role",     // 用户-角色关联（随用户隔离）
             "edu_consult_msg",   // 咨询消息流（随主表咨询隔离）
-            "sys_notice_read"    // 通知阅读状态（按用户，无租户列）
+            "sys_notice_read",   // 通知阅读状态（按用户，无租户列）
+            "sys_deploy_target", // 发布目标服务器（平台级，无租户列）
+            "sys_deploy_record"  // 发布记录与日志（平台级，无租户列）
     ));
 
     @Bean

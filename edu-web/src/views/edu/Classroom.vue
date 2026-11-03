@@ -17,12 +17,18 @@
         <el-button type="primary" @click="search">查询</el-button>
         <div style="flex: 1"></div>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe height="100%">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" />
-        <el-table-column prop="name" label="教室名称" min-width="150" />
-        <el-table-column prop="capacity" label="可容纳人数" width="110" />
-        <el-table-column label="校区" min-width="130">
+        <el-table-column label="校区" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ orgName(row.orgId) }}</template>
+        </el-table-column>
+        <el-table-column prop="name" label="教室名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="capacity" label="可容纳人数" width="110" show-overflow-tooltip />
+        <el-table-column prop="contact" label="联系人" width="100" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.contact || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="contactPhone" label="联系电话" width="135" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.contactPhone || '-' }}</template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
@@ -54,6 +60,17 @@
         </el-form-item>
         <el-form-item label="教室名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="可容纳人数"><el-input-number v-model="form.capacity" :min="0" style="width: 100%" /></el-form-item>
+        <el-form-item label="联系人">
+          <el-select v-model="form.contact" filterable clearable allow-create default-first-option
+                     style="width: 100%" placeholder="选择员工（支持搜索，也可手输）"
+                     @change="onContactChange">
+            <el-option v-for="c in contactCandidates" :key="c.name"
+                       :label="c.name + (c.phone ? '（' + c.phone + '）' : '')" :value="c.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="联系电话">
+          <el-input v-model="form.contactPhone" maxlength="20" placeholder="选择联系人后自动带出，可修改" />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="500" show-word-limit
                     placeholder="教室位置、设备、使用注意事项等" />
@@ -72,11 +89,11 @@
                         start-placeholder="开始日期" end-placeholder="结束日期" style="width: 260px" @change="loadOcc" />
       </div>
       <div class="panel-title">已占用时段</div>
-      <el-table :data="occ.occupied || []" size="small" stripe max-height="220">
-        <el-table-column prop="date" label="日期" width="110" />
-        <el-table-column prop="start" label="开始" width="80" />
-        <el-table-column prop="end" label="结束" width="80" />
-        <el-table-column label="状态" width="90">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="occ.occupied || []" size="small" stripe max-height="220">
+        <el-table-column prop="date" label="日期" width="110"  show-overflow-tooltip/>
+        <el-table-column prop="start" label="开始" width="80"  show-overflow-tooltip/>
+        <el-table-column prop="end" label="结束" width="80"  show-overflow-tooltip/>
+        <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['warning', 'success'][row.status]" effect="plain">
               {{ ['待上课', '已完成'][row.status] }}
@@ -85,10 +102,10 @@
         </el-table-column>
       </el-table>
       <div class="panel-title" style="margin-top: 14px">空余时段（08:00-22:00）</div>
-      <el-table :data="occ.free || []" size="small" stripe max-height="220">
-        <el-table-column prop="date" label="日期" width="110" />
-        <el-table-column prop="start" label="开始" width="80" />
-        <el-table-column prop="end" label="结束" width="80" />
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="occ.free || []" size="small" stripe max-height="220">
+        <el-table-column prop="date" label="日期" width="110"  show-overflow-tooltip/>
+        <el-table-column prop="start" label="开始" width="80"  show-overflow-tooltip/>
+        <el-table-column prop="end" label="结束" width="80"  show-overflow-tooltip/>
       </el-table>
       <el-empty v-if="!(occ.free || []).length && !(occ.occupied || []).length" description="暂无数据" :image-size="60" />
     </el-drawer>
@@ -103,6 +120,13 @@ import api from '../../api'
 import { usePage } from '../../composables/usePage'
 
 const query = reactive({ keyword: '', orgId: null })
+
+/* 联系人候选：本企业在职员工；选中后手机号联动带出（可改） */
+const contactCandidates = ref([])
+function onContactChange(name) {
+  const hit = contactCandidates.value.find((c) => c.name === name)
+  if (hit) form.value.contactPhone = hit.phone || ''
+}
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
   usePage((q) => api.classroomPage({ ...q, orgId: query.orgId }), query)
 
@@ -157,6 +181,7 @@ const orgMap = ref({})
 const orgName = (id) => orgMap.value[id] || '-'
 
 onMounted(async () => {
+  contactCandidates.value = (await api.classroomContactCandidates()) || []
   load()
   const tree = (await api.orgTree()) || []
   const flat = {}

@@ -1,0 +1,22 @@
+# 外部数据库模式：不带 kaied-db 容器，应用直连 .env 中的外部数据库
+services:
+  kaied-app:
+    build: .
+    image: kaied-app:latest
+    container_name: kaied-app
+    env_file: .env
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    restart: unless-stopped
+
+  kaied-web:
+    image: nginx:alpine
+    container_name: kaied-web
+    volumes:
+      - ./dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${WEB_PORT}:80"
+    depends_on:
+      - kaied-app
+    restart: unless-stopped

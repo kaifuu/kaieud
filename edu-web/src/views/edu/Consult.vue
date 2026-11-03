@@ -18,19 +18,19 @@
         <el-button @click="doExport">导出</el-button>
       </div>
       <template v-if="tab === 'consult'">
-        <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+        <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
           <el-table-column type="index" label="序号" width="60" :index="seq" />
-          <el-table-column label="学生" width="100">
+          <el-table-column label="学生" width="100" show-overflow-tooltip>
             <template #default="{ row }">{{ studentName(row.studentId) }}</template>
           </el-table-column>
-          <el-table-column label="咨询老师" width="110">
+          <el-table-column label="咨询老师" width="110" show-overflow-tooltip>
             <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
           </el-table-column>
-          <el-table-column prop="content" label="咨询内容" min-width="220" />
-          <el-table-column label="回复" min-width="220">
+          <el-table-column prop="content" label="咨询内容" min-width="220"  show-overflow-tooltip/>
+          <el-table-column label="回复" min-width="220" show-overflow-tooltip>
             <template #default="{ row }">{{ row.reply || '待回复' }}</template>
           </el-table-column>
-          <el-table-column label="时间" width="170">
+          <el-table-column label="时间" width="170" show-overflow-tooltip>
             <template #default="{ row }">{{ fmt(row.createTime) }}</template>
           </el-table-column>
           <el-table-column label="操作" width="90" fixed="right">
@@ -45,19 +45,19 @@
         </el-table>
       </template>
       <template v-else>
-        <el-table :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+        <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
           <el-table-column type="index" label="序号" width="60" :index="seq" />
-          <el-table-column label="学生" width="100">
+          <el-table-column label="学生" width="100" show-overflow-tooltip>
             <template #default="{ row }">{{ studentName(row.studentId) }}</template>
           </el-table-column>
-          <el-table-column label="教师" width="110">
+          <el-table-column label="教师" width="110" show-overflow-tooltip>
             <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
           </el-table-column>
-          <el-table-column label="评分" width="150" sortable="custom" prop="score">
+          <el-table-column label="评分" width="150" sortable="custom" prop="score" show-overflow-tooltip>
             <template #default="{ row }"><el-rate :model-value="row.score" disabled /></template>
           </el-table-column>
-          <el-table-column prop="content" label="评价内容" min-width="280" />
-          <el-table-column label="时间" width="170">
+          <el-table-column prop="content" label="评价内容" min-width="280"  show-overflow-tooltip/>
+          <el-table-column label="时间" width="170" show-overflow-tooltip>
             <template #default="{ row }">{{ fmt(row.createTime) }}</template>
           </el-table-column>
         </el-table>
