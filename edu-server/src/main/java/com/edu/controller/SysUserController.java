@@ -213,6 +213,7 @@ public class SysUserController {
             st.setName(user.getRealName());
             st.setGender(user.getGender() == null ? 1 : user.getGender());
             st.setBirthDate(user.getBirthDate());
+            st.setIdCard(user.getIdCard());
             st.setGrade(user.getGrade());
             st.setSchool(user.getSchool());
             st.setParentName(user.getParentName());
@@ -241,6 +242,7 @@ public class SysUserController {
         st.setName(user.getRealName());
         st.setGender(user.getGender() == null ? 1 : user.getGender());
         st.setBirthDate(user.getBirthDate());
+            st.setIdCard(user.getIdCard());
         st.setGrade(user.getGrade());
         st.setSchool(user.getSchool());
         st.setParentName(user.getParentName());
@@ -430,6 +432,7 @@ public class SysUserController {
                             .eq(com.edu.entity.EduStudent::getUserId, id).last("LIMIT 1"));
             if (st != null) {
                 m.put("birthDate", st.getBirthDate());
+            m.put("idCard", st.getIdCard());
                 m.put("grade", st.getGrade());
                 m.put("school", st.getSchool());
                 m.put("parentName", st.getParentName());

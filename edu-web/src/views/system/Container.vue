@@ -302,13 +302,17 @@
         </el-tag>
         <el-button link @click="loadLog(logRec.id)">手动刷新</el-button>
       </div>
-      <pre class="log-body">{{ logRec.log || '暂无日志' }}</pre>
+      <div ref="logBoxRef" class="log-body">
+        <div v-for="(line, i) in logLines" :key="i" class="log-line"
+             :class="{ 'log-done': /打包完成|部署完成|__DEPLOY_DONE__/.test(line) }">{{ line }}</div>
+        <div v-if="!logLines.length" style="color: #5a7ba0">暂无日志</div>
+      </div>
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
@@ -504,6 +508,14 @@ const remotePage = usePage((q) => api.deployRecords({ ...q, type: 'REMOTE' }), {
 const lVisible = ref(false)
 const logRec = ref({})
 const logTitle = ref('日志')
+const logBoxRef = ref(null)
+const logLines = computed(() => String(logRec.value.log || '').split('\n'))
+/** 日志更新自动滚动到底部，实时跟踪最新输出 */
+watch(() => logRec.value.log, async () => {
+  await nextTick()
+  const el = logBoxRef.value
+  if (el) el.scrollTop = el.scrollHeight
+}, { immediate: true })
 let timer = null
 async function viewLog(row, kind) {
   logRec.value = row
@@ -540,9 +552,11 @@ onBeforeUnmount(() => clearInterval(timer))
 .log-body {
   background: #0d1526; color: #c9e3ff; border-radius: 10px;
   padding: 14px 16px; font-size: 12.5px; line-height: 1.75;
-  white-space: pre-wrap; word-break: break-all;
   max-height: calc(100vh - 180px); overflow: auto;
+  font-family: Consolas, 'JetBrains Mono', monospace;
 }
+.log-line { white-space: pre-wrap; word-break: break-all; }
+.log-done { color: #34d399; font-weight: 700; }
 /* 容器TAB：服务器卡片网格 */
 .container-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));

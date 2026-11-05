@@ -74,8 +74,13 @@ public class PortalController {
     /** 订阅班型 */
     @PostMapping("/subscribe")
     public Result<EduEnroll> subscribe(@RequestBody EduEnrollController.SubscribeDTO dto) {
-        return Result.ok(enrollService.subscribe(studentId(), dto.getCourseId(),
-                dto.getClazzId(), dto.getTeacherId()));
+        com.edu.controller.EduEnrollController.SubscribeDTO d =
+                new com.edu.controller.EduEnrollController.SubscribeDTO();
+        d.setStudentId(studentId());
+        d.setCourseId(dto.getCourseId());
+        d.setClazzId(dto.getClazzId());
+        d.setTeacherId(dto.getTeacherId());
+        return Result.ok(enrollService.subscribe(d));
     }
 
     /**

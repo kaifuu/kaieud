@@ -1,18 +1,17 @@
 <template>
   <div class="page tabs-page">
     <div class="page-header">
-      <span class="page-title">通知管理</span>
+      <span class="page-title">{{ isPlatform ? '我收到的通知' : '通知管理' }}</span>
       <div class="actions">
-        <el-button v-if="tab === 'notice' && canManage" type="primary" @click="openNotice()">新增通知</el-button>
-        <el-button v-else-if="tab === 'config' && canManage" type="primary" @click="openConfig()">新增配置</el-button>
+        <el-button v-if="tab === 'config' && canManage && !isPlatform" type="primary" @click="openConfig()">新增配置</el-button>
       </div>
     </div>
 
     <div class="panel" style="padding: 0 16px; margin-bottom: 14px">
       <el-tabs v-model="tab" @tab-change="load">
         <el-tab-pane label="我收到的通知" name="notice" />
-        <el-tab-pane v-if="canManage" label="通知配置" name="config" />
-        <el-tab-pane label="消息历史" name="history" />
+        <el-tab-pane v-if="canManage && !isPlatform" label="通知配置" name="config" />
+        <el-tab-pane v-if="!isPlatform" label="消息历史" name="history" />
       </el-tabs>
     </div>
 
@@ -71,16 +70,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="publishTime" label="发布时间" width="165"  show-overflow-tooltip/>
-        <el-table-column label="操作" :width="canManage ? 240 : 90" fixed="right">
+        <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="viewNotice(row)">查看</el-button>
-            <template v-if="canManage">
-            <el-button link type="primary" @click="openNotice(row)">编辑</el-button>
-            <el-button v-if="row.status === 0" link type="success" @click="publish(row)">发布</el-button>
-            <el-popconfirm title="确认删除该通知?" @confirm="removeNotice(row.id)">
+            <el-popconfirm v-if="canManage" title="确认删除该通知?" @confirm="removeNotice(row.id)">
               <template #reference><el-button link type="danger">删除</el-button></template>
             </el-popconfirm>
-            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -187,42 +182,6 @@
       </template>
     </el-dialog>
 
-    <!-- 通知编辑抽屉 -->
-    <el-drawer v-model="noticeVisible" :title="noticeForm.id ? '编辑通知' : '新增通知'" size="460px">
-      <el-form :model="noticeForm" label-width="90px">
-        <el-form-item label="标题" required><el-input v-model="noticeForm.title" /></el-form-item>
-        <el-form-item label="内容" required><el-input v-model="noticeForm.content" type="textarea" :rows="4" /></el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="noticeForm.noticeType" style="width: 100%">
-            <el-option label="系统" :value="0" /><el-option label="课程" :value="1" /><el-option label="缴费" :value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="级别">
-          <el-select v-model="noticeForm.level" style="width: 100%">
-            <el-option label="普通" :value="0" /><el-option label="重要" :value="1" /><el-option label="紧急" :value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="接收对象">
-          <el-select v-model="noticeForm.target" style="width: 100%">
-            <el-option label="全部" value="ALL" />
-            <el-option v-for="o in userTypeOptions" :key="o.value" :label="o.label" :value="String(o.value)" />
-          </el-select>
-          <div class="form-tip">接收对象与用户管理的用户类型一致（系统字典 user_type，可在字典管理维护）</div>
-        </el-form-item>
-        <el-form-item label="指定用户">
-          <el-select v-model="noticeForm.targetUserIds" multiple filterable clearable
-                     placeholder="按用户定向发送（如仅A教务可见），可搜索" style="width: 100%">
-            <el-option v-for="u in userOptions" :key="u.id" :value="u.id"
-                       :label="`${u.realName}（${u.username}）`" />
-          </el-select>
-          <div class="form-tip">指定后仅这些用户可见；与接收对象为"或"关系，两者都不满足的人看不到</div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="noticeVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveNotice">保存</el-button>
-      </template>
-    </el-drawer>
 
     <!-- 配置编辑抽屉 -->
     <el-drawer v-model="configVisible" :title="configForm.id ? '编辑配置' : '新增配置'" size="440px">
@@ -256,6 +215,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
@@ -268,10 +228,14 @@ const store = useUserStore()
 const dictStore = useDictStore()
 /** 通知维护（新增/编辑/发布/删除/配置）仅 sys:notify 权限；普通用户只看自己收到的与消息历史 */
 const canManage = computed(() => store.hasPerm('sys:notify'))
+/** 平台运营：只看「我收到的通知」（配置/历史为企业系统管理职能） */
+const isPlatform = computed(() => store.user?.userType === 1
+  && (store.user?.tenantId ?? 0) === 0)
 
 /** 接收对象候选：与用户管理的用户类型一致（系统字典 user_type） */
 const userTypeOptions = computed(() => dictStore.options('user_type') || [])
 
+const route = useRoute()
 const tab = ref('notice')
 /** 接收对象显示名：全部/角色编码(历史)/用户类型字典值 */
 const ROLE_NAMES = {
@@ -324,41 +288,9 @@ async function markAllRead() {
   window.dispatchEvent(new CustomEvent('notice-read'))
 }
 
-const noticeVisible = ref(false)
-const saving = ref(false)
-const noticeForm = ref({})
 const userOptions = ref([]) // 指定接收用户候选
 
 /** 打开通知编辑：加载用户候选（指定用户定向发送用） */
-async function openNotice(row) {
-  noticeForm.value = row
-    ? { ...row, targetUserIds: (row.targetUsers || '').split(',').filter(Boolean).map(Number) }
-    : { noticeType: 0, level: 0, target: 'ALL', targetUserIds: [], status: 0 }
-  noticeVisible.value = true
-  if (!userOptions.value.length) {
-    try {
-      const d = await api.userPage({ page: 1, size: 500 })
-      userOptions.value = d.records || []
-    } catch (e) { /* 忽略，候选为空 */ }
-  }
-}
-async function saveNotice() {
-  const f = noticeForm.value
-  if (!f.title || !f.content) return ElMessage.warning('标题和内容不能为空')
-  saving.value = true
-  try {
-    const { targetUserIds, ...rest } = f
-    await api.noticeSave({ ...rest, targetUsers: (targetUserIds || []).join(',') })
-    ElMessage.success('已保存')
-    noticeVisible.value = false
-    nPage.load()
-  } finally { saving.value = false }
-}
-async function publish(row) {
-  await api.noticePublish(row.id)
-  ElMessage.success('已发布')
-  nPage.load()
-}
 async function removeNotice(id) {
   await api.noticeDel(id)
   ElMessage.success('已删除')
@@ -434,6 +366,9 @@ function load() {
 }
 onMounted(() => {
   dictStore.load()
+  // 铃铛跳转携带 ?tab=notice 直达「我收到的通知」TAB
+  const q = (route.query.tab || '').toString()
+  if (q && ['notice', 'config', 'history'].includes(q)) tab.value = q
   load()
 })
 </script>

@@ -17,13 +17,18 @@ export const useDictStore = defineStore('dict', {
       } catch (e) { /* 静默，保留缓存 */ }
       return this.dicts
     },
-    /** 字典值转标签，如 dictLabel('class_type', 2) => '小班课' */
+    /** 字典值转标签，如 dictLabel('class_type', 2) => '小班课'；中文值（如年级/校区）按原值匹配 */
     label(type, value) {
-      const item = (this.dicts[type] || []).find((d) => Number(d.value) === Number(value))
+      const item = (this.dicts[type] || []).find(
+        (d) => d.value === value || (d.value != null && value != null && Number(d.value) === Number(value)))
       return item ? item.label : (value ?? '')
     },
     options(type) {
-      return (this.dicts[type] || []).map((d) => ({ label: d.label, value: Number(d.value) }))
+      return (this.dicts[type] || []).map((d) => {
+        const n = Number(d.value)
+        // 中文等非数字值保持原样，避免产生 NaN 传给组件
+        return { label: d.label, value: Number.isNaN(n) ? d.value : n }
+      })
     }
   }
 })

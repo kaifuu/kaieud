@@ -16,6 +16,13 @@ public class EduPackage {
     private Long id;
     private Long tenantId;
     private String name;
+    /** 科目（字典 course_category） */
+    private Integer category;
+    /** 授课模式（字典 class_type） */
+    private Integer teachMode;
+    /** 适用年级 */
+    private String grade;
+    /** 关联课程（历史字段，新版套餐按科目/授课模式/年级定义，不再必填） */
     private Long courseId;
     /** 1一对一 2小班 3大班 */
     private Integer classType;

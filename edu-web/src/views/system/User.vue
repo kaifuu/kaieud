@@ -45,6 +45,7 @@
         <!-- 学生TAB专属列：学籍信息 -->
         <template v-if="tab === 'student'">
           <el-table-column v-if="cols.grade" prop="grade" label="年级" width="90"  show-overflow-tooltip/>
+        <el-table-column v-if="tab === 'student'" prop="idCard" label="身份证号" width="170"  show-overflow-tooltip/>
           <el-table-column v-if="cols.school" prop="school" label="学校" min-width="130"  show-overflow-tooltip/>
           <el-table-column v-if="cols.parentPhone" prop="parentPhone" label="家长电话" width="135"  show-overflow-tooltip/>
           <el-table-column v-if="cols.advisor" prop="advisor" label="归属顾问" width="100"  show-overflow-tooltip/>
@@ -141,7 +142,14 @@
         <template v-if="Number(form.userType) === 5">
           <el-divider content-position="left">学生信息</el-divider>
           <el-form-item label="出生日期"><el-date-picker v-model="form.birthDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
-          <el-form-item label="年级"><el-input v-model="form.grade" /></el-form-item>
+          <el-form-item label="年级">
+            <el-select v-model="form.grade" clearable filterable placeholder="选择年级" style="width: 100%">
+              <el-option v-for="d in dictStore.options('grade')" :key="d.value" :label="d.label" :value="d.label" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="身份证号">
+            <el-input v-model="form.idCard" maxlength="18" placeholder="18位身份证号，选填" />
+          </el-form-item>
           <el-form-item label="就读学校"><el-input v-model="form.school" /></el-form-item>
           <el-form-item label="家长姓名"><el-input v-model="form.parentName" /></el-form-item>
           <el-form-item label="家长电话"><el-input v-model="form.parentPhone" /></el-form-item>
@@ -223,6 +231,7 @@
         <div class="d-section-title">学籍信息（学生档案）</div>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="年级">{{ detailRow.grade || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="身份证号">{{ detailRow.idCard || '无' }}</el-descriptions-item>
           <el-descriptions-item label="出生日期">{{ detailRow.birthDate || '无' }}</el-descriptions-item>
           <el-descriptions-item label="就读学校" :span="2">{{ detailRow.school || '无' }}</el-descriptions-item>
           <el-descriptions-item label="家长姓名">{{ detailRow.parentName || '无' }}</el-descriptions-item>

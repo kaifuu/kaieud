@@ -90,8 +90,10 @@
               </el-select>
             </el-form-item>
             <el-form-item label="关联课程" required>
-              <el-select v-model="form.courseId" disabled style="width: 100%">
-                <el-option v-for="c in courses" :key="c.id" :label="c.name" :value="c.id" />
+              <el-select v-model="form.courseId" filterable :disabled="editing" style="width: 100%"
+                         placeholder="选择课程（未选套餐时直接按课程定价）" @change="onCourse">
+                <el-option v-for="c in courses" :key="c.id"
+                           :label="`${c.name}（${c.totalHours}课时·¥${c.price}）`" :value="c.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="班型">
@@ -118,10 +120,12 @@
           </el-tab-pane>
           <el-tab-pane label="课时信息" name="hours">
             <el-form-item label="购买课时" required>
-              <el-input-number v-model="form.purchasedHours" :min="0" :precision="0" disabled style="width: 100%" />
+              <el-input-number v-model="form.purchasedHours" :min="0" :precision="0"
+                               :disabled="editing" style="width: 100%" />
             </el-form-item>
             <el-form-item label="赠送课时">
-              <el-input-number v-model="form.giftHours" :min="0" :precision="0" disabled style="width: 100%" />
+              <el-input-number v-model="form.giftHours" :min="0" :precision="0"
+                               :disabled="editing" style="width: 100%" />
             </el-form-item>
             <el-form-item label="总课时">
               <el-input :model-value="totalCourseHours" disabled />
@@ -142,6 +146,7 @@
             </el-form-item>
             <el-form-item label="合同单价" required>
               <el-input-number v-model="form.unitPrice" :min="0" :precision="2" style="width: 100%" />
+              <div class="desc-tip">套餐/课程带出，支持一客一价调整</div>
             </el-form-item>
             <el-form-item label="合同总价">
               <el-input :model-value="totalAmount" disabled />
@@ -371,7 +376,7 @@ const totalAmount = computed(() =>
 /** 选中套餐（套餐总价从关联套餐获取） */
 const selectedPackage = computed(() => packages.value.find((x) => x.id === Number(form.value.packageId)))
 
-/** 总课时 = 所选套餐的 购买课时 + 赠送课时（随套餐带过来，只读） */
+/** 总课时：选套餐随套餐带出，否则 = 购买 + 赠送 */
 const totalCourseHours = computed(() => {
   const p = selectedPackage.value
   if (p) return Number(p.hours || 0) + Number(p.giftHours || 0)
@@ -397,16 +402,40 @@ const profitInfo = computed(() => {
   return { text, color }
 })
 
+/** 选套餐带出课时/单价（一客一价可再调单价）；新版套餐无关联课程/班型时由用户手选 */
 function onPackage(pid) {
   const p = packages.value.find((x) => x.id === pid)
   if (p) {
-    form.value.courseId = p.courseId
-    form.value.classType = p.classType
+    if (p.courseId) form.value.courseId = p.courseId
+    if (p.classType) form.value.classType = p.classType
     form.value.purchasedHours = Number(p.hours)
     form.value.giftHours = Number(p.giftHours)
     form.value.packageUnitPrice = Number(p.unitPrice)
     form.value.unitPrice = Number(p.unitPrice)
     form.value.validDays = p.validDays
+  }
+}
+
+/** 直接选课程（未选套餐）：按课程定价带出，无基础定价时取定价标准首行 */
+async function onCourse(cid) {
+  const c = courses.value.find((x) => x.id === cid)
+  if (c && !form.value.packageId) {
+    let hours = Number(c.totalHours || 0)
+    let price = Number(c.price || 0)
+    if (!hours || !price) {
+      try {
+        const ps = (await api.coursePrices(cid)) || []
+        const first = ps.find((p) => p.chargeMode === 1)
+        if (first && Number(first.hours) > 0) {
+          hours = Number(first.hours)
+          price = Math.round((Number(first.totalAmount) / hours) * 100) / 100
+        }
+      } catch (e) { /* 定价缺失时保持 0 由必填校验兜底 */ }
+    }
+    form.value.classType = c.teachMode || c.classType
+    form.value.purchasedHours = hours || undefined
+    form.value.giftHours = 0
+    form.value.unitPrice = price || undefined
   }
 }
 function openCreate() {
@@ -465,7 +494,7 @@ async function save() {
   }
   if (!f.purchasedHours) {
     createTab.value = 'hours'
-    return ElMessage.warning('请选择套餐带出购买课时')
+    return ElMessage.warning('请填写购买课时（选套餐自动带出）')
   }
   if (!f.unitPrice) {
     createTab.value = 'price'

@@ -1,0 +1,5 @@
+# Windows 协作防坑：部署脚本必须 LF，否则远端 Linux bash 因 \r 报错
+*.sh text eol=lf
+*.yml text eol=lf
+Dockerfile text eol=lf
+*.tpl text eol=lf

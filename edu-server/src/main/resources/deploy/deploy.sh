@@ -41,7 +41,7 @@ if [ "$DB_MODE" = 'EXTERNAL' ]; then
   DB_USER=$(getenv DB_USER)
   DB_PASS=$(getenv DB_PASS)
   echo "== 外部数据库初始化($DB_HOST:$DB_PORT/$DB_NAME) =="
-  pull mysql:8 || echo "  [WARN] mysql:8 拉取失败,无法自动导库,请手工导入 sql/edu_course.sql"
+  pull mysql:8 || echo "  [WARN] mysql:8 拉取失败,无法自动导库,请手工导入 sql/init.sql"
   docker run --rm -e MYSQL_PWD="$DB_PASS" mysql:8 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" \
     --default-character-set=utf8mb4 -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci" \
     && echo '  数据库已就绪'
@@ -50,7 +50,7 @@ if [ "$DB_MODE" = 'EXTERNAL' ]; then
   if [ "$CNT" = "0" ]; then
     echo '  空库: 导入初始数据(表结构+种子数据,约1分钟)...'
     docker run -i --rm -e MYSQL_PWD="$DB_PASS" mysql:8 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" \
-      --default-character-set=utf8mb4 "$DB_NAME" < ./sql/edu_course.sql \
+      --default-character-set=utf8mb4 "$DB_NAME" < ./sql/init.sql \
       && echo '  初始数据导入完成'
   else
     echo "  库中已有表($CNT),跳过导入(不覆盖线上数据)"

@@ -5,17 +5,13 @@
       <div class="actions" v-if="tab === 'corp'">
         <el-button type="primary" @click="openEdit()">新增企业</el-button>
       </div>
-      <div class="actions" v-if="tab === 'notice'">
-        <el-button type="primary" @click="openNotice()">发布公告</el-button>
-      </div>
     </div>
 
-    <!-- 平台运营视图：企业管理 / 品牌与广告 / 通知公告（系统字典由各企业自维护） -->
+    <!-- 平台运营视图：企业管理 / 品牌与广告（系统字典由各企业自维护） -->
     <div class="panel" style="padding: 0 16px; margin-bottom: 14px">
-      <el-tabs v-model="tab" @tab-change="onTabChange">
+      <el-tabs v-model="tab">
         <el-tab-pane label="企业管理" name="corp" />
         <el-tab-pane label="品牌与广告" name="brand" />
-        <el-tab-pane label="通知公告" name="notice" />
 
       </el-tabs>
     </div>
@@ -73,99 +69,6 @@
       <BasicSetting class="embed-page" />
     </div>
 
-    <!-- TAB4 通知公告：平台向全部企业用户发布系统升级等公告（tenant_id=0，全员可见） -->
-    <div v-show="tab === 'notice'" class="panel table-panel tabs-fill">
-      <div class="toolbar">
-        <el-input v-model="noticeQuery.keyword" placeholder="公告标题" clearable style="width: 200px"
-                  @keyup.enter="noticePage.search()">
-          <template #prefix><el-icon><Search /></el-icon></template>
-        </el-input>
-        <el-select v-model="noticeQuery.status" placeholder="状态" clearable style="width: 110px">
-          <el-option label="草稿" :value="0" /><el-option label="已发布" :value="1" />
-        </el-select>
-        <el-button type="primary" @click="noticePage.search()">查询</el-button>
-        <span style="color: #8fa8c4; font-size: 13px">平台公告对全部企业的用户可见（铃铛/通知管理自动展示）</span>
-      </div>
-      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="noticePage.rows.value" v-loading="noticePage.loading.value" stripe height="100%">
-        <el-table-column type="index" label="序号" width="60" :index="noticePage.seq" />
-        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
-        <el-table-column label="类型" width="90" show-overflow-tooltip>
-          <template #default="{ row }">{{ ['', '课程', '缴费'][row.noticeType] || '系统' }}</template>
-        </el-table-column>
-        <el-table-column label="级别" width="90" show-overflow-tooltip>
-          <template #default="{ row }">
-            <el-tag size="small" :type="['info', 'warning', 'danger'][row.level]" effect="light">
-              {{ ['普通', '重要', '紧急'][row.level] }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="接收对象" width="110" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ (row.target || 'ALL').split(',').map((x) => ({ ALL: '全部', EDU_ADMIN: '教管人员', CLASS_TEACHER: '班主任',
-              TEACHER: '教师', STUDENT: '学生' }[x.trim()] || x.trim())).join('、') }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="90" show-overflow-tooltip>
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'" effect="plain">
-              {{ row.status === 1 ? '已发布' : '草稿' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="publishTime" label="发布时间" width="165"  show-overflow-tooltip/>
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openNotice(row)">编辑</el-button>
-            <el-button v-if="row.status === 0" link type="success" @click="publishNotice(row)">发布</el-button>
-            <el-popconfirm title="确认删除该公告?" @confirm="delNotice(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="pager-row">
-        <el-pagination background layout="total, prev, pager, next" :total="noticePage.pager.total"
-                       v-model:current-page="noticePage.pager.page" :page-size="noticePage.pager.size"
-                       @current-change="noticePage.load" />
-      </div>
-    </div>
-
-    <!-- 公告编辑抽屉 -->
-    <el-drawer v-model="noticeVisible" :title="noticeForm.id ? '编辑公告' : '发布公告'" size="460px">
-      <el-form :model="noticeForm" label-width="90px">
-        <el-form-item label="标题" required><el-input v-model="noticeForm.title" maxlength="60" /></el-form-item>
-        <el-form-item label="内容" required>
-          <el-input v-model="noticeForm.content" type="textarea" :rows="5" maxlength="500"
-                    placeholder="如：系统将于今晚 23:00-24:00 升级维护，期间暂停访问" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="noticeForm.noticeType" style="width: 100%">
-            <el-option label="系统" :value="0" /><el-option label="课程" :value="1" /><el-option label="缴费" :value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="级别">
-          <el-select v-model="noticeForm.level" style="width: 100%">
-            <el-option label="普通" :value="0" /><el-option label="重要" :value="1" /><el-option label="紧急" :value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="接收对象">
-          <el-select v-model="noticeForm.target" style="width: 100%">
-            <el-option label="全部（所有企业用户）" value="ALL" />
-            <el-option label="教管人员" value="EDU_ADMIN" />
-            <el-option label="班主任" value="CLASS_TEACHER" />
-            <el-option label="教师" value="TEACHER" />
-            <el-option label="学生" value="STUDENT" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="立即发布">
-          <el-switch v-model="noticeForm.publishNow" active-text="保存后立即对全员可见" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="noticeVisible = false">取消</el-button>
-        <el-button type="primary" :loading="noticeSaving" @click="saveNotice">保存</el-button>
-      </template>
-    </el-drawer>
 
     <el-drawer v-model="visible" :title="form.id ? '编辑企业' : '新增企业'" size="440px">
       <el-form :model="form" label-width="90px">
@@ -244,52 +147,10 @@ import ColumnSetting from '../../components/ColumnSetting.vue'
 import { exportXlsx } from '../../utils/export'
 import BasicSetting from './BasicSetting.vue'
 
-/** 平台运营视图：企业管理 / 品牌与广告 / 通知公告 */
+/** 平台运营视图：企业管理 / 品牌与广告 */
 const tab = ref('corp')
 
 /* ===== 通知公告（平台公告，tenant_id=0，全员可见） ===== */
-const noticeQuery = reactive({ keyword: '', status: null })
-const noticePage = usePage((q) => api.noticePlatformPage(q), noticeQuery)
-const noticeVisible = ref(false)
-const noticeSaving = ref(false)
-const noticeForm = ref({})
-function openNotice(row) {
-  noticeForm.value = row
-    ? { ...row, publishNow: row.status === 1 }
-    : { noticeType: 0, level: 1, target: 'ALL', publishNow: true }
-  noticeVisible.value = true
-}
-async function saveNotice() {
-  const f = noticeForm.value
-  if (!f.title || !f.content) return ElMessage.warning('标题和内容不能为空')
-  noticeSaving.value = true
-  try {
-    await api.noticeSave({ ...f, status: f.publishNow ? 1 : 0 })
-    ElMessage.success(f.publishNow ? '公告已发布，全员可见' : '公告已存为草稿')
-    noticeVisible.value = false
-    noticePage.load()
-  } finally { noticeSaving.value = false }
-}
-async function publishNotice(row) {
-  await api.noticePublish(row.id)
-  ElMessage.success('已发布')
-  noticePage.load()
-}
-async function delNotice(id) {
-  await api.noticeDel(id)
-  ElMessage.success('已删除')
-  noticePage.load()
-}
-
-/** 切到通知公告TAB时懒加载公告列表 */
-let noticeLoaded = false
-function onTabChange(t) {
-  if (t === 'notice' && !noticeLoaded) {
-    noticeLoaded = true
-    noticePage.load()
-  }
-}
-
 const query = reactive({ keyword: '' })
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
   usePage((q) => api.tenantPage(q), query)

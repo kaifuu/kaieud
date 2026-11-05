@@ -11,7 +11,11 @@ import com.edu.entity.EduClazz;
 import com.edu.entity.EduEnroll;
 import com.edu.entity.EduTeacher;
 import com.edu.entity.SysUser;
+import com.edu.entity.EduStudent;
+import com.edu.entity.EduContract;
 import com.edu.mapper.EduClazzMapper;
+import com.edu.mapper.EduStudentMapper;
+import com.edu.mapper.EduContractMapper;
 import com.edu.mapper.EduEnrollMapper;
 import com.edu.mapper.EduTeacherMapper;
 import com.edu.mapper.SysUserMapper;
@@ -23,8 +27,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** 班级管理 + 班主任管理(指定/更换班主任) */
 @RestController
@@ -37,6 +44,8 @@ public class EduClazzController {
     private final EduTeacherMapper teacherMapper;
     private final EduEnrollMapper enrollMapper;
     private final SysUserMapper userMapper;
+    private final EduStudentMapper studentMapper;
+    private final EduContractMapper contractMapper;
 
     /** 员工类型（与用户管理"员工"TAB一致）：2教务 3班主任 6校区校长 7校区咨询师 8校区学管师 */
     private static final List<Integer> STAFF_TYPES = java.util.Arrays.asList(2, 3, 6, 7, 8);
@@ -153,4 +162,178 @@ public class EduClazzController {
         return Result.ok();
     }
 
+
+    /* ==================== 班级学生管理 ==================== */
+
+    /**
+     * 班级学生候选：按 合同编号/学生姓名/学生手机号 搜索，
+     * 候选为有生效合同(status<3)的学生，附其可绑合同列表（含剩余课时）。
+     */
+    @GetMapping("/student-candidates")
+    public Result<List<Map<String, Object>>> studentCandidates(@RequestParam(required = false) String keyword,
+                                                               @RequestParam(required = false) Long clazzId) {
+        List<EduContract> contracts = contractMapper.selectList(new LambdaQueryWrapper<EduContract>()
+                .lt(EduContract::getStatus, 3));
+        if (contracts.isEmpty()) return Result.ok(new ArrayList<>());
+        Map<Long, EduStudent> stuMap = new HashMap<>();
+        for (EduStudent s : studentMapper.selectList(null)) stuMap.put(s.getId(), s);
+        // 已在指定班级的学生不重复入列
+        Set<Long> inClazz = new HashSet<>();
+        if (clazzId != null)
+            for (EduEnroll e : enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
+                    .eq(EduEnroll::getClazzId, clazzId).eq(EduEnroll::getStatus, 1)))
+                inClazz.add(e.getStudentId());
+        String k = keyword == null ? "" : keyword.trim().toLowerCase();
+        Map<Long, List<EduContract>> byStudent = new LinkedHashMap<>();
+        for (EduContract c : contracts) byStudent.computeIfAbsent(c.getStudentId(), x -> new ArrayList<>()).add(c);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<Long, List<EduContract>> en : byStudent.entrySet()) {
+            EduStudent s = stuMap.get(en.getKey());
+            if (s == null || inClazz.contains(en.getKey())) continue;
+            boolean hit = k.isEmpty();
+            if (!hit)
+                for (EduContract c : en.getValue())
+                    if (c.getContractNo() != null && c.getContractNo().toLowerCase().contains(k)) { hit = true; break; }
+            if (!hit && s.getName() != null && s.getName().toLowerCase().contains(k)) hit = true;
+            if (!hit && s.getParentPhone() != null && s.getParentPhone().contains(k)) hit = true;
+            if (!hit && s.getBackupPhone() != null && s.getBackupPhone().contains(k)) hit = true;
+            if (!hit) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("studentId", en.getKey());
+            m.put("name", s.getName());
+            m.put("phone", s.getParentPhone() == null ? s.getBackupPhone() : s.getParentPhone());
+            List<Map<String, Object>> contractList = new ArrayList<>();
+            for (EduContract c : en.getValue()) {
+                Map<String, Object> cm = new LinkedHashMap<>();
+                cm.put("id", c.getId());
+                cm.put("contractNo", c.getContractNo());
+                cm.put("courseId", c.getCourseId());
+                cm.put("remainHours", remainHours(c));
+                cm.put("status", c.getStatus() == null ? 0 : c.getStatus());
+                cm.put("endDate", c.getEndDate() == null ? null : c.getEndDate().toString());
+                contractList.add(cm);
+            }
+            m.put("contracts", contractList);
+            result.add(m);
+        }
+        return Result.ok(result);
+    }
+
+    /** 加入班级（绑定学生+合同）：在读人数不能超过容量 */
+    @PostMapping("/{id}/students")
+    @Log("班级添加学生")
+    public Result<Void> addStudent(@PathVariable Long id, @RequestBody AddStudentDTO dto) {
+        if (dto.getStudentId() == null || dto.getContractId() == null)
+            return Result.error("学生与关联合同为必填项");
+        EduClazz clazz = clazzMapper.selectById(id);
+        if (clazz == null) return Result.error("班级不存在");
+        Long studying = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+        int cap = clazz.getCapacity() == null ? 0 : clazz.getCapacity();
+        if (studying + 1 > cap)
+            return Result.error("班级容量不足：容量 " + cap + " 名，已占用 " + studying + " 名，空余 " + Math.max(cap - studying, 0) + " 名");
+        EduContract c = contractMapper.selectById(dto.getContractId());
+        if (c == null || !dto.getStudentId().equals(c.getStudentId()))
+            return Result.error("所选合同不属于该学生");
+        if (remainHours(c).compareTo(java.math.BigDecimal.ZERO) <= 0)
+            return Result.error("该合同课时已耗尽，无法加入班级");
+        Long dup = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStudentId, dto.getStudentId())
+                .eq(EduEnroll::getStatus, 1));
+        if (dup > 0) return Result.error("该学生已在本班级");
+        EduEnroll e = new EduEnroll();
+        e.setTenantId(clazz.getTenantId());
+        e.setStudentId(dto.getStudentId());
+        e.setCourseId(c.getCourseId());
+        e.setClazzId(id);
+        e.setTeacherId(clazz.getClassTeacherId());
+        e.setTotalHours(remainHours(c).intValue());
+        e.setUsedHours(0);
+        e.setPrice(c.getUnitPrice());
+        e.setStatus(1);
+        enrollMapper.insert(e);
+        return Result.ok();
+    }
+
+    /** 调班：在读报名迁到目标班级（容量+课程一致性校验），原班名额自动释放 */
+    @PostMapping("/{fromId}/transfer")
+    @Log("学生调班")
+    public Result<Void> transfer(@PathVariable Long fromId, @RequestBody TransferDTO dto) {
+        if (dto.getToClazzId() == null || dto.getStudentId() == null)
+            return Result.error("目标班级与学生为必填项");
+        if (fromId.equals(dto.getToClazzId())) return Result.error("目标班级不能与当前班级相同");
+        EduClazz to = clazzMapper.selectById(dto.getToClazzId());
+        if (to == null) return Result.error("目标班级不存在");
+        Long studying = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, dto.getToClazzId()).eq(EduEnroll::getStatus, 1));
+        int cap = to.getCapacity() == null ? 0 : to.getCapacity();
+        if (studying + 1 > cap)
+            return Result.error("目标班级容量不足：容量 " + cap + " 名，已占用 " + studying + " 名");
+        EduEnroll e = enrollMapper.selectOne(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, fromId).eq(EduEnroll::getStudentId, dto.getStudentId())
+                .eq(EduEnroll::getStatus, 1).last("LIMIT 1"));
+        if (e == null) return Result.error("该学生不在当前班级");
+        if (e.getCourseId() != null && to.getCourseId() != null && !e.getCourseId().equals(to.getCourseId()))
+            return Result.error("目标班级课程与报名课程不一致，不允许调班");
+        e.setClazzId(dto.getToClazzId());
+        if (to.getClassTeacherId() != null) e.setTeacherId(to.getClassTeacherId());
+        enrollMapper.updateById(e);
+        return Result.ok();
+    }
+
+    /** 班级学生列表（详情页）：容量/占用/空余 + 学生合同课时（总/已上/未上） */
+    @GetMapping("/{id}/students")
+    public Result<Map<String, Object>> students(@PathVariable Long id) {
+        EduClazz clazz = clazzMapper.selectById(id);
+        if (clazz == null) return Result.error("班级不存在");
+        List<EduEnroll> enrolls = enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+        Map<Long, EduStudent> stuMap = new HashMap<>();
+        if (!enrolls.isEmpty()) {
+            Set<Long> sids = new HashSet<>();
+            for (EduEnroll e : enrolls) sids.add(e.getStudentId());
+            for (EduStudent s : studentMapper.selectBatchIds(sids)) stuMap.put(s.getId(), s);
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (EduEnroll e : enrolls) {
+            EduStudent s = stuMap.get(e.getStudentId());
+            int total = e.getTotalHours() == null ? 0 : e.getTotalHours();
+            int used = e.getUsedHours() == null ? 0 : e.getUsedHours();
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("enrollId", e.getId());
+            m.put("studentId", e.getStudentId());
+            m.put("name", s == null ? "-" : s.getName());
+            m.put("phone", s == null ? "-" : (s.getParentPhone() == null ? s.getBackupPhone() : s.getParentPhone()));
+            m.put("totalHours", total);
+            m.put("usedHours", used);
+            m.put("remainHours", Math.max(total - used, 0));
+            m.put("enrollTime", e.getCreateTime());
+            rows.add(m);
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("capacity", clazz.getCapacity() == null ? 0 : clazz.getCapacity());
+        data.put("studying", enrolls.size());
+        data.put("rows", rows);
+        return Result.ok(data);
+    }
+
+    /** 合同剩余课时 */
+    private java.math.BigDecimal remainHours(EduContract c) {
+        return (c.getPurchasedHours() == null ? java.math.BigDecimal.ZERO : c.getPurchasedHours())
+                .add(c.getGiftHours() == null ? java.math.BigDecimal.ZERO : c.getGiftHours())
+                .subtract(c.getUsedPurchased() == null ? java.math.BigDecimal.ZERO : c.getUsedPurchased())
+                .subtract(c.getUsedGift() == null ? java.math.BigDecimal.ZERO : c.getUsedGift());
+    }
+
+    @lombok.Data
+    public static class AddStudentDTO {
+        private Long studentId;
+        private Long contractId;
+    }
+
+    @lombok.Data
+    public static class TransferDTO {
+        private Long studentId;
+        private Long toClazzId;
+    }
 }

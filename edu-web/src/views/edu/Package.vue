@@ -11,31 +11,37 @@
         <el-input v-model="query.keyword" placeholder="套餐名称" clearable style="width: 190px" @keyup.enter="search">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="query.classType" placeholder="班型" clearable style="width: 130px">
-          <el-option v-for="d in dicts.class_type" :key="d.value" :label="d.label" :value="Number(d.value)" />
+        <el-select v-model="query.category" placeholder="科目" clearable style="width: 110px">
+          <el-option v-for="d in dictStore.options('course_category')" :key="d.value" :label="d.label" :value="Number(d.value)" />
+        </el-select>
+        <el-select v-model="query.teachMode" placeholder="授课模式" clearable style="width: 120px">
+          <el-option v-for="d in dictStore.options('class_type')" :key="d.value" :label="d.label" :value="Number(d.value)" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <div style="flex: 1"></div>
         <el-button @click="doExport">导出</el-button>
       </div>
-      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }" :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort">
         <el-table-column type="index" label="序号" width="60" :index="seq" />
-        <el-table-column prop="name" label="套餐名称" min-width="160" sortable="custom"  show-overflow-tooltip/>
-        <el-table-column label="关联课程" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ courseName(row.courseId) }}</template>
+        <el-table-column prop="name" label="套餐名称" min-width="160" sortable="custom" show-overflow-tooltip />
+        <el-table-column label="科目" width="80" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.category ? dictText('course_category', row.category) : '-' }}</template>
         </el-table-column>
-        <el-table-column label="班型" width="90" show-overflow-tooltip>
-          <template #default="{ row }">{{ dictText('class_type', row.classType) }}</template>
+        <el-table-column label="授课模式" width="88" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.teachMode ? dictText('class_type', row.teachMode) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="unitPrice" label="单价(元/课时)" width="125" sortable="custom"  show-overflow-tooltip/>
-        <el-table-column prop="hours" label="购买课时" width="95" sortable="custom"  show-overflow-tooltip/>
-        <el-table-column prop="giftHours" label="赠送课时" width="95"  show-overflow-tooltip/>
+        <el-table-column prop="grade" label="适用年级" width="86" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.grade || '不限' }}</template>
+        </el-table-column>
+        <el-table-column prop="unitPrice" label="单价(元/课时)" width="125" sortable="custom" show-overflow-tooltip />
+        <el-table-column prop="hours" label="购买课时" width="95" sortable="custom" show-overflow-tooltip />
+        <el-table-column prop="giftHours" label="赠送课时" width="95" show-overflow-tooltip />
         <el-table-column label="套餐总课时" width="105" show-overflow-tooltip>
           <template #default="{ row }">{{ Number(row.hours) + Number(row.giftHours || 0) }}</template>
         </el-table-column>
-        <el-table-column prop="validDays" label="有效期(天)" width="105"  show-overflow-tooltip/>
-        <el-table-column prop="startDate" label="生效日期" width="110"  show-overflow-tooltip/>
-        <el-table-column prop="endDate" label="截止日期" width="110"  show-overflow-tooltip/>
+        <el-table-column prop="validDays" label="有效期(天)" width="105" show-overflow-tooltip />
+        <el-table-column prop="startDate" label="生效日期" width="110" show-overflow-tooltip />
+        <el-table-column prop="endDate" label="截止日期" width="110" show-overflow-tooltip />
         <el-table-column label="状态" width="80" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="isExpired(row)" size="small" type="danger" effect="plain">已过期</el-tag>
@@ -100,19 +106,20 @@
     <el-drawer v-model="visible" :title="form.id ? '编辑套餐' : '新增套餐'" size="460px">
       <el-form :model="form" label-width="110px">
         <el-form-item label="套餐名称" required><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="关联课程" required>
-          <el-select v-model="form.courseId" filterable style="width: 100%"
-                     placeholder="输入关键字查询课程（仅上架课程可关联）" @change="onCourseChange">
-            <el-option v-for="c in courseOptions" :key="c.id"
-                       :label="`${c.name}（${c.status === 1 ? '上架' : '已下架'}）`"
-                       :value="c.id" :disabled="c.status !== 1" />
+        <el-form-item label="科目" required>
+          <el-select v-model="form.category" style="width: 100%" placeholder="选择科目">
+            <el-option v-for="d in dictStore.options('course_category')" :key="d.value" :label="d.label" :value="Number(d.value)" />
           </el-select>
         </el-form-item>
-        <el-form-item label="班型">
-          <el-input :model-value="dictText('class_type', form.classType)" disabled />
+        <el-form-item label="授课模式">
+          <el-select v-model="form.teachMode" clearable style="width: 100%" placeholder="选择授课模式">
+            <el-option v-for="d in dictStore.options('class_type')" :key="d.value" :label="d.label" :value="Number(d.value)" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="标准时长(分)">
-          <el-input :model-value="courseDuration" disabled />
+        <el-form-item label="适用年级">
+          <el-select v-model="form.grade" clearable filterable style="width: 100%" placeholder="不限">
+            <el-option v-for="d in dictStore.options('grade')" :key="d.value" :label="d.label" :value="d.label" />
+          </el-select>
         </el-form-item>
         <el-form-item label="单课时售价" required><el-input-number v-model="form.unitPrice" :min="0" :precision="2" /></el-form-item>
         <el-form-item label="套餐总价"><el-input :model-value="packageTotal" disabled /></el-form-item>
@@ -140,16 +147,16 @@
 
     <!-- 合同引用抽屉：查看引用该套餐的全部合同 -->
     <el-drawer v-model="refVisible" :title="`合同引用 — ${refRow.name || ''}`" size="720px">
-      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="refContracts" v-loading="refLoading" stripe size="small">
+      <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }" :data="refContracts" v-loading="refLoading" stripe size="small">
         <el-table-column type="index" label="序号" width="55" />
-        <el-table-column prop="contractNo" label="合同编号" min-width="150"  show-overflow-tooltip/>
-        <el-table-column prop="studentName" label="学员" width="90"  show-overflow-tooltip/>
-        <el-table-column prop="purchasedHours" label="购买课时" width="90"  show-overflow-tooltip/>
-        <el-table-column prop="giftHours" label="赠送课时" width="90"  show-overflow-tooltip/>
-        <el-table-column prop="unitPrice" label="单价(元)" width="90"  show-overflow-tooltip/>
-        <el-table-column prop="totalAmount" label="合同金额" width="100"  show-overflow-tooltip/>
-        <el-table-column prop="startDate" label="生效日期" width="105"  show-overflow-tooltip/>
-        <el-table-column prop="endDate" label="截止日期" width="105"  show-overflow-tooltip/>
+        <el-table-column prop="contractNo" label="合同编号" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="studentName" label="学员" width="90" show-overflow-tooltip />
+        <el-table-column prop="purchasedHours" label="购买课时" width="90" show-overflow-tooltip />
+        <el-table-column prop="giftHours" label="赠送课时" width="90" show-overflow-tooltip />
+        <el-table-column prop="unitPrice" label="单价(元)" width="90" show-overflow-tooltip />
+        <el-table-column prop="totalAmount" label="合同金额" width="100" show-overflow-tooltip />
+        <el-table-column prop="startDate" label="生效日期" width="105" show-overflow-tooltip />
+        <el-table-column prop="endDate" label="截止日期" width="105" show-overflow-tooltip />
         <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['info', 'warning', 'success', 'danger', 'danger'][row.status]" effect="plain">
@@ -176,14 +183,10 @@ import { useDictStore } from '../../store/dict'
 import DetailDrawer from '../../components/DetailDrawer.vue'
 
 const dictStore = useDictStore()
-const dicts = computed(() => dictStore.dicts)
-const courses = ref([])
-const query = reactive({ keyword: '', classType: null })
+const dictText = (type, v) => dictStore.label(type, v)
+const query = reactive({ keyword: '', category: null, teachMode: null })
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
   usePage((q) => api.packagePage(q), query)
-
-const courseName = (id) => courses.value.find((c) => c.id === id)?.name || '-'
-const dictText = (type, v) => dictStore.label(type, v)
 
 const totalHours = computed(() =>
   Number(form.value.hours || 0) + Number(form.value.giftHours || 0))
@@ -228,24 +231,13 @@ function isExpired(row) {
   return !!row.endDate && row.endDate < todayStr
 }
 
-/** 选中课程：联动班型/标准时长（仅展示，不可编辑） */
-const selectedCourse = computed(() => courses.value.find((c) => c.id === Number(form.value.courseId)))
-/** 可关联课程：仅上架可新选；编辑回显时原课程已下架则钉入展示（禁选，防误清空） */
-const courseOptions = computed(() => {
-  const list = courses.value.filter((c) => c.status === 1)
-  const cur = courses.value.find((c) => c.id === Number(form.value.courseId))
-  return cur && cur.status !== 1 ? [cur, ...list] : list
-})
-const courseDuration = computed(() =>
-  selectedCourse.value ? (selectedCourse.value.durationMinutes || 60) + ' 分钟' : '-')
-function onCourseChange() {
-  const c = selectedCourse.value
-  if (c) form.value.classType = c.classType
-}
-
 function doExport() {
   exportXlsx('课时套餐', [
-    { label: '套餐名称', prop: 'name' }, { label: '单价', prop: 'unitPrice' },
+    { label: '套餐名称', prop: 'name' },
+    { label: '科目', prop: 'category', fmt: (v) => (v ? dictText('course_category', v) : '-') },
+    { label: '授课模式', prop: 'teachMode', fmt: (v) => (v ? dictText('class_type', v) : '-') },
+    { label: '适用年级', prop: 'grade', fmt: (v) => v || '不限' },
+    { label: '单价', prop: 'unitPrice' },
     { label: '购买课时', prop: 'hours' }, { label: '赠送课时', prop: 'giftHours' },
     { label: '有效期(天)', prop: 'validDays' }
   ], rows.value)
@@ -260,8 +252,9 @@ const detailVisible = ref(false)
 const detailRow = ref({})
 const detailFields = [
   { prop: 'name', label: '套餐名称' },
-  { prop: 'courseId', label: '关联课程', formatter: courseName },
-  { prop: 'classType', label: '班型', formatter: (v) => dictText('class_type', v) },
+  { prop: 'category', label: '科目', formatter: (v) => (v ? dictText('course_category', v) : '-') },
+  { prop: 'teachMode', label: '授课模式', formatter: (v) => (v ? dictText('class_type', v) : '-') },
+  { prop: 'grade', label: '适用年级', formatter: (v) => v || '不限' },
   { prop: 'unitPrice', label: '单价(元/课时)', formatter: (v) => Number(v || 0).toFixed(2) },
   { prop: 'hours', label: '购买课时' },
   { prop: 'giftHours', label: '赠送课时' },
@@ -302,6 +295,7 @@ function openEdit(row) {
     if (isExpired(row)) form.value.enabled = 0
   } else {
     form.value = {
+      category: null, teachMode: null, grade: null,
       hours: 1, giftHours: 0, validDays: 365, enabled: 1, unitPrice: 0,
       startDate: new Date().toISOString().slice(0, 10)
     }
@@ -309,9 +303,7 @@ function openEdit(row) {
   visible.value = true
 }
 async function save() {
-  if (!form.value.name || !form.value.courseId) return ElMessage.warning('名称与课程为必填项')
-  if (selectedCourse.value && selectedCourse.value.status !== 1)
-    return ElMessage.error('关联课程已下架，不能保存，请重新选择上架课程')
+  if (!form.value.name || !form.value.category) return ElMessage.warning('名称与科目为必填项')
   if (!form.value.startDate) return ElMessage.warning('请选择生效日期')
   if (Number(form.value.enabled) === 1 && formExpired.value) {
     ElMessage.error('截止日期已过，不能启用')
@@ -333,15 +325,12 @@ async function remove(id) {
 }
 onMounted(async () => {
   load()
-  // 全量课程（含下架）：下拉按状态标注并禁选下架项；列表/详情解析课程名也依赖它
-  const d = await api.coursePage({ page: 1, size: 500 })
-  courses.value = d.records || []
   dictStore.load(true)
 })
 </script>
 
 <style scoped>
-/* “更多”触发器：胶囊式，展开时主色点亮 + 箭头旋转 */
+/* "更多"触发器：胶囊式，展开时主色点亮 + 箭头旋转 */
 .more-trigger {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 13px; color: #475467;

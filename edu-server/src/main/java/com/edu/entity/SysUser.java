@@ -38,6 +38,9 @@ public class SysUser {
     private LocalDate birthDate;
     @TableField(exist = false)
     private String grade;
+    /** 身份证号（学生档案表单字段） */
+    @TableField(exist = false)
+    private String idCard;
     @TableField(exist = false)
     private String school;
     @TableField(exist = false)

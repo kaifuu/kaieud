@@ -49,13 +49,15 @@ public class EduPackageController {
     public Result<PageResult<EduPackage>> page(@RequestParam(defaultValue = "1") long page,
                                                @RequestParam(defaultValue = "10") long size,
                                                @RequestParam(required = false) String keyword,
-                                               @RequestParam(required = false) Integer classType,
+                                               @RequestParam(required = false) Integer category,
+                                               @RequestParam(required = false) Integer teachMode,
                                                @RequestParam(required = false) String sortBy,
                                                @RequestParam(required = false) String direction) {
         autoDisableExpired();
         LambdaQueryWrapper<EduPackage> qw = new LambdaQueryWrapper<EduPackage>()
                 .like(StringUtils.hasText(keyword), EduPackage::getName, keyword)
-                .eq(classType != null, EduPackage::getClassType, classType)
+                .eq(category != null, EduPackage::getCategory, category)
+                .eq(teachMode != null, EduPackage::getTeachMode, teachMode)
                 .eq(EduPackage::getDeleted, 0)
                 ;
         qw.last(SafeSort.order(sortBy, direction, "id", "id", "name", "unitPrice", "hours", "createTime"));

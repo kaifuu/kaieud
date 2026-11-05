@@ -138,12 +138,18 @@ export default {
 
   coursePage: (p) => get('/edu/course/page', p),
   courseList: () => get('/edu/course/list'),
+  coursePrices: (id) => get(`/edu/course/${id}/prices`),
   courseSave: (d) => post('/edu/course', d),
   courseUpdate: (d) => put('/edu/course', d),
   courseDel: (id) => del(`/edu/course/${id}`),
   clazzPage: (p) => get('/edu/clazz/page', p),
   // 班主任候选：用户管理中类型为员工的在职人员（含教师档案ID）
   clazzTeacherCandidates: () => get('/edu/clazz/teacher-candidates'),
+  // 班级学生：候选（合同号/姓名/手机号）、加入（容量校验）、调班、班级学生列表
+  clazzStudentCandidates: (p) => get('/edu/clazz/student-candidates', p),
+  clazzAddStudent: (id, d) => post(`/edu/clazz/${id}/students`, d),
+  clazzTransfer: (fromId, d) => post(`/edu/clazz/${fromId}/transfer`, d),
+  clazzStudents: (id) => get(`/edu/clazz/${id}/students`),
   clazzList: () => get('/edu/clazz/list'),
   clazzSave: (d) => post('/edu/clazz', d),
   clazzUpdate: (d) => put('/edu/clazz', d),
@@ -152,6 +158,8 @@ export default {
   enrollPage: (p) => get('/edu/enroll/page', p),
   scheduleClazzStudents: (clazzId) => get('/edu/schedule/clazz-students', { clazzId }),
   enrollSubscribe: (d) => post('/edu/enroll/subscribe', d),
+  enrollUpdate: (d) => put('/edu/enroll', d),
+  enrollCredit: (d) => post('/edu/enroll/credit', d),
   enrollUnsubscribe: (id) => post(`/edu/enroll/${id}/unsubscribe`),
   enrollAssignTeacher: (id, teacherId) => post(`/edu/enroll/${id}/assign-teacher`, { teacherId }),
   enrollCompensateHours: (id, hours) => post(`/edu/enroll/${id}/compensate-hours`, { hours }),

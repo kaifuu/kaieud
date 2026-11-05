@@ -10,6 +10,8 @@
         </slot>
       </el-descriptions-item>
     </el-descriptions>
+    <!-- 自定义扩展区：如定价标准等结构化内容 -->
+    <slot name="extra" :data="data"></slot>
   </el-drawer>
 </template>
 

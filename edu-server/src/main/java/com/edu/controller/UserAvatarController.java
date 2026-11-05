@@ -20,7 +20,8 @@ public class UserAvatarController {
         java.util.Map<String, Object> row = userMapper.selectAvatarRaw(id);
         byte[] data = row == null ? null : (byte[]) row.get("avatar");
         if (data == null || data.length == 0) {
-            return ResponseEntity.notFound().build();
+            // 无头像返回200空体（text/plain）：避免浏览器控制台刷404，前端按非图像回退姓名首字母
+            return ResponseEntity.ok().contentType(MediaType.TEXT_PLAIN).body(new byte[0]);
         }
         // 魔数判断图片类型：PNG(89 50) / JPEG(-1 40)
         MediaType type = (data.length > 1 && data[0] == (byte) 0x89 && data[1] == 0x50)

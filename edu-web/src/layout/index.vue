@@ -239,7 +239,7 @@ async function loadNotices() {
   } catch (e) { /* 忽略 */ }
 }
 function goNotify() {
-  router.push('/system/notify')
+  router.push({ path: '/system/notify', query: { tab: 'notice' } })
 }
 
 /* ===== 界面密度（紧凑/宽松，全局记忆） ===== */

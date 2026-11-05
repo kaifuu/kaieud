@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -42,6 +44,7 @@ public class ContainerDeployService {
     private final SysDeployTargetMapper targetMapper;
     private final SshService ssh;
     private final com.edu.security.DeployCrypto crypto;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @Value("${edu.deploy.project-root:}")
     private String projectRootCfg;
@@ -118,11 +121,17 @@ public class ContainerDeployService {
             tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
             addFile(tar, jar.toPath(), "app.jar");
             addDir(tar, root.resolve("edu-web/dist"), "dist");
-            addFile(tar, root.resolve("sql/edu_course.sql"), "sql/edu_course.sql");
+            // 初始SQL：精简版（仅平台admin+模板），全新部署干净起步；企业admin由平台创建企业时自动生成
+            Path initSql = out.resolveSibling("init.sql");
+            java.nio.file.Files.write(initSql, minimalInitSql().getBytes("UTF-8"));
+            addFile(tar, initSql, "sql/init.sql");
+            java.nio.file.Files.deleteIfExists(initSql);
             for (String tpl : Arrays.asList("Dockerfile", "compose-bundled.yml", "compose-external.yml", "deploy.sh", "nginx.conf.tpl")) {
                 try (InputStream in = new ClassPathResource("deploy/" + tpl).getInputStream()) {
+                    // 统一转 LF：源文件被 Windows 编辑器/git 转成 CRLF 时，远端 bash 会因 \r 报错
+                    byte[] bytes = org.apache.commons.io.IOUtils.toByteArray(in);
                     Path tmp = Files.createTempFile("tpl-", tpl);
-                    Files.copy(in, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    java.nio.file.Files.write(tmp, new String(bytes, "UTF-8").replace("\r\n", "\n").getBytes("UTF-8"));
                     addFile(tar, tmp, tpl);
                     Files.deleteIfExists(tmp);
                 }
@@ -360,4 +369,49 @@ public class ContainerDeployService {
     private static String tail(String s, int max) {
         return s == null ? "" : (s.length() > max ? "... " + s.substring(s.length() - max) : s);
     }
+
+    /**
+     * 精简初始SQL（运行时从本库实时导出）：
+     * 结构 = SHOW CREATE TABLE（与运行系统完全一致，杜绝手写漂移）；
+     * 种子 = 平台租户(0) + 平台管理员 + 全量菜单模板(scope=0/1) + 基础字典，
+     * 不含演示企业与业务数据。企业admin由平台创建企业时自动生成。
+     */
+    public String minimalInitSql() {
+        StringBuilder sb = new StringBuilder();
+        // —— 表结构：本库全部表 ——
+        List<String> tables = jdbc.queryForList(
+                "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME", String.class);
+        for (String t : tables) {
+            String ddl = jdbc.queryForMap("SHOW CREATE TABLE `" + t + "`")
+                    .get("Create Table").toString();
+            ddl = ddl.replaceAll(" AUTO_INCREMENT=\\d+", "");
+            sb.append(ddl).append(";\n");
+        }
+        // —— 种子数据 ——
+        appendInserts(sb, "sys_tenant", "SELECT * FROM sys_tenant WHERE id = 0");
+        appendInserts(sb, "sys_user", "SELECT * FROM sys_user WHERE tenant_id = 0");
+        appendInserts(sb, "sys_menu", "SELECT * FROM sys_menu WHERE tenant_id = 0 ORDER BY id");
+        appendInserts(sb, "sys_dict_type", "SELECT * FROM sys_dict_type WHERE tenant_id = 0");
+        appendInserts(sb, "sys_dict", "SELECT * FROM sys_dict WHERE tenant_id = 0 ORDER BY dict_type, sort, value");
+        return sb.toString();
+    }
+
+    /** 按查询结果生成 INSERT（值转义：null→NULL，字符串加引号并转义单引号） */
+    private void appendInserts(StringBuilder sb, String table, String query) {
+        List<Map<String, Object>> rows = jdbc.queryForList(query);
+        for (Map<String, Object> row : rows) {
+            StringBuilder cols = new StringBuilder();
+            StringBuilder vals = new StringBuilder();
+            for (Map.Entry<String, Object> e : row.entrySet()) {
+                if (cols.length() > 0) { cols.append(", "); vals.append(", "); }
+                cols.append("`").append(e.getKey()).append("`");
+                Object v = e.getValue();
+                if (v == null) vals.append("NULL");
+                else if (v instanceof Number) vals.append(v);
+                else vals.append("'").append(String.valueOf(v).replace("\\", "\\\\").replace("'", "\\'")).append("'");
+            }
+            sb.append("INSERT INTO `").append(table).append("` (").append(cols).append(") VALUES (").append(vals).append(");\n");
+        }
+    }
 }
+

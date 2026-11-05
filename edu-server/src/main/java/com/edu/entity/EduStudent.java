@@ -20,6 +20,8 @@ public class EduStudent {
     private LocalDate birthDate;
     private String school;
     private String grade;
+    /** 身份证号 */
+    private String idCard;
     private String parentName;
     private String parentPhone;
     private String address;
