@@ -33,6 +33,8 @@ export default {
   accountPage: (p) => get('/edu/account/page', p),
   accountSummary: (p) => get('/edu/account/summary', p),
   accountRecharge: (d) => post('/edu/account/recharge', d),
+  // 无合同余额充值（报名/续报办理中心-余额充值）
+  accountRechargeBalance: (d) => post('/edu/account/recharge-balance', d),
   portalMyAccount: () => get('/portal/my-account'),
   // 全部学生充值记录（企业管理员/财务，本租户范围，仅查询）
   portalAccountRecords: (p) => get('/portal/account-records', p),
@@ -158,7 +160,10 @@ export default {
   enrollPage: (p) => get('/edu/enroll/page', p),
   scheduleClazzStudents: (clazzId) => get('/edu/schedule/clazz-students', { clazzId }),
   enrollSubscribe: (d) => post('/edu/enroll/subscribe', d),
+  enrollTransfer: (d) => post('/edu/enroll/transfer', d),
   enrollUpdate: (d) => put('/edu/enroll', d),
+  enrollDel: (id) => del(`/edu/enroll/${id}`),
+  enrollLogs: (id) => get(`/edu/enroll/${id}/logs`),
   enrollCredit: (d) => post('/edu/enroll/credit', d),
   enrollUnsubscribe: (id) => post(`/edu/enroll/${id}/unsubscribe`),
   enrollAssignTeacher: (id, teacherId) => post(`/edu/enroll/${id}/assign-teacher`, { teacherId }),
@@ -245,6 +250,7 @@ export default {
   deployTestTarget: (id) => post(`/deploy/targets/${id}/test`),
   deployTestDb: (id) => post(`/deploy/targets/${id}/test-db`),
   deployInitDb: (id) => post(`/deploy/targets/${id}/init-db`),
+  deployPatchDb: (id) => post(`/deploy/targets/${id}/patch-db`),
   deployBuild: (d) => post('/deploy/build', d),
   deployDeploy: (buildId, d) => post(`/deploy/${buildId}/deploy`, d),
   deployService: (id, action) => post(`/deploy/targets/${id}/service`, { action }),

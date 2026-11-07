@@ -1,7 +1,7 @@
 <template>
   <div class="page tabs-page">
     <div class="page-header">
-      <span class="page-title">缴费管理</span>
+      <span class="page-title">{{ pageTitle }}</span>
       <div class="actions">
         <el-button v-if="tab === 'pay'" type="primary" @click="openCreate">新增缴费</el-button>
       </div>
@@ -177,6 +177,7 @@
 
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
@@ -186,6 +187,9 @@ import DetailDrawer from '../../components/DetailDrawer.vue'
 import { useDictStore } from '../../store/dict'
 
 const dictStore = useDictStore()
+/** 页面标题：从办理中心-补费入口进入显示「补费」，菜单直接进入显示「缴费管理」 */
+const route = useRoute()
+const pageTitle = computed(() => route.query.entry || '缴费管理')
 const tab = ref('pay')
 const query = reactive({ studentId: null, contractNo: '' })
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =

@@ -48,6 +48,12 @@
         <el-table-column label="退费课时" width="90" align="center" show-overflow-tooltip>
           <template #default="{ row }">{{ row.hours != null ? row.hours : '-' }}</template>
         </el-table-column>
+        <el-table-column label="支付信息" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ payInfoOf(row) }}</template>
+        </el-table-column>
+        <el-table-column label="经办校区" width="100" align="center" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.campus || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="contractNo" label="关联合同" width="150"  show-overflow-tooltip/>
         <el-table-column prop="remark" label="原因备注" min-width="200" show-overflow-tooltip />
         <el-table-column prop="operator" label="操作人" width="100"  show-overflow-tooltip/>
@@ -147,6 +153,15 @@ async function loadSummary() {
   summary.value = (await api.accountSummary({ studentId: query.studentId })) || {}
 }
 const fmtAmount = (v) => Number(v ?? 0).toFixed(2)
+/** 支付信息：余额充值多账户明细（【渠道】金额），旧数据无留档时显示 - */
+const payInfoOf = (row) => {
+  if (!row.payDetail) return '-'
+  try {
+    const d = JSON.parse(row.payDetail)
+    if (!Array.isArray(d) || !d.length) return '-'
+    return d.map((p) => `【${p.channel}】${Number(p.amount || 0).toFixed(2)}元`).join(' ')
+  } catch (e) { return '-' }
+}
 
 onMounted(async () => {
   load()

@@ -33,10 +33,13 @@ public class EduCourse {
     private Integer classType;
     /** 授课模式（字典 teach_mode：一对一/小班课/大班课/线上课） */
     private Integer teachMode;
-    /** 开课校区（指定模式为逗号分隔中文名，空=全部校区） */
+    /** 开课校区（历史字段：指定模式为逗号分隔中文名；已由 edu_course_campus 中间表接管，仅为兼容保留） */
     private String campus;
-    /** 校区模式 1全部校区 2指定校区 */
+    /** 校区模式 1全部校区 2指定校区（历史字段，已由中间表接管） */
     private Integer campusMode;
+    /** 开课校区列表（edu_course_campus 中间表查询时填充，保存时提交；空=保存时按当期校区字典全量展开） */
+    @TableField(exist = false)
+    private java.util.List<String> campuses;
     /** 按课时收费 0/1 */
     private Integer chargeHour;
     /** 按时间收费 0/1 */

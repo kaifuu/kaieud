@@ -216,6 +216,7 @@ public class TeachController {
         List<EduEnroll> enrolls = enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
                 .eq(EduEnroll::getTeacherId, teacherId())
                 .ne(EduEnroll::getStatus, 3)
+                .ne(EduEnroll::getStatus, 4)
                 .orderByDesc(EduEnroll::getId));
         for (EduEnroll e : enrolls) {
             Map<String, Object> item = new HashMap<>();
@@ -238,7 +239,8 @@ public class TeachController {
         Long cnt = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
                 .eq(EduEnroll::getTeacherId, teacherId())
                 .eq(EduEnroll::getStudentId, studentId)
-                .ne(EduEnroll::getStatus, 3));
+                .ne(EduEnroll::getStatus, 3)
+                .ne(EduEnroll::getStatus, 4));
         if (cnt == null || cnt == 0) throw new BizException("该学生不在您名下，无法查看");
         Map<String, Object> data = maskedStudent(studentId);
         // 该生在本教师名下的报名概览（课程/班级/课时）
@@ -247,6 +249,7 @@ public class TeachController {
                 .eq(EduEnroll::getTeacherId, teacherId())
                 .eq(EduEnroll::getStudentId, studentId)
                 .ne(EduEnroll::getStatus, 3)
+                .ne(EduEnroll::getStatus, 4)
                 .orderByDesc(EduEnroll::getId))) {
             Map<String, Object> r = new HashMap<>();
             EduCourse c = e.getCourseId() == null ? null : courseMapper.selectById(e.getCourseId());
@@ -344,6 +347,7 @@ public class TeachController {
                 .eq(EduEnroll::getTeacherId, teacherId())
                 .isNotNull(EduEnroll::getClazzId)
                 .ne(EduEnroll::getStatus, 3)
+                .ne(EduEnroll::getStatus, 4)
                 .orderByDesc(EduEnroll::getId)
                 .last("limit 1"));
         return enroll == null ? null : clazzMapper.selectById(enroll.getClazzId());
@@ -381,7 +385,8 @@ public class TeachController {
     public Result<Map<String, Object>> myIncome() {
         List<EduEnroll> enrolls = enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
                 .eq(EduEnroll::getTeacherId, teacherId())
-                .ne(EduEnroll::getStatus, 3));
+                .ne(EduEnroll::getStatus, 3)
+                .ne(EduEnroll::getStatus, 4));
         BigDecimal totalAmount = BigDecimal.ZERO;
         BigDecimal paidAmount = BigDecimal.ZERO;
         BigDecimal avgDiscount = BigDecimal.ZERO;

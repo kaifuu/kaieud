@@ -14,8 +14,8 @@ import java.util.*;
 
 /**
  * 租户开通（企业级数据隔离）：
- * 每个租户拥有自己的 组织/用户/角色/菜单 —— 平台保留模板，
- * 开通租户时复制平台模板（菜单树 + 角色 + 角色菜单映射），
+ * 每个租户拥有自己的 组织/用户/角色/菜单/字典 —— 平台保留模板，
+ * 开通租户时复制平台模板（菜单树 + 角色 + 角色菜单映射 + 系统字典），
  * 并把该租户既有用户绑定的平台角色换绑为租户角色，最后生成租户管理员账号。
  */
 @Service
@@ -31,6 +31,8 @@ public class TenantProvisionService {
     private final SysRoleMenuMapper roleMenuMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final SysUserMapper userMapper;
+    private final SysDictMapper dictMapper;
+    private final SysDictTypeMapper dictTypeMapper;
     private final SysPurgeLogMapper purgeLogMapper;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
@@ -66,7 +68,11 @@ public class TenantProvisionService {
             }
         }
 
-        // 2. 角色处理：历史平台角色实际归属租户1（sys_role.tenant_id 默认1），
+        // 2. 系统字典：从平台模板(租户0)按「类型+值」补齐缺失项（幂等；
+        //    新开企业自带系统字典，已有自定义字典的租户不受影响）
+        seedDicts(tenantId);
+
+        // 3. 角色处理：历史平台角色实际归属租户1（sys_role.tenant_id 默认1），
         //    以租户1角色为模板源；菜单引用按「类型+路径」键重映射到本租户菜单（幂等）
         List<SysRole> templateRoles = roleMapper.selectList(new LambdaQueryWrapper<SysRole>()
                 .eq(SysRole::getTenantId, 1L));
@@ -115,7 +121,7 @@ public class TenantProvisionService {
             }
         }
 
-        // 3. 租户管理员：每个企业统一的 admin 账号（用户名租户内唯一），初始密码 123456
+        // 4. 租户管理员：每个企业统一的 admin 账号（用户名租户内唯一），初始密码 123456
         SysUser existing = userMapper.selectOne(new LambdaQueryWrapper<SysUser>()
                 .eq(SysUser::getTenantId, tenantId)
                 .eq(SysUser::getUsername, "admin"));
@@ -131,6 +137,42 @@ public class TenantProvisionService {
         }
         tenant.setAdminUsername("admin");
         tenantMapper.updateById(tenant);
+    }
+
+    /**
+     * 系统字典种子（幂等）：字典值按「类型+值」、字典类型按「类型」比对，
+     * 仅补齐模板(租户0)有而本租户缺失的项，不覆盖租户已维护的数据。
+     */
+    private void seedDicts(Long tenantId) {
+        List<SysDict> templates = dictMapper.selectList(new LambdaQueryWrapper<SysDict>()
+                .eq(SysDict::getTenantId, 0L).orderByAsc(SysDict::getDictType, SysDict::getSort));
+        if (!templates.isEmpty()) {
+            Set<String> owned = new HashSet<>();
+            for (SysDict d : dictMapper.selectList(new LambdaQueryWrapper<SysDict>()
+                    .eq(SysDict::getTenantId, tenantId)))
+                owned.add(d.getDictType() + ':' + d.getValue());
+            for (SysDict t : templates) {
+                if (owned.contains(t.getDictType() + ':' + t.getValue())) continue;
+                SysDict copy = new SysDict();
+                copy.setTenantId(tenantId);
+                copy.setDictType(t.getDictType());
+                copy.setLabel(t.getLabel());
+                copy.setValue(t.getValue());
+                copy.setSort(t.getSort());
+                dictMapper.insert(copy);
+            }
+        }
+        for (SysDictType t : dictTypeMapper.selectList(new LambdaQueryWrapper<SysDictType>()
+                .eq(SysDictType::getTenantId, 0L))) {
+            if (dictTypeMapper.selectCount(new LambdaQueryWrapper<SysDictType>()
+                    .eq(SysDictType::getTenantId, tenantId)
+                    .eq(SysDictType::getDictType, t.getDictType())) > 0) continue;
+            SysDictType copy = new SysDictType();
+            copy.setTenantId(tenantId);
+            copy.setDictType(t.getDictType());
+            copy.setName(t.getName());
+            dictTypeMapper.insert(copy);
+        }
     }
 
     /** 租户菜单键表：type:path -> id（tenantId=0 表示平台模板） */
@@ -206,6 +248,7 @@ public class TenantProvisionService {
     /** 带 tenant_id 的业务/系统表（物理清除范围）；sys_log 审计日志永不删除 */
     private static final String[] PURGE_TABLES = {
             "sys_notice", "sys_notify_config", "sys_org", "sys_menu", "sys_role",
+            "sys_dict", "sys_dict_type",
             "edu_schedule_log", "edu_schedule", "edu_absence", "edu_leave",
             "edu_consume", "edu_enroll", "edu_evaluation", "edu_payment_log", "edu_payment",
             "edu_refund", "edu_contract", "edu_clazz", "edu_classroom", "edu_course",

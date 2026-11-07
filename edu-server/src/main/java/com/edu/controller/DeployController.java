@@ -12,6 +12,7 @@ import com.edu.mapper.SysDeployRecordMapper;
 import com.edu.mapper.SysDeployTargetMapper;
 import com.edu.security.AuthContext;
 import com.edu.security.DeployCrypto;
+import org.springframework.core.io.ClassPathResource;
 import com.edu.service.ContainerDeployService;
 import com.edu.service.SshService;
 import lombok.Data;
@@ -212,6 +213,86 @@ public class DeployController {
         } catch (Exception e) {
             return Result.error("初始化失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
         }
+    }
+
+    /**
+     * 补丁升级：把 jar 内 sql/patch_*.sql 增量脚本逐条执行到目标外部库。
+     * 可重复执行：重复列/重复表(1050/1060/1061/1062)自动跳过并计数，其余错误逐条记录不中断。
+     */
+    @PostMapping("/targets/{id}/patch-db")
+    @Log("补丁升级远程数据库")
+    public Result<Map<String, Object>> patchDb(@PathVariable Long id) {
+        platformOnly();
+        SysDeployTarget t = targetMapper.selectById(id);
+        if (t == null) return Result.error("目标不存在");
+        if (t.getDbMode() == null || t.getDbMode() != 2)
+            return Result.error("仅外部数据库模式支持补丁升级");
+        if (!StringUtils.hasText(t.getDbHost()) || !StringUtils.hasText(t.getDbUsername()))
+            return Result.error("请先保存并测试数据库连接");
+
+        String patch;
+        try {
+            ClassPathResource res = new ClassPathResource("sql/patch_v2.55.sql");
+            byte[] buf = new byte[(int) res.contentLength()];
+            try (java.io.InputStream in = res.getInputStream()) {
+                int read = 0;
+                while (read < buf.length) {
+                    int n = in.read(buf, read, buf.length - read);
+                    if (n < 0) break;
+                    read += n;
+                }
+                patch = new String(buf, 0, read, java.nio.charset.StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            return Result.error("补丁文件读取失败：" + e.getMessage());
+        }
+
+        String pass = t.getDbSecret() == null ? "" : crypto.decrypt(t.getDbSecret());
+        String base = StringUtils.hasText(t.getDbName()) ? t.getDbName().trim() : "edu_course";
+        String url = "jdbc:mysql://" + t.getDbHost() + ":" + (t.getDbPort() == null ? 3306 : t.getDbPort()) + "/" + base
+                + "?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false"
+                + "&allowPublicKeyRetrieval=true&connectTimeout=6000&socketTimeout=300000&allowMultiQueries=false";
+        long t0 = System.currentTimeMillis();
+        StringBuilder log = new StringBuilder();
+        int applied = 0, skipped = 0, failed = 0;
+        try (java.sql.Connection c = java.sql.DriverManager.getConnection(url, t.getDbUsername(), pass);
+             java.sql.Statement st = c.createStatement()) {
+            for (String raw : patch.split(";\\r?\\n")) {
+                // 去掉注释行后合并为单条语句
+                StringBuilder one = new StringBuilder();
+                for (String line : raw.split("\\r?\\n")) {
+                    if (line.trim().startsWith("--")) continue;
+                    one.append(line).append('\n');
+                }
+                String sql = one.toString().trim();
+                if (sql.isEmpty()) continue;
+                String head = sql.length() > 60 ? sql.substring(0, 60) + "…" : sql;
+                try {
+                    st.execute(sql);
+                    applied++;
+                    log.append("[OK]      ").append(head).append('\n');
+                } catch (java.sql.SQLException e) {
+                    int code = e.getErrorCode();
+                    if (code == 1050 || code == 1060 || code == 1061 || code == 1062) {
+                        skipped++;
+                        log.append("[SKIP]    ").append(head).append("  (").append(e.getMessage()).append(")\n");
+                    } else {
+                        failed++;
+                        log.append("[FAIL]    ").append(head).append("  (").append(e.getMessage()).append(")\n");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return Result.error("补丁执行失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())
+                    + "\n" + log);
+        }
+        Map<String, Object> r = new HashMap<>();
+        r.put("applied", applied);
+        r.put("skipped", skipped);
+        r.put("failed", failed);
+        r.put("seconds", (System.currentTimeMillis() - t0) / 1000.0);
+        r.put("log", log.toString());
+        return Result.ok(r);
     }
 
 

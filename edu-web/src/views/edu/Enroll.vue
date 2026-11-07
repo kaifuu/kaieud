@@ -12,7 +12,7 @@
           <el-option v-for="s in students" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
         <el-select v-model="query.status" placeholder="状态" clearable style="width: 120px">
-          <el-option label="在读" :value="1" /><el-option label="已结课" :value="2" /><el-option label="已退费" :value="3" />
+          <el-option label="在读" :value="1" /><el-option label="已结课" :value="2" /><el-option label="已退费" :value="3" /><el-option label="已转课" :value="4" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button @click="doExport">导出</el-button>
@@ -45,7 +45,7 @@
         <el-table-column v-if="cols.status" label="状态" width="90" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="['', 'success', 'info', 'danger'][row.status]" effect="plain">
-              {{ ['', '在读', '已结课', '已退费'][row.status] }}
+              {{ ['', '在读', '已结课', '已退费', '已转课'][row.status] }}
             </el-tag>
           </template>
         </el-table-column>
@@ -149,7 +149,7 @@ const detailFields = [
       { prop: 'totalHours', label: '总课时' }, { prop: 'usedHours', label: '已用课时' },
       { prop: 'price', label: '单价(元)' }, { prop: 'discount', label: '折扣(%)' },
       { prop: 'totalAmount', label: '应收总额(元)' }, { prop: 'paidAmount', label: '已缴金额(元)' },
-      { prop: 'status', label: '状态', map: { 1: '在读', 2: '已结课', 3: '已退费' } }
+      { prop: 'status', label: '状态', map: { 1: '在读', 2: '已结课', 3: '已退费', 4: '已转课' } }
     ]
 function openDetail(row) {
   detailRow.value = row
@@ -202,7 +202,7 @@ function doExport() {
       { label: '课程', prop: 'courseId', fmt: (v) => courseName(v) },
       { label: '总课时', prop: 'totalHours' }, { label: '已消课时', prop: 'usedHours' },
       { label: '应收', prop: 'totalAmount' }, { label: '已缴', prop: 'paidAmount' },
-      { label: '状态', prop: 'status', fmt: (v) => ['', '在读', '已结课', '已退费'][v] || '' }
+      { label: '状态', prop: 'status', fmt: (v) => ['', '在读', '已结课', '已退费', '已转课'][v] || '' }
     ], rows.value)
 }
 onMounted(async () => {

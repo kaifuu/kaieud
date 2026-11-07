@@ -41,7 +41,7 @@
         <el-table-column label="剩余课时" width="100" show-overflow-tooltip><template #default="{ row }">{{ row.totalHours - row.usedHours }}</template></el-table-column>
         <el-table-column label="状态" width="90" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ ['', '在读', '已结课', '已退费'][row.status] }}</el-tag>
+            <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ ['', '在读', '已结课', '已退费', '已转课'][row.status] }}</el-tag>
           </template>
         </el-table-column>
       </el-table>

@@ -235,7 +235,9 @@
           <el-form-item label="连接测试">
             <el-button :loading="dbTesting" @click="testDb">测试连接</el-button>
             <el-button :loading="dbIniting" type="warning" @click="initDb">构建初始表</el-button>
+            <el-button :loading="dbPatching" type="primary" @click="patchDb">补丁升级</el-button>
             <div class="form-tip">构建初始表：在远程库自动建一套系统表与基础数据（仅平台管理员 admin，无演示企业/业务数据）；库中已有表时拒绝执行以防覆盖</div>
+            <div class="form-tip">补丁升级：把版本升级产生的增量SQL（v2.41→v2.55：课程收费模式/套餐改造/报名单支付字段/字典）逐条打到远程库，可重复执行</div>
             <span v-if="tForm.lastDbTestOk === 1" style="color: #12b76a; margin-left: 8px">✓ {{ (tForm.lastDbTestMsg || '').slice(0, 30) }}</span>
             <span v-else-if="tForm.lastDbTestOk === 0" style="color: #f04438; margin-left: 8px">{{ (tForm.lastDbTestMsg || '失败').slice(0, 40) }}</span>
             <div class="form-tip">会自动保存当前配置再测试；部署后容器将默认连接此数据库</div>
@@ -291,6 +293,17 @@
         <el-button @click="dVisible = false">取消</el-button>
         <el-button type="primary" :loading="dSaving" @click="doDeploy">开始部署</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 补丁升级结果明细 -->
+    <el-dialog v-model="patchVisible" title="补丁升级结果" width="720px" append-to-body>
+      <div v-if="patchResult" class="patch-summary">
+        <span>执行 <b class="ps-ok">{{ patchResult.applied }}</b> 条</span>
+        <span>跳过（已应用）<b>{{ patchResult.skipped }}</b> 条</span>
+        <span>失败 <b :class="patchResult.failed > 0 ? 'ps-fail' : ''">{{ patchResult.failed }}</b> 条</span>
+        <span>耗时 {{ patchResult.seconds }} 秒</span>
+      </div>
+      <pre class="patch-log">{{ patchResult?.log || '无明细' }}</pre>
     </el-dialog>
 
     <!-- 日志抽屉（RUNNING 自动轮询） -->
@@ -390,6 +403,26 @@ async function initDb() {
       '构建成功', { type: 'success' })
     loadTargets()
   } catch (e) { /* 拦截器提示 */ } finally { dbIniting.value = false }
+}
+
+/* 补丁升级：增量SQL打到远程库，结果明细弹窗展示 */
+const dbPatching = ref(false)
+const patchResult = ref(null)
+const patchVisible = ref(false)
+async function patchDb() {
+  await ElMessageBox.confirm(
+    '将把增量补丁 SQL（v2.41→v2.55：课程收费模式/定价标准表/套餐改造/报名单支付与经办字段/系统字典）逐条执行到远程数据库。\n补丁可重复执行：已应用过的语句会自动跳过。确认继续？',
+    '补丁升级', { type: 'warning', confirmButtonText: '开始升级', cancelButtonText: '取消' })
+  dbPatching.value = true
+  try {
+    const id = await doSaveTarget()
+    if (!id) return
+    const r = await api.deployPatchDb(id)
+    patchResult.value = r || {}
+    patchVisible.value = true
+    if ((r?.failed ?? 0) === 0) ElMessage.success(`补丁完成：执行 ${r?.applied ?? 0} 条，跳过 ${r?.skipped ?? 0} 条`)
+    else ElMessage.warning(`有 ${r.failed} 条执行失败，请查看明细`)
+  } catch (e) { /* 拦截器提示 */ } finally { dbPatching.value = false }
 }
 
 async function testDb() {
@@ -548,6 +581,16 @@ onBeforeUnmount(() => clearInterval(timer))
 
 <style scoped>
 .form-tip { font-size: 12px; color: #8fa8c4; line-height: 1.5; margin-top: 4px; }
+/* 补丁升级结果 */
+.patch-summary { display: flex; gap: 22px; font-size: 13.5px; color: #475467; margin-bottom: 10px; }
+.patch-summary b { font-size: 16px; color: #142a44; }
+.ps-ok { color: #12b76a !important; }
+.ps-fail { color: #f04438 !important; }
+.patch-log {
+  max-height: 420px; overflow: auto; background: #0d223a; color: #cfe3ff;
+  font-size: 12px; line-height: 1.7; padding: 12px 14px; border-radius: 8px;
+  white-space: pre-wrap; word-break: break-all; margin: 0;
+}
 .log-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .log-body {
   background: #0d1526; color: #c9e3ff; border-radius: 10px;

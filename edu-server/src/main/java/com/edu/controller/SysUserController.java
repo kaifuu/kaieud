@@ -219,6 +219,7 @@ public class SysUserController {
             st.setParentName(user.getParentName());
             st.setParentPhone(user.getParentPhone());
             st.setBackupPhone(user.getBackupPhone());
+            fillStudentPhone(st, user);
             st.setAdvisor(user.getAdvisor());
             st.setTags(user.getTags());
             st.setAddress(user.getAddress());
@@ -247,6 +248,7 @@ public class SysUserController {
         st.setSchool(user.getSchool());
         st.setParentName(user.getParentName());
         st.setParentPhone(user.getParentPhone());
+        fillStudentPhone(st, user);
         st.setStatus(1);
         st.setDeleted(0);
         studentMapper.insert(st);
@@ -272,6 +274,14 @@ public class SysUserController {
         teacherMapper.insert(t);
     }
 
+    /** 账号手机号补写学生档案：仅当家长/备用电话均为空时落为家长电话（不覆盖已维护数据） */
+    private void fillStudentPhone(com.edu.entity.EduStudent st, SysUser user) {
+        if (StringUtils.hasText(user.getPhone())
+                && !StringUtils.hasText(st.getParentPhone())
+                && !StringUtils.hasText(st.getBackupPhone()))
+            st.setParentPhone(user.getPhone());
+    }
+
     /** 编辑用户时同步档案；"兼任教师"开关负责教师档案的建立/移除 */
     private void syncUserProfile(SysUser user) {
         Integer type = user.getUserType();
@@ -291,6 +301,8 @@ public class SysUserController {
                 if (user.getGender() != null) st.setGender(user.getGender());
                 if (StringUtils.hasText(user.getGrade())) st.setGrade(user.getGrade());
                 if (StringUtils.hasText(user.getSchool())) st.setSchool(user.getSchool());
+                // 手机号补写：用户管理补录账号手机号且档案两个电话都为空时，落为家长电话
+                fillStudentPhone(st, user);
                 studentMapper.updateById(st);
             }
         } else {
@@ -331,6 +343,7 @@ public class SysUserController {
                 if (user.getGender() != null) st.setGender(user.getGender());
                 if (StringUtils.hasText(user.getGrade())) st.setGrade(user.getGrade());
                 if (StringUtils.hasText(user.getSchool())) st.setSchool(user.getSchool());
+                fillStudentPhone(st, user);
                 studentMapper.updateById(st);
             } else if (st != null) {
                 // 取消兼任：学生档案已被业务引用则拒绝，避免排课/报名/咨询记录失去归属

@@ -20,6 +20,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -103,6 +104,41 @@ public class EduAccountController {
         return Result.ok();
     }
 
+    /**
+     * 无合同余额充值（报名/续报办理中心-余额充值入口）：预存学费到学员账户，
+     * 后续报名时以余额抵扣；多账户支付明细与经办信息随单独立字段留档。
+     */
+    @PostMapping("/recharge-balance")
+    @Log("学员余额充值")
+    public Result<Void> rechargeBalance(@RequestBody BalanceRechargeDTO dto) {
+        if (dto.getStudentId() == null) return Result.error("请选择学员");
+        if (dto.getAmount() == null || dto.getAmount().compareTo(BigDecimal.ZERO) <= 0)
+            return Result.error("充值金额必须大于 0");
+        if (dto.getPayDetail() != null && dto.getPayDetail().length() > 1000)
+            return Result.error("支付明细过长，请减少支付账户条数");
+        EduStudent s = studentMapper.selectById(dto.getStudentId());
+        if (s == null || s.getDeleted() == 1) return Result.error("学员不存在或已删除");
+
+        EduAccountLog log = new EduAccountLog();
+        log.setTenantId(s.getTenantId());
+        log.setStudentId(dto.getStudentId());
+        log.setType(1);
+        log.setAmount(dto.getAmount());
+        log.setCampus(dto.getCampus());
+        log.setPayDetail(dto.getPayDetail());
+        log.setSource(dto.getSource());
+        log.setHandleDate(dto.getHandleDate());
+        log.setOrderTaker(dto.getOrderTaker());
+        log.setConsultant(dto.getConsultant());
+        // 备注：余额充值：原因（支付渠道/校区等已有独立字段，不再并入备注）
+        StringBuilder remark = new StringBuilder("余额充值");
+        if (StringUtils.hasText(dto.getRemark())) remark.append("：").append(dto.getRemark());
+        log.setRemark(remark.toString());
+        log.setOperator(AuthContext.get().getRealName());
+        accountMapper.insert(log);
+        return Result.ok();
+    }
+
     /** 流水附学生姓名/合同编号与课程 */
     private List<Map<String, Object>> enrich(List<EduAccountLog> records) {
         if (records.isEmpty()) return new ArrayList<>();
@@ -122,6 +158,12 @@ public class EduAccountController {
             m.put("type", l.getType());
             m.put("amount", l.getAmount());
             m.put("hours", l.getHours());
+            m.put("campus", l.getCampus());
+            m.put("payDetail", l.getPayDetail());
+            m.put("source", l.getSource());
+            m.put("handleDate", l.getHandleDate());
+            m.put("orderTaker", l.getOrderTaker());
+            m.put("consultant", l.getConsultant());
             EduContract c = l.getContractId() == null ? null : cMap.get(l.getContractId());
             m.put("contractNo", c == null ? "-" : c.getContractNo());
             m.put("remark", l.getRemark());
@@ -145,6 +187,27 @@ public class EduAccountController {
         private Long studentId;
         private Long contractId;
         private BigDecimal amount;
+        private String remark;
+    }
+
+    /** 无合同余额充值（办理中心入口） */
+    @Data
+    public static class BalanceRechargeDTO {
+        private Long studentId;
+        /** 充值金额（支付账户实收合计） */
+        private BigDecimal amount;
+        /** 支付明细JSON [{channel,account,serial,amount}]（多账户支付留档） */
+        private String payDetail;
+        /** 经办校区 */
+        private String campus;
+        /** 销售来源 */
+        private String source;
+        /** 经办日期 */
+        private LocalDate handleDate;
+        /** 采单员 */
+        private String orderTaker;
+        /** 咨询顾问 */
+        private String consultant;
         private String remark;
     }
 }

@@ -21,6 +21,9 @@
         <el-select v-model="query.status" placeholder="状态" clearable style="width: 100px">
           <el-option label="上架" :value="1" /><el-option label="下架" :value="0" />
         </el-select>
+        <el-select v-model="query.campus" placeholder="开课校区" clearable style="width: 130px">
+          <el-option v-for="c in campusChecks" :key="c" :label="c" :value="c" />
+        </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button @click="doExport">导出</el-button>
         <div style="flex: 1"></div>
@@ -55,8 +58,8 @@
         <el-table-column v-if="cols.teachMode" prop="teachMode" label="授课模式" width="88" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ row.teachMode ? dictStore.label('class_type', row.teachMode) : '-' }}</template>
         </el-table-column>
-        <el-table-column v-if="cols.campus" label="开课校区" width="100" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.campusMode === 2 ? (row.campus || '-') : '全部校区' }}</template>
+        <el-table-column v-if="cols.campus" label="开课校区" width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ (row.campuses || []).join('/') || '-' }}</template>
         </el-table-column>
         <el-table-column v-if="cols.grade" prop="grade" label="适用年级" width="86" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ row.grade || '不限' }}</template>
@@ -242,7 +245,7 @@ import { exportXlsx } from '../../utils/export'
 import { useDictStore } from '../../store/dict'
 
 const dictStore = useDictStore()
-const query = reactive({ keyword: '', category: null, teachMode: null, status: null })
+const query = reactive({ keyword: '', category: null, teachMode: null, status: null, campus: null })
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
   usePage((q) => api.coursePage(q), query)
 
@@ -380,7 +383,15 @@ async function openDetail(row) {
 }
 /** 行数据 + 定价载入表单 */
 async function loadIntoForm(row) {
-  form.value = { ...row, campusList: (row.campus || '').split(',').filter(Boolean) }
+  // 校区列表来自中间表（campuses）；恰好覆盖全部校区字典时回显为"全部校区"模式
+  const campusList = row.campuses || []
+  const all = campusChecks.value
+  const coversAll = all.length > 0 && all.every((c) => campusList.includes(c))
+  form.value = {
+    ...row,
+    campusMode: campusList.length && !coversAll ? 2 : 1,
+    campusList,
+  }
   const prices = (await api.coursePrices(row.id)) || []
   hourPrices.value = prices.filter((p) => p.chargeMode === 1)
     .map((p) => ({ campus: p.campus, hours: p.hours, totalAmount: Number(p.totalAmount) }))
@@ -409,7 +420,8 @@ async function save() {
     hourPrices.value.forEach((r, i) => prices.push({ chargeMode: 1, campus: r.campus, hours: r.hours, totalAmount: r.totalAmount, sort: i }))
   if (f.chargeTime === 1)
     timePrices.value.forEach((r, i) => prices.push({ chargeMode: 2, campus: r.campus, hours: 1, timePeriod: r.timePeriod, totalAmount: r.totalAmount, sort: i }))
-  const payload = { ...f, campus: f.campusMode === 2 ? (f.campusList || []).join(',') : '', prices }
+  // campuses 数组提交：空数组=全部校区（后端按当期校区字典物化为多行中间表记录）
+  const payload = { ...f, campuses: f.campusMode === 2 ? (f.campusList || []) : [], prices }
   saving.value = true
   try {
     if (f.id) await api.courseUpdate(payload)
@@ -435,7 +447,7 @@ function doExport() {
     { label: '课程名称', prop: 'name' },
     { label: '科目', prop: 'category', fmt: (v) => dictStore.label('course_category', v) },
     { label: '授课模式', prop: 'teachMode', fmt: (v) => (v ? dictStore.label('class_type', v) : '-') },
-    { label: '开课校区', prop: 'campus', fmt: (v, row) => (row.campusMode === 2 ? v : '全部校区') },
+    { label: '开课校区', prop: 'campuses', fmt: (v) => (v || []).join('/') || '-' },
     { label: '适用年级', prop: 'grade' },
     { label: '状态', prop: 'status', fmt: (v) => (v === 1 ? '上架' : '下架') }
   ], rows.value)

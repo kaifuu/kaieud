@@ -36,7 +36,7 @@
         <template #default="{ row }">¥{{ row.enroll.totalAmount }}</template>
       </el-table-column>
       <el-table-column label="状态" width="90" show-overflow-tooltip>
-        <template #default="{ row }">{{ ['', '在读', '已结课', '已退费'][row.enroll.status] }}</template>
+        <template #default="{ row }">{{ ['', '在读', '已结课', '已退费', '已转课'][row.enroll.status] }}</template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
@@ -92,7 +92,7 @@
             <template #default="{ row }">{{ row.usedHours }} / {{ row.totalHours }}</template>
           </el-table-column>
           <el-table-column label="状态" width="70" show-overflow-tooltip>
-            <template #default="{ row }">{{ ['', '在读', '已结课', '已退费'][row.status] }}</template>
+            <template #default="{ row }">{{ ['', '在读', '已结课', '已退费', '已转课'][row.status] }}</template>
           </el-table-column>
         </el-table>
       </div>

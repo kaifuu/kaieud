@@ -32,6 +32,9 @@ public class EduStudent {
     /** 1在读2停课3结课4退费 */
     private Integer status;
     private Integer deleted;
+    /** 有效联系电话（家长/备用/账号手机号依次取，非表字段：列表接口填充，供搜索与展示） */
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private String phone;
     private Long orgId;
     /** 学管师用户ID */
     private Long managerId;
