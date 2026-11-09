@@ -38,6 +38,7 @@ public class EduAccountController {
     private final EduAccountLogMapper accountMapper;
     private final EduStudentMapper studentMapper;
     private final EduContractMapper contractMapper;
+    private final com.edu.common.RepeatGuard repeatGuard;
 
     /** 流水分页：按学生/类型/时间筛选，附学生姓名与合同信息 */
     @GetMapping("/page")
@@ -111,6 +112,12 @@ public class EduAccountController {
     @PostMapping("/recharge-balance")
     @Log("学员余额充值")
     public Result<Void> rechargeBalance(@RequestBody BalanceRechargeDTO dto) {
+        // 重复提交防护：同一用户5秒内完全相同的充值请求只放行一次
+        com.edu.security.LoginUser u = AuthContext.get();
+        String fp = u.getTenantId() + ":" + u.getId() + ":recharge:"
+                + dto.getStudentId() + ":" + dto.getAmount() + ":" + dto.getPayDetail();
+        if (!repeatGuard.tryAcquire(fp))
+            return Result.error("充值已提交，请勿重复提交");
         if (dto.getStudentId() == null) return Result.error("请选择学员");
         if (dto.getAmount() == null || dto.getAmount().compareTo(BigDecimal.ZERO) <= 0)
             return Result.error("充值金额必须大于 0");
@@ -137,6 +144,47 @@ public class EduAccountController {
         log.setOperator(AuthContext.get().getRealName());
         accountMapper.insert(log);
         return Result.ok();
+    }
+
+    /** 账户流水编辑（办理中心-余额充值/转课/退费记录）：经办信息可改；
+     *  充值类(type1)金额与支付明细/备注可改，转结类(type2)金额为结算结果不可改（备注为审计留痕不可改） */
+    @PutMapping("/log")
+    @Log("编辑账户流水")
+    public Result<Void> updateLog(@RequestBody LogUpdateDTO dto) {
+        if (dto.getId() == null) return Result.error("缺少流水ID");
+        EduAccountLog l = accountMapper.selectById(dto.getId());
+        if (l == null) return Result.error("流水不存在");
+        boolean recharge = l.getType() != null && l.getType() == 1;
+        if (recharge) {
+            if (dto.getAmount() != null && dto.getAmount().compareTo(BigDecimal.ZERO) > 0)
+                l.setAmount(dto.getAmount());
+            if (dto.getPayDetail() != null) l.setPayDetail(dto.getPayDetail());
+            if (dto.getRemark() != null) {
+                String r = dto.getRemark().replaceFirst("^余额充值：?", "").trim();
+                l.setRemark(r.isEmpty() ? "余额充值" : "余额充值：" + r);
+            }
+        }
+        if (dto.getCampus() != null) l.setCampus(dto.getCampus());
+        if (dto.getSource() != null) l.setSource(dto.getSource());
+        if (dto.getHandleDate() != null) l.setHandleDate(dto.getHandleDate());
+        if (dto.getOrderTaker() != null) l.setOrderTaker(dto.getOrderTaker());
+        if (dto.getConsultant() != null) l.setConsultant(dto.getConsultant());
+        accountMapper.updateById(l);
+        return Result.ok();
+    }
+
+    /** 流水编辑入参（金额/支付明细/备注仅充值类生效） */
+    @Data
+    public static class LogUpdateDTO {
+        private Long id;
+        private BigDecimal amount;
+        private String payDetail;
+        private String campus;
+        private String source;
+        private LocalDate handleDate;
+        private String orderTaker;
+        private String consultant;
+        private String remark;
     }
 
     /** 流水附学生姓名/合同编号与课程 */

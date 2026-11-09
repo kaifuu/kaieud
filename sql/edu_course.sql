@@ -1496,3 +1496,72 @@ WHERE e.campus IS NULL
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-11-06  9:51:18
+
+-- ----- 积分管理（办理中心-积分）v2.61 -----
+CREATE TABLE IF NOT EXISTS `edu_score_log` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `tenant_id` BIGINT NOT NULL DEFAULT 0 COMMENT '租户',
+  `student_id` BIGINT NOT NULL COMMENT '学员',
+  `type` TINYINT NOT NULL COMMENT '1增加 2兑换',
+  `points` DECIMAL(10,2) NOT NULL COMMENT '本次积分(正数)',
+  `campus` VARCHAR(50) DEFAULT NULL COMMENT '经办校区',
+  `source` VARCHAR(50) DEFAULT NULL COMMENT '销售来源',
+  `handle_date` DATE DEFAULT NULL COMMENT '经办日期',
+  `order_taker` VARCHAR(50) DEFAULT NULL COMMENT '采单员',
+  `consultant` VARCHAR(50) DEFAULT NULL COMMENT '咨询顾问',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注/摘要',
+  `operator` VARCHAR(50) DEFAULT NULL COMMENT '操作人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_score_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学员积分流水';
+
+-- ----- v2.62 教材杂费（办理中心）-----
+CREATE TABLE IF NOT EXISTS `edu_material` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `tenant_id` BIGINT NOT NULL DEFAULT 0 COMMENT '租户',
+  `name` VARCHAR(100) NOT NULL COMMENT '项目名称',
+  `price` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '单价',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1上架 0停用',
+  `sort` INT DEFAULT 0 COMMENT '排序',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), KEY `idx_material_tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教材杂费项目';
+CREATE TABLE IF NOT EXISTS `edu_material_log` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `tenant_id` BIGINT NOT NULL DEFAULT 0 COMMENT '租户',
+  `student_id` BIGINT NOT NULL COMMENT '学员',
+  `items` TEXT COMMENT '明细JSON[{materialId,name,price,qty,got}]',
+  `amount` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '应收小计',
+  `paid_amount` DECIMAL(10,2) DEFAULT 0 COMMENT '实收合计',
+  `pay_detail` VARCHAR(1000) COMMENT '支付明细JSON',
+  `campus` VARCHAR(50) DEFAULT NULL COMMENT '经办校区',
+  `source` VARCHAR(50) DEFAULT NULL COMMENT '销售来源',
+  `handle_date` DATE DEFAULT NULL COMMENT '经办日期',
+  `order_taker` VARCHAR(50) DEFAULT NULL COMMENT '采单员',
+  `consultant` VARCHAR(50) DEFAULT NULL COMMENT '咨询顾问',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注/摘要',
+  `operator` VARCHAR(50) DEFAULT NULL COMMENT '操作人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), KEY `idx_ml_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教材杂费办理流水';
+
+-- ----- v2.63 补费（办理中心）-----
+CREATE TABLE IF NOT EXISTS `edu_supplement_log` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `tenant_id` BIGINT NOT NULL DEFAULT 0 COMMENT '租户',
+  `student_id` BIGINT NOT NULL COMMENT '学员',
+  `items` TEXT COMMENT '补费明细JSON[{kind,refId,rid,typeName,name,arrears,amount}]',
+  `amount` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '补费金额合计',
+  `paid_amount` DECIMAL(10,2) DEFAULT 0 COMMENT '实收合计',
+  `pay_detail` VARCHAR(1000) COMMENT '支付明细JSON',
+  `campus` VARCHAR(50) DEFAULT NULL COMMENT '经办校区',
+  `source` VARCHAR(50) DEFAULT NULL COMMENT '销售来源',
+  `handle_date` DATE DEFAULT NULL COMMENT '经办日期',
+  `order_taker` VARCHAR(50) DEFAULT NULL COMMENT '采单员',
+  `consultant` VARCHAR(50) DEFAULT NULL COMMENT '咨询顾问',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注/摘要',
+  `operator` VARCHAR(50) DEFAULT NULL COMMENT '操作人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), KEY `idx_sl_student` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='补费办理流水';

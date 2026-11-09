@@ -28,6 +28,201 @@ public class EduEnrollController {
     private final com.edu.mapper.EduEnrollLogMapper enrollLogMapper;
     private final com.edu.mapper.EduCoursePriceMapper coursePriceMapper;
     private final com.edu.mapper.EduCourseCampusMapper courseCampusMapper;
+    private final com.edu.common.RepeatGuard repeatGuard;
+    private final com.edu.mapper.EduPaymentMapper paymentMapper;
+    private final com.edu.mapper.EduScoreLogMapper scoreMapper;
+    private final com.edu.mapper.EduMaterialLogMapper materialLogMapper;
+    private final com.edu.mapper.EduSupplementLogMapper supplementLogMapper;
+
+    /**
+     * 办理中心统一记录列表：报名/续报（edu_enroll）+ 余额充值/退费/转课（账户流水）
+     * + 补费（edu_payment），按经办日期倒序。行上 kind 标记来源，供前端「编辑」
+     * 跳转对应办理页：enroll=报名/续报编辑、log=按类型编辑流水经办信息、payment=缴费管理。
+     */
+    @GetMapping("/handle-records")
+    public Result<?> handleRecords(@RequestParam(defaultValue = "1") long page,
+                                   @RequestParam(defaultValue = "200") long size,
+                                   @RequestParam(required = false) String type,
+                                   @RequestParam(required = false) Long studentId) {
+        java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+        // 1) 报名单：在读/已结课=报名；已转课=转课转出单；退费退出的=退费单
+        for (EduEnroll e : enrollMapper.selectList(
+                new LambdaQueryWrapper<EduEnroll>()
+                        .eq(studentId != null, EduEnroll::getStudentId, studentId)
+                        .orderByDesc(EduEnroll::getId))) {
+            String t = e.getStatus() != null && e.getStatus() == 4 ? "转课"
+                    : e.getStatus() != null && e.getStatus() == 3
+                      && e.getRemark() != null && e.getRemark().startsWith("退费退出") ? "退费" : "报名";
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("rid", "EN" + e.getId());
+            m.put("kind", "enroll");
+            m.put("id", e.getId());
+            m.put("refId", e.getId());
+            m.put("type", t);
+            m.put("studentId", e.getStudentId());
+            m.put("courseId", e.getCourseId());
+            m.put("packageName", e.getPackageName());
+            m.put("totalHours", e.getTotalHours());
+            m.put("price", e.getPrice());
+            m.put("discountAmount", e.getDiscountAmount());
+            m.put("totalAmount", e.getTotalAmount());
+            m.put("paidAmount", e.getPaidAmount());
+            m.put("payDetail", e.getPayDetail());
+            m.put("campus", e.getCampus());
+            m.put("clazzId", e.getClazzId());
+            m.put("teacherId", e.getTeacherId());
+            m.put("validDate", e.getValidDate());
+            m.put("handleDate", e.getHandleDate());
+            m.put("handler", e.getHandler());
+            m.put("orderTaker", e.getOrderTaker());
+            m.put("consultant", e.getConsultant());
+            m.put("remark", e.getRemark());
+            m.put("source", e.getSource());
+            m.put("status", e.getStatus());
+            m.put("createTime", e.getCreateTime() == null ? null : e.getCreateTime().toString());
+            rows.add(m);
+        }
+        // 2) 账户流水：充值(type1)=余额充值；转课转出/退费转结(type2)按备注前缀分类
+        for (com.edu.entity.EduAccountLog l : accountMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduAccountLog>()
+                        .eq(studentId != null, com.edu.entity.EduAccountLog::getStudentId, studentId)
+                        .orderByDesc(com.edu.entity.EduAccountLog::getId))) {
+            String rm = l.getRemark() == null ? "" : l.getRemark();
+            String t;
+            if (l.getType() != null && l.getType() == 1) t = "充值";
+            else if (rm.startsWith("转课转出学费入账")) t = "转课";
+            else if (l.getType() != null && l.getType() == 2) t = "退费";
+            else continue;
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("rid", "AL" + l.getId());
+            m.put("kind", "log");
+            m.put("refId", l.getId());
+            m.put("type", t);
+            m.put("studentId", l.getStudentId());
+            m.put("amount", l.getAmount());
+            m.put("content", rm);
+            m.put("payDetail", l.getPayDetail());
+            m.put("campus", l.getCampus());
+            m.put("handleDate", l.getHandleDate());
+            m.put("handler", l.getOperator());
+            m.put("orderTaker", l.getOrderTaker());
+            m.put("consultant", l.getConsultant());
+            m.put("source", l.getSource());
+            m.put("remark", rm);
+            m.put("createTime", l.getCreateTime() == null ? null : l.getCreateTime().toString());
+            rows.add(m);
+        }
+        // 3) 补费（缴费记录）
+        for (com.edu.entity.EduPayment p : paymentMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduPayment>()
+                        .eq(studentId != null, com.edu.entity.EduPayment::getStudentId, studentId)
+                        .orderByDesc(com.edu.entity.EduPayment::getId))) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("rid", "PY" + p.getId());
+            m.put("kind", "payment");
+            m.put("refId", p.getId());
+            m.put("type", "补费");
+            m.put("studentId", p.getStudentId());
+            m.put("courseId", p.getCourseId());
+            m.put("amount", p.getAmount());
+            m.put("content", "缴费单 " + (p.getPaymentNo() == null ? p.getId() : p.getPaymentNo()));
+            m.put("handleDate", p.getPayTime() == null ? null : p.getPayTime().toLocalDate().toString());
+            m.put("handler", p.getOperator());
+            m.put("remark", p.getRemark());
+            m.put("createTime", p.getCreateTime() == null ? null : p.getCreateTime().toString());
+            rows.add(m);
+        }
+        // 4) 积分办理流水（办理中心-积分）
+        for (com.edu.entity.EduScoreLog sl : scoreMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduScoreLog>()
+                        .eq(studentId != null, com.edu.entity.EduScoreLog::getStudentId, studentId)
+                        .orderByDesc(com.edu.entity.EduScoreLog::getId))) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("rid", "SC" + sl.getId());
+            m.put("kind", "score");
+            m.put("refId", sl.getId());
+            m.put("type", "积分");
+            m.put("studentId", sl.getStudentId());
+            m.put("amount", sl.getPoints());
+            m.put("content", sl.getRemark());
+            m.put("campus", sl.getCampus());
+            m.put("handleDate", sl.getHandleDate());
+            m.put("handler", sl.getOperator());
+            m.put("orderTaker", sl.getOrderTaker());
+            m.put("consultant", sl.getConsultant());
+            m.put("source", sl.getSource());
+            m.put("remark", sl.getRemark());
+            m.put("createTime", sl.getCreateTime() == null ? null : sl.getCreateTime().toString());
+            rows.add(m);
+        }
+        // 5) 教材杂费办理流水
+        for (com.edu.entity.EduMaterialLog ml : materialLogMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduMaterialLog>()
+                        .eq(studentId != null, com.edu.entity.EduMaterialLog::getStudentId, studentId)
+                        .orderByDesc(com.edu.entity.EduMaterialLog::getId))) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("rid", "MT" + ml.getId());
+            m.put("kind", "material");
+            m.put("refId", ml.getId());
+            m.put("type", "教材杂费");
+            m.put("studentId", ml.getStudentId());
+            m.put("totalAmount", ml.getAmount());
+            m.put("paidAmount", ml.getPaidAmount());
+            m.put("content", ml.getRemark());
+            m.put("payDetail", ml.getPayDetail());
+            m.put("campus", ml.getCampus());
+            m.put("handleDate", ml.getHandleDate());
+            m.put("handler", ml.getOperator());
+            m.put("orderTaker", ml.getOrderTaker());
+            m.put("consultant", ml.getConsultant());
+            m.put("source", ml.getSource());
+            m.put("remark", ml.getRemark());
+            m.put("createTime", ml.getCreateTime() == null ? null : ml.getCreateTime().toString());
+            rows.add(m);
+        }
+        // 6) 补费办理流水
+        for (com.edu.entity.EduSupplementLog sl : supplementLogMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduSupplementLog>()
+                        .eq(studentId != null, com.edu.entity.EduSupplementLog::getStudentId, studentId)
+                        .orderByDesc(com.edu.entity.EduSupplementLog::getId))) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("rid", "SM" + sl.getId());
+            m.put("kind", "supplement");
+            m.put("refId", sl.getId());
+            m.put("type", "补费");
+            m.put("studentId", sl.getStudentId());
+            m.put("totalAmount", sl.getAmount());
+            m.put("paidAmount", sl.getPaidAmount());
+            m.put("content", sl.getRemark());
+            m.put("payDetail", sl.getPayDetail());
+            m.put("campus", sl.getCampus());
+            m.put("handleDate", sl.getHandleDate());
+            m.put("handler", sl.getOperator());
+            m.put("orderTaker", sl.getOrderTaker());
+            m.put("consultant", sl.getConsultant());
+            m.put("source", sl.getSource());
+            m.put("remark", sl.getRemark());
+            m.put("createTime", sl.getCreateTime() == null ? null : sl.getCreateTime().toString());
+            rows.add(m);
+        }
+        // 类型筛选 + 排序（经办日期/创建时间倒序）+ 分页
+        if (type != null && !type.isEmpty())
+            rows.removeIf(r -> !type.equals(r.get("type")));
+        rows.sort((a, b) -> String.valueOf(b.getOrDefault("handleDate", "")).compareTo(
+                String.valueOf(a.getOrDefault("handleDate", ""))));
+        int from = (int) Math.max(0, (page - 1) * size);
+        int to = Math.min(rows.size(), from + (int) size);
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("total", rows.size());
+        result.put("records", from >= rows.size() ? new java.util.ArrayList<>() : rows.subList(from, to));
+        return Result.ok(result);
+    }
+
+    /** 提交指纹前缀（操作名 + 用户 + 租户），拼接业务字段后交给 RepeatGuard 去重 */
+    private String guardKey(String op) {
+        com.edu.security.LoginUser u = com.edu.security.AuthContext.get();
+        return u.getTenantId() + ":" + u.getId() + ":" + op + ":";
+    }
 
     @GetMapping("/page")
     public Result<PageResult<EduEnroll>> page(@RequestParam(defaultValue = "1") long page,
@@ -101,48 +296,202 @@ public class EduEnrollController {
     @PostMapping("/subscribe")
     @Log("订阅班课")
     public Result<EduEnroll> subscribe(@RequestBody SubscribeDTO dto) {
+        // 重复提交防护：同一用户5秒内完全相同的订阅请求只放行一次
+        String fp = dto.getStudentId() + ":" + dto.getPackageId() + ":" + dto.getCourseId() + ":"
+                + dto.getCampus() + ":" + dto.getPriceId() + ":" + dto.getQty() + ":"
+                + dto.getPaidAmount() + ":" + dto.getPayDetail();
+        if (!repeatGuard.tryAcquire(guardKey("subscribe") + fp))
+            return Result.error("报名已提交，请勿重复提交");
         return Result.ok(enrollService.subscribe(dto));
     }
 
-    /** 转课：在读报名单转另一门课程（原单已付抵扣，多退少补） */
+    /** 学员欠费记录（补费用）：在读报名单与教材杂费单中 欠费>0 的记录 */
+    @GetMapping("/supplement-records")
+    public Result<?> supplementRecords(@RequestParam Long studentId) {
+        java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (EduEnroll e : enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getStudentId, studentId).eq(EduEnroll::getStatus, 1)
+                .orderByDesc(EduEnroll::getId))) {
+            java.math.BigDecimal due = (e.getTotalAmount() == null ? java.math.BigDecimal.ZERO : e.getTotalAmount())
+                    .subtract(e.getPaidAmount() == null ? java.math.BigDecimal.ZERO : e.getPaidAmount());
+            if (due.compareTo(java.math.BigDecimal.ZERO) <= 0) continue;
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("kind", "enroll");
+            m.put("refId", e.getId());
+            m.put("rid", "EN" + e.getId());
+            m.put("typeName", "报名");
+            m.put("courseId", e.getCourseId());
+            m.put("packageName", e.getPackageName());
+            m.put("handler", e.getHandler());
+            m.put("handleDate", e.getHandleDate());
+            m.put("campus", e.getCampus());
+            m.put("arrears", due);
+            rows.add(m);
+        }
+        for (com.edu.entity.EduMaterialLog ml : materialLogMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduMaterialLog>()
+                        .eq(com.edu.entity.EduMaterialLog::getStudentId, studentId)
+                        .orderByDesc(com.edu.entity.EduMaterialLog::getId))) {
+            java.math.BigDecimal due = (ml.getAmount() == null ? java.math.BigDecimal.ZERO : ml.getAmount())
+                    .subtract(ml.getPaidAmount() == null ? java.math.BigDecimal.ZERO : ml.getPaidAmount());
+            if (due.compareTo(java.math.BigDecimal.ZERO) <= 0) continue;
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("kind", "material");
+            m.put("refId", ml.getId());
+            m.put("rid", "MT" + ml.getId());
+            m.put("typeName", "教材杂费");
+            m.put("name", ml.getRemark());
+            m.put("handler", ml.getOperator());
+            m.put("handleDate", ml.getHandleDate());
+            m.put("campus", ml.getCampus());
+            m.put("arrears", due);
+            rows.add(m);
+        }
+        return Result.ok(rows);
+    }
+
+    /** 补费办理入参 */
+    @Data
+    public static class SupplementDTO {
+        private Long studentId;
+        private java.util.List<ItemDTO> items;
+        /** 明细JSON留档（与 items 一致） */
+        private String itemsJson;
+        private java.math.BigDecimal paidAmount;
+        private String payDetail;
+        private String campus;
+        private String source;
+        private String handleDate;
+        private String orderTaker;
+        private String consultant;
+        private String remark;
+
+        @Data
+        public static class ItemDTO {
+            /** enroll=报名单 material=教材杂费单 */
+            private String kind;
+            private Long refId;
+            /** 本次补费金额 */
+            private java.math.BigDecimal amount;
+        }
+    }
+
+    /** 补费办理：逐单追加实收并写补费流水 */
+    @PostMapping("/supplement")
+    @Log("补费")
+    public Result<?> supplement(@RequestBody SupplementDTO dto) {
+        // 重复提交防护
+        String itemsFp = dto.getItems() == null ? "" : dto.getItems().stream()
+                .sorted(java.util.Comparator.comparing(i -> i.getRefId() == null ? 0L : i.getRefId()))
+                .map(i -> i.getKind() + "-" + i.getRefId() + "-" + i.getAmount())
+                .collect(java.util.stream.Collectors.joining(","));
+        if (!repeatGuard.tryAcquire(guardKey("supplement") + dto.getStudentId() + ":" + itemsFp))
+            return Result.error("补费已提交，请勿重复提交");
+        return Result.ok(enrollService.supplement(dto));
+    }
+
+    /** 补费流水编辑（办理记录-补费）：仅经办信息可改 */
+    @PutMapping("/supplement-log")
+    @Log("编辑补费流水")
+    public Result<Void> updateSupplementLog(@RequestBody SupplementLogUpdateDTO dto) {
+        if (dto.getId() == null) return Result.error("缺少流水ID");
+        com.edu.entity.EduSupplementLog l = supplementLogMapper.selectById(dto.getId());
+        if (l == null) return Result.error("补费流水不存在");
+        if (dto.getCampus() != null) l.setCampus(dto.getCampus());
+        if (dto.getSource() != null) l.setSource(dto.getSource());
+        if (dto.getHandleDate() != null) l.setHandleDate(dto.getHandleDate());
+        if (dto.getOrderTaker() != null) l.setOrderTaker(dto.getOrderTaker());
+        if (dto.getConsultant() != null) l.setConsultant(dto.getConsultant());
+        supplementLogMapper.updateById(l);
+        return Result.ok();
+    }
+
+    @Data
+    public static class SupplementLogUpdateDTO {
+        private Long id;
+        private String campus;
+        private String source;
+        private java.time.LocalDate handleDate;
+        private String orderTaker;
+        private String consultant;
+    }
+
+    /** 转课（课时转出）：在读报名单转出剩余课时，学费自动转入学员账户余额 */
     @Data
     public static class TransferDTO {
         private Long studentId;
-        /** 转出报名单ID（须为该学员在读记录） */
-        private Long fromEnrollId;
-        /** 转入课程 */
-        private Long courseId;
-        /** 报名校区（edu_course_campus 校区名） */
-        private String campus;
-        private Long clazzId;
-        private Long teacherId;
-        /** 定价行ID（edu_course_price，按课时模式） */
-        private Long priceId;
-        /** 份数，默认 1 */
-        private Integer qty;
-        /** 优惠金额 */
-        private java.math.BigDecimal discountAmount;
-        /** 渠道实收合计（补差部分，多账户明细见 payDetail） */
-        private java.math.BigDecimal paidAmount;
-        /** 有效期（yyyy-MM-dd，勾选后传） */
-        private String validDate;
+        /** 转出明细：报名单 + 本次转出课时（1~剩余课时） */
+        private java.util.List<ItemDTO> items;
         private String remark;
         private String source;
         private String handler;
         private String handleDate;
         private String orderTaker;
         private String consultant;
-        /** 支付信息（日志用） */
-        private String payInfo;
-        /** 支付明细JSON [{channel,account,serial,amount}] */
-        private String payDetail;
+
+        @Data
+        public static class ItemDTO {
+            private Long enrollId;
+            /** 本次转出课时 */
+            private Integer hours;
+        }
     }
 
-    /** 转课办理：原单置为已转课并创建转入报名单，差额多退少补 */
+    /** 转课办理：扣减课时/关闭报名单，转出学费入账户余额 */
     @PostMapping("/transfer")
     @Log("转课")
     public Result<?> transfer(@RequestBody TransferDTO dto) {
+        // 重复提交防护：转出明细（单号+课时）完全相同的请求5秒内只放行一次
+        String itemsFp = dto.getItems() == null ? "" : dto.getItems().stream()
+                .sorted(java.util.Comparator.comparing(i -> i.getEnrollId() == null ? 0L : i.getEnrollId()))
+                .map(i -> i.getEnrollId() + "-" + i.getHours())
+                .collect(java.util.stream.Collectors.joining(","));
+        if (!repeatGuard.tryAcquire(guardKey("transfer") + dto.getStudentId() + ":" + itemsFp))
+            return Result.error("转课已提交，请勿重复提交");
         return Result.ok(enrollService.transfer(dto));
+    }
+
+    /** 退费：在读报名单退出剩余课时，金额转结到账户余额 */
+    @Data
+    public static class RefundDTO {
+        private Long studentId;
+        /** 退出明细：报名单 + 本次退出课时 + 是否按原价退费（默认按实收折算） */
+        private java.util.List<ItemDTO> items;
+        /** 实退合计（渠道退款金额，≤应退总计；差额转结账户余额） */
+        private java.math.BigDecimal paidOut;
+        /** 实退渠道明细JSON [{channel,account,serial,amount}]（账户流水留档） */
+        private String payDetail;
+        /** 经办校区 */
+        private String campus;
+        private String remark;
+        private String source;
+        private String handler;
+        private String handleDate;
+        private String orderTaker;
+        private String consultant;
+
+        @Data
+        public static class ItemDTO {
+            private Long enrollId;
+            /** 本次退出课时 */
+            private Integer hours;
+            /** 按原价退费（优惠一并退）；false=按实收口径折算 */
+            private Boolean byOriginal;
+        }
+    }
+
+    /** 退费办理：扣减课时/退订报名单，实退渠道退款，差额转结账户余额 */
+    @PostMapping("/refund")
+    @Log("退费")
+    public Result<?> refund(@RequestBody RefundDTO dto) {
+        // 重复提交防护：退出明细完全相同的请求5秒内只放行一次
+        String itemsFp = dto.getItems() == null ? "" : dto.getItems().stream()
+                .sorted(java.util.Comparator.comparing(i -> i.getEnrollId() == null ? 0L : i.getEnrollId()))
+                .map(i -> i.getEnrollId() + "-" + i.getHours() + "-" + i.getByOriginal())
+                .collect(java.util.stream.Collectors.joining(","));
+        if (!repeatGuard.tryAcquire(guardKey("refund") + dto.getStudentId() + ":" + itemsFp))
+            return Result.error("退费已提交，请勿重复提交");
+        return Result.ok(enrollService.refund(dto));
     }
 
     /** 修改报名单：全字段（定价/数量/优惠/老师/班级/支付/经办） */
