@@ -11,8 +11,8 @@
         <el-input v-model="query.keyword" placeholder="教室名称" clearable style="width: 190px" @keyup.enter="search">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="query.orgId" placeholder="校区" clearable filterable style="width: 140px">
-          <el-option v-for="o in orgOptions" :key="o.value" :label="o.label" :value="o.value" />
+        <el-select v-model="query.campus" placeholder="校区" clearable filterable style="width: 140px">
+          <el-option v-for="c in campusOptions" :key="c" :label="c" :value="c" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <div style="flex: 1"></div>
@@ -20,7 +20,7 @@
       <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%">
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column label="校区" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ orgName(row.orgId) }}</template>
+          <template #default="{ row }">{{ row.campus || '-' }}</template>
         </el-table-column>
         <el-table-column prop="name" label="教室名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="capacity" label="可容纳人数" width="110" show-overflow-tooltip />
@@ -54,8 +54,8 @@
     <el-drawer v-model="visible" :title="form.id ? '编辑教室' : '新增教室'" size="440px">
       <el-form :model="form" label-width="100px">
         <el-form-item label="所属校区" required>
-          <el-select v-model="form.orgId" placeholder="请选择所属校区" style="width: 100%">
-            <el-option v-for="o in orgOptions" :key="o.value" :label="o.label" :value="o.value" />
+          <el-select v-model="form.campus" placeholder="请选择所属校区" style="width: 100%">
+            <el-option v-for="c in campusOptions" :key="c" :label="c" :value="c" />
           </el-select>
         </el-form-item>
         <el-form-item label="教室名称" required><el-input v-model="form.name" /></el-form-item>
@@ -113,13 +113,16 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
+import { useDictStore } from '../../store/dict'
 
-const query = reactive({ keyword: '', orgId: null })
+const dictStore = useDictStore()
+
+const query = reactive({ keyword: '', campus: null })
 
 /* 联系人候选：本企业在职员工；选中后手机号联动带出（可改） */
 const contactCandidates = ref([])
@@ -128,7 +131,7 @@ function onContactChange(name) {
   if (hit) form.value.contactPhone = hit.phone || ''
 }
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
-  usePage((q) => api.classroomPage({ ...q, orgId: query.orgId }), query)
+  usePage((q) => api.classroomPage({ ...q, campus: query.campus }), query)
 
 
 const visible = ref(false)
@@ -140,11 +143,11 @@ const occRange = ref([new Date().toISOString().slice(0, 10), new Date(Date.now()
 const occ = ref({})
 
 function openEdit(row) {
-  form.value = row ? { ...row } : { capacity: 30, orgId: query.orgId }
+  form.value = row ? { ...row } : { capacity: 30, campus: query.campus || null }
   visible.value = true
 }
 async function save() {
-  if (!form.value.orgId) return ElMessage.warning('所属校区为必填项')
+  if (!form.value.campus) return ElMessage.warning('所属校区为必填项')
   if (!form.value.name) return ElMessage.warning('教室名称不能为空')
   saving.value = true
   try {
@@ -175,22 +178,13 @@ async function loadOcc() {
   })) || {}
 }
 
-/* 校区来源：本企业组织树（拍平为 父/子 层级名） */
-const orgOptions = ref([])
-const orgMap = ref({})
-const orgName = (id) => orgMap.value[id] || '-'
+/* 校区来源：系统字典-校区（不含"全部校区"占位项） */
+const campusOptions = computed(() =>
+  dictStore.options('campus').map((d) => d.label).filter((l) => l !== '全部校区'))
 
 onMounted(async () => {
+  dictStore.load(true)
   contactCandidates.value = (await api.classroomContactCandidates()) || []
   load()
-  const tree = (await api.orgTree()) || []
-  const flat = {}
-  const walk = (nodes, parentName) => nodes.forEach((n) => {
-    flat[n.id] = parentName ? `${parentName}/${n.name}` : n.name
-    walk(n.children || [], parentName || n.name)
-  })
-  walk(tree, '')
-  orgMap.value = flat
-  orgOptions.value = Object.keys(flat).map((id) => ({ value: Number(id), label: flat[id] }))
 })
 </script>

@@ -15,7 +15,10 @@ public class EduClassroom {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long tenantId;
+    /** 所属校区（组织树ID，历史字段：新数据按校区字典名存 campus） */
     private Long orgId;
+    /** 所属校区名称（来源系统字典-校区） */
+    private String campus;
     private String name;
     private Integer capacity;
     /** 联系人 */

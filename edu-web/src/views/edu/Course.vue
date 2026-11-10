@@ -58,6 +58,15 @@
         <el-table-column v-if="cols.teachMode" prop="teachMode" label="授课模式" width="88" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ row.teachMode ? dictStore.label('class_type', row.teachMode) : '-' }}</template>
         </el-table-column>
+        <el-table-column v-if="cols.chargeMode" label="收费模式" width="110" align="center">
+          <template #default="{ row }">
+            <template v-if="feeModeText(row) !== '—'">
+              <el-tag v-for="m in feeModes(row)" :key="m" size="small" class="cm-tag"
+                      :type="m === '按课时' ? 'primary' : 'warning'" effect="plain">{{ m }}</el-tag>
+            </template>
+            <span v-else class="ex-empty">未开启</span>
+          </template>
+        </el-table-column>
         <el-table-column v-if="cols.campus" label="开课校区" width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ (row.campuses || []).join('/') || '-' }}</template>
         </el-table-column>
@@ -110,9 +119,11 @@
           </el-select>
         </el-form-item>
         <el-form-item label="授课模式">
-          <el-select v-model="form.teachMode" clearable style="width: 100%" placeholder="选择授课模式（一对一/小班/大班等）">
-            <el-option v-for="d in dictStore.options('class_type')" :key="d.value" :label="d.label" :value="Number(d.value)" />
-          </el-select>
+          <el-radio-group v-model="form.teachMode">
+            <el-radio v-for="d in dictStore.options('class_type')" :key="d.value" :value="Number(d.value)">
+              {{ d.label }}
+            </el-radio>
+          </el-radio-group>
         </el-form-item>
         <el-form-item label="适用年级">
           <el-select v-model="form.grade" clearable filterable style="width: 100%" placeholder="不限">
@@ -251,14 +262,23 @@ const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
 
 const allColumns = [
   { prop: 'name', label: '课程名称' }, { prop: 'category', label: '科目' },
-  { prop: 'teachMode', label: '授课模式' },
+  { prop: 'teachMode', label: '授课模式' }, { prop: 'chargeMode', label: '收费模式' },
   { prop: 'campus', label: '开课校区' }, { prop: 'grade', label: '适用年级' },
   { prop: 'createTime', label: '创建时间' },
   { prop: 'updateTime', label: '更新时间' }, { prop: 'status', label: '状态' }
 ]
-const cols = reactive({ name: true, category: true, teachMode: true, campus: true,
-  grade: true, createTime: true, updateTime: false, status: true })
+const cols = reactive({ name: true, category: true, teachMode: true, chargeMode: true,
+  campus: true, grade: true, createTime: true, updateTime: false, status: true })
 const onCols = (c) => Object.assign(cols, c)
+
+/** 收费模式：按课时/按时间 可同时开启，均未开=— */
+const feeModes = (row) => {
+  const modes = []
+  if (row.chargeHour === 1) modes.push('按课时')
+  if (row.chargeTime === 1) modes.push('按时间')
+  return modes
+}
+const feeModeText = (row) => feeModes(row).join(',') || '—'
 
 /* 教师（预留：详情/导出已去授课老师，字段不再使用） */
 
@@ -447,6 +467,7 @@ function doExport() {
     { label: '课程名称', prop: 'name' },
     { label: '科目', prop: 'category', fmt: (v) => dictStore.label('course_category', v) },
     { label: '授课模式', prop: 'teachMode', fmt: (v) => (v ? dictStore.label('class_type', v) : '-') },
+    { label: '收费模式', prop: '', fmt: (v, row) => feeModes(row).join('/') || '未开启' },
     { label: '开课校区', prop: 'campuses', fmt: (v) => (v || []).join('/') || '-' },
     { label: '适用年级', prop: 'grade' },
     { label: '状态', prop: 'status', fmt: (v) => (v === 1 ? '上架' : '下架') }
@@ -506,6 +527,9 @@ onMounted(async () => {
 .ex-campus { font-weight: 600; color: #155EEF; margin-right: 4px; }
 .ex-item { font-size: 12.5px; color: #475467; white-space: nowrap; }
 .ex-empty { color: #98a2b3; font-size: 12.5px; padding: 4px 0; }
+/* 列表收费模式列：双标签并排间距 */
+.cm-tag { margin-right: 4px; }
+.cm-tag:last-child { margin-right: 0; }
 /* 详情只读模式：表格内文本展示 */
 .pv-text { font-size: 13px; color: #344054; }
 .form-view :deep(.el-radio.is-disabled .el-radio__inner),

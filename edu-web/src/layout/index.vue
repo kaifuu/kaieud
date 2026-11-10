@@ -7,7 +7,8 @@
         <BrandLogo v-else :size="34" :show-text="!collapsed" name="智教云课" sub="KaiEdu · 教务平台" />
       </div>
       <el-menu :default-active="route.path" router unique-opened class="menu"
-                :collapse="collapsed" :collapse-transition="false" popper-class="dark-menu-popper">
+                :collapse="collapsed" :collapse-transition="false" popper-class="dark-menu-popper"
+                @select="onMenuSelect">
         <template v-for="m in store.menus" :key="m.id">
           <!-- 目录 -->
           <el-sub-menu v-if="m.type === 'M'" :index="String(m.id)">
@@ -169,6 +170,11 @@ const store = useUserStore()
 
 const typeNames = { 1: '超级管理员', 2: '教管人员', 3: '班主任', 4: '教师', 5: '学生' }
 const typeName = computed(() => typeNames[store.user?.userType] || '用户')
+
+/** 点击当前页对应的菜单项时 router.push 同路径不会跳转，广播事件交页面自行处理（如办理中心→返回列表） */
+function onMenuSelect(index) {
+  if (index === route.path) window.dispatchEvent(new CustomEvent('menu-self-click', { detail: index }))
+}
 
 /** 面包屑：父目录 › 当前页（顶栏不再与内容区页头重复显示同名标题） */
 const crumb = computed(() => {

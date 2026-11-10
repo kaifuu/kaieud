@@ -46,6 +46,7 @@ public class EduClazzController {
     private final SysUserMapper userMapper;
     private final EduStudentMapper studentMapper;
     private final EduContractMapper contractMapper;
+    private final com.edu.mapper.EduCourseMapper courseMapper;
 
     /** 员工类型（与用户管理"员工"TAB一致）：2教务 3班主任 6校区校长 7校区咨询师 8校区学管师 */
     private static final List<Integer> STAFF_TYPES = java.util.Arrays.asList(2, 3, 6, 7, 8);
@@ -111,7 +112,7 @@ public class EduClazzController {
                         .like(StringUtils.hasText(keyword), EduClazz::getName, keyword)
                         .eq(courseId != null, EduClazz::getCourseId, courseId)
                         .eq(status != null, EduClazz::getStatus, status)
-                        .last(SafeSort.order(sortBy, direction, "id", "id", "name", "capacity", "startDate", "status", "createTime")));
+                        .last(SafeSort.order(sortBy, direction, "id", "id", "name", "capacity", "startDate", "endDate", "status", "createTime")));
         return Result.ok(PageResult.of(p.getTotal(), p.getRecords()));
     }
 
@@ -147,7 +148,12 @@ public class EduClazzController {
                 .set(EduClazz::getCourseId, clazz.getCourseId())
                 .set(EduClazz::getClassTeacherId, clazz.getClassTeacherId())
                 .set(EduClazz::getCapacity, clazz.getCapacity())
+                .set(EduClazz::getMinCapacity, clazz.getMinCapacity())
+                .set(EduClazz::getStudentHours, clazz.getStudentHours())
+                .set(EduClazz::getTeacherHours, clazz.getTeacherHours())
+                .set(EduClazz::getClassroomId, clazz.getClassroomId())
                 .set(EduClazz::getStartDate, clazz.getStartDate())
+                .set(EduClazz::getEndDate, clazz.getEndDate())
                 .set(EduClazz::getStatus, clazz.getStatus()));
         return Result.ok();
     }
@@ -329,6 +335,116 @@ public class EduClazzController {
     public static class AddStudentDTO {
         private Long studentId;
         private Long contractId;
+    }
+
+    /**
+     * 班级功能页-添加学员候选：本班课程的在读报名单（仅班课，授课模式=9），
+     * 按学员聚合取最新一单（排除已在本班的），附剩余课时/报名时间/分班状态。
+     * 筛选：关键字(姓名/手机号)/校区/分班状态/报名时间范围。
+     */
+    @GetMapping("/{id}/student-add-candidates")
+    public Result<List<Map<String, Object>>> addCandidates(@PathVariable Long id,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String campus,
+            @RequestParam(required = false) Boolean assigned,
+            @RequestParam(required = false) String begin,
+            @RequestParam(required = false) String end) {
+        EduClazz clazz = clazzMapper.selectById(id);
+        if (clazz == null) return Result.error("班级不存在");
+        // 仅班课课程可按此方式加学员（一对一不走班级）
+        com.edu.entity.EduCourse course = clazz.getCourseId() == null ? null : courseMapper.selectById(clazz.getCourseId());
+        if (course == null || course.getTeachMode() == null || course.getTeachMode() != 9)
+            return Result.ok(new ArrayList<>());
+        List<EduEnroll> enrolls = enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getCourseId, clazz.getCourseId())
+                .eq(EduEnroll::getStatus, 1)
+                .orderByDesc(EduEnroll::getId));
+        // 按学员取最新一单；已在本班的排除
+        Map<Long, EduEnroll> latest = new LinkedHashMap<>();
+        for (EduEnroll e : enrolls) {
+            if (id.equals(e.getClazzId())) continue;
+            latest.putIfAbsent(e.getStudentId(), e);
+        }
+        if (latest.isEmpty()) return Result.ok(new ArrayList<>());
+        Map<Long, EduStudent> stuMap = new HashMap<>();
+        for (EduStudent s : studentMapper.selectBatchIds(latest.keySet())) stuMap.put(s.getId(), s);
+        String k = keyword == null ? "" : keyword.trim().toLowerCase();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<Long, EduEnroll> en : latest.entrySet()) {
+            EduEnroll e = en.getValue();
+            EduStudent s = stuMap.get(en.getKey());
+            if (s == null) continue;
+            // 报名日期：经办日期优先，退回创建日期
+            String d = e.getHandleDate() != null ? e.getHandleDate().toString()
+                    : (e.getCreateTime() == null ? null : e.getCreateTime().toLocalDate().toString());
+            // 筛选：校区 / 分班状态 / 报名时间范围 / 关键字
+            if (StringUtils.hasText(campus) && !campus.equals(e.getCampus())) continue;
+            boolean isAssigned = e.getClazzId() != null;
+            if (assigned != null && assigned != isAssigned) continue;
+            if (StringUtils.hasText(begin) && (d == null || d.compareTo(begin) < 0)) continue;
+            if (StringUtils.hasText(end) && (d == null || d.compareTo(end) > 0)) continue;
+            if (!k.isEmpty()) {
+                boolean hit = (s.getName() != null && s.getName().toLowerCase().contains(k))
+                        || (s.getParentPhone() != null && s.getParentPhone().contains(k))
+                        || (s.getBackupPhone() != null && s.getBackupPhone().contains(k));
+                if (!hit) continue;
+            }
+            int total = e.getTotalHours() == null ? 0 : e.getTotalHours();
+            int used = e.getUsedHours() == null ? 0 : e.getUsedHours();
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("studentId", en.getKey());
+            m.put("name", s.getName());
+            m.put("phone", s.getParentPhone() == null ? s.getBackupPhone() : s.getParentPhone());
+            m.put("enrollId", e.getId());
+            m.put("remainHours", Math.max(total - used, 0));
+            m.put("campus", e.getCampus());
+            m.put("clazzId", e.getClazzId());
+            m.put("assigned", isAssigned);
+            m.put("enrollTime", d);
+            result.add(m);
+        }
+        return Result.ok(result);
+    }
+
+    /**
+     * 批量加入班级：把所选学员在本班课程的最新在读报名单分入本班（容量校验）；
+     * 已在其他班的报名单调整到本班（换班），无可报课程报名单的学员跳过。
+     */
+    @PostMapping("/{id}/add-students")
+    @Log("班级批量添加学员")
+    public Result<String> addStudents(@PathVariable Long id, @RequestBody AddStudentsDTO dto) {
+        if (dto.getStudentIds() == null || dto.getStudentIds().isEmpty())
+            return Result.error("请选择要加入的学员");
+        EduClazz clazz = clazzMapper.selectById(id);
+        if (clazz == null) return Result.error("班级不存在");
+        Long studying = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+        int cap = clazz.getCapacity() == null ? 0 : clazz.getCapacity();
+        if (studying + dto.getStudentIds().size() > cap)
+            return Result.error("班级容量不足：满班 " + cap + " 名，已占用 " + studying
+                    + " 名，本次需加入 " + dto.getStudentIds().size() + " 名");
+        int ok = 0;
+        for (Long sid : dto.getStudentIds()) {
+            // 与候选口径一致：本课程在读、不在本班的最新一单（clazz_id 为空=未分班，需包含）
+            EduEnroll e = enrollMapper.selectOne(new LambdaQueryWrapper<EduEnroll>()
+                    .eq(EduEnroll::getStudentId, sid)
+                    .eq(EduEnroll::getCourseId, clazz.getCourseId())
+                    .eq(EduEnroll::getStatus, 1)
+                    .and(w -> w.isNull(EduEnroll::getClazzId).or().ne(EduEnroll::getClazzId, id))
+                    .orderByDesc(EduEnroll::getId).last("LIMIT 1"));
+            if (e == null) continue;
+            e.setClazzId(id);
+            if (clazz.getClassTeacherId() != null) e.setTeacherId(clazz.getClassTeacherId());
+            enrollMapper.updateById(e);
+            ok++;
+        }
+        return Result.ok("已加入 " + ok + " 名学员"
+                + (ok < dto.getStudentIds().size() ? "，" + (dto.getStudentIds().size() - ok) + " 名无可加报名单已跳过" : ""));
+    }
+
+    @lombok.Data
+    public static class AddStudentsDTO {
+        private List<Long> studentIds;
     }
 
     @lombok.Data

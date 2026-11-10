@@ -56,10 +56,10 @@ public class EduClassroomController {
     public Result<PageResult<EduClassroom>> page(@RequestParam(defaultValue = "1") long page,
                                                  @RequestParam(defaultValue = "10") long size,
                                                  @RequestParam(required = false) String keyword,
-                                                 @RequestParam(required = false) Long orgId) {
+                                                 @RequestParam(required = false) String campus) {
         LambdaQueryWrapper<EduClassroom> qw = new LambdaQueryWrapper<EduClassroom>()
                 .like(StringUtils.hasText(keyword), EduClassroom::getName, keyword)
-                .eq(orgId != null, EduClassroom::getOrgId, orgId)
+                .eq(StringUtils.hasText(campus), EduClassroom::getCampus, campus)
                 .eq(EduClassroom::getDeleted, 0)
                 .orderByDesc(EduClassroom::getId);
         Page<EduClassroom> p = classroomMapper.selectPage(new Page<>(page, size), qw);
@@ -75,7 +75,7 @@ public class EduClassroomController {
     @PostMapping
     @Log("新增教室")
     public Result<Void> save(@RequestBody EduClassroom room) {
-        if (room.getOrgId() == null) return Result.error("所属校区为必填项");
+        if (!StringUtils.hasText(room.getCampus())) return Result.error("所属校区为必填项");
         room.setTenantId(AuthContext.get().getTenantId());
         room.setDeleted(0);
         classroomMapper.insert(room);
@@ -85,7 +85,7 @@ public class EduClassroomController {
     @PutMapping
     @Log("修改教室")
     public Result<Void> update(@RequestBody EduClassroom room) {
-        if (room.getOrgId() == null) return Result.error("所属校区为必填项");
+        if (!StringUtils.hasText(room.getCampus())) return Result.error("所属校区为必填项");
         classroomMapper.updateById(room);
         return Result.ok();
     }

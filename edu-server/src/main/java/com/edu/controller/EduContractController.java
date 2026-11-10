@@ -48,6 +48,47 @@ public class EduContractController {
     private final com.edu.mapper.EduPackageMapper packageMapper;
     private final com.edu.mapper.SysUserMapper sysUserMapper;
     private final com.edu.service.DataScopeService dataScopeService;
+    private final com.edu.mapper.EduContractLogMapper contractLogMapper;
+
+    /** 合同操作留痕（合同历史TAB数据源） */
+    private void logContract(EduContract c, String action, String content) {
+        try {
+            com.edu.entity.EduContractLog l = new com.edu.entity.EduContractLog();
+            l.setTenantId(c.getTenantId());
+            l.setContractId(c.getId());
+            l.setContractNo(c.getContractNo());
+            l.setStudentId(c.getStudentId());
+            l.setAction(action);
+            l.setContent(content);
+            l.setOperator(AuthContext.get().getRealName());
+            l.setCreateTime(LocalDateTime.now());
+            contractLogMapper.insert(l);
+        } catch (Exception ignore) { /* 留痕失败不阻断业务 */ }
+    }
+
+    /** 合同历史：全量操作记录（新增/修改/退费/删除），可按编号/操作人/学员筛选，支持列排序 */
+    @GetMapping("/logs")
+    public Result<PageResult<com.edu.entity.EduContractLog>> logs(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) Long contractId,
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String direction) {
+        Page<com.edu.entity.EduContractLog> p = contractLogMapper.selectPage(new Page<>(page, size),
+                new LambdaQueryWrapper<com.edu.entity.EduContractLog>()
+                        .and(StringUtils.hasText(keyword), w -> w
+                                .like(com.edu.entity.EduContractLog::getContractNo, keyword)
+                                .or().like(com.edu.entity.EduContractLog::getOperator, keyword))
+                        .eq(StringUtils.hasText(action), com.edu.entity.EduContractLog::getAction, action)
+                        .eq(contractId != null, com.edu.entity.EduContractLog::getContractId, contractId)
+                        .eq(studentId != null, com.edu.entity.EduContractLog::getStudentId, studentId)
+                        .last(SafeSort.order(sortBy, direction, "id",
+                                "id", "contractNo", "action", "operator", "createTime")));
+        return Result.ok(PageResult.of(p.getTotal(), p.getRecords()));
+    }
 
     @GetMapping("/page")
     public Result<PageResult<EduContract>> page(@RequestParam(defaultValue = "1") long page,
@@ -130,6 +171,11 @@ public class EduContractController {
         c.setOrgId(stu != null && stu.getOrgId() != null ? stu.getOrgId() : 1L);
         c.setDeleted(0);
         contractMapper.insert(c);
+        logContract(c, "新增", "新增合同：购买 " + c.getPurchasedHours().stripTrailingZeros().toPlainString()
+                + " 课时" + (c.getGiftHours() != null && c.getGiftHours().compareTo(BigDecimal.ZERO) > 0
+                ? "，赠送 " + c.getGiftHours().stripTrailingZeros().toPlainString() + " 课时" : "")
+                + "，总价 ¥" + c.getTotalAmount().stripTrailingZeros().toPlainString()
+                + "，生效 " + c.getStartDate() + " 至 " + c.getEndDate());
         return Result.ok(c);
     }
 
@@ -146,6 +192,9 @@ public class EduContractController {
         if (c == null) return Result.error("合同不存在");
         if (c.getStatus() != null && c.getStatus() == 3) return Result.error("已退费合同不允许修改");
         if (dto.getStatus() != null && dto.getStatus() == 3) return Result.error("合同退费请走退费流程");
+        // 变更前快照（留痕用）
+        final BigDecimal oldUnit = c.getUnitPrice(), oldTotal = c.getTotalAmount();
+        final Integer oldStatus = c.getStatus();
         if (dto.getUnitPrice() != null) {
             if (dto.getUnitPrice().compareTo(BigDecimal.ZERO) <= 0)
                 return Result.error("合同单价必须大于 0");
@@ -171,7 +220,33 @@ public class EduContractController {
         c.setAttachmentUrl(dto.getAttachmentUrl());
         c.setRemark(dto.getRemark());
         contractMapper.updateById(c);
+        // 修改留痕：摘要记录关键变更（单价/总价/有效期/状态）
+        List<String> chg = new java.util.ArrayList<>();
+        if (dto.getUnitPrice() != null && oldUnit != null && dto.getUnitPrice().compareTo(oldUnit) != 0)
+            chg.add("单价 ¥" + oldUnit.stripTrailingZeros().toPlainString()
+                    + "→¥" + c.getUnitPrice().stripTrailingZeros().toPlainString());
+        if (c.getTotalAmount() != null && oldTotal != null && c.getTotalAmount().compareTo(oldTotal) != 0)
+            chg.add("总价 ¥" + oldTotal.stripTrailingZeros().toPlainString()
+                    + "→¥" + c.getTotalAmount().stripTrailingZeros().toPlainString());
+        if (dto.getValidDays() != null)
+            chg.add("有效期调整为 " + dto.getValidDays() + " 天（到期日 " + c.getEndDate() + "）");
+        if (dto.getStatus() != null && oldStatus != null && !dto.getStatus().equals(oldStatus))
+            chg.add("状态 " + statusTextOf(oldStatus) + "→" + statusTextOf(c.getStatus()));
+        logContract(c, "修改", chg.isEmpty() ? "修改合同：经办信息/备注/附件等" : "修改合同：" + String.join("，", chg));
         return Result.ok();
+    }
+
+    /** 合同状态文案（留痕用） */
+    private static String statusTextOf(Integer s) {
+        if (s == null) return "-";
+        switch (s) {
+            case 0: return "待缴费";
+            case 1: return "部分缴费";
+            case 2: return "已结清";
+            case 3: return "已退费";
+            case 4: return "已到期";
+            default: return String.valueOf(s);
+        }
     }
 
     /** 合同详情：含缴费记录、消课记录 */
@@ -340,6 +415,10 @@ public class EduContractController {
             accountLog.setOperator(AuthContext.get().getRealName());
             accountLogMapper.insert(accountLog);
         }
+        logContract(c, "退费", "合同退费：" + dto.getRefundHours().stripTrailingZeros().toPlainString()
+                + " 课时、¥" + dto.getRefundAmount().stripTrailingZeros().toPlainString()
+                + "（退费方式：" + (refundTo == 2 ? "退费至账户" : "退费至个人")
+                + (StringUtils.hasText(dto.getReason()) ? "，原因：" + dto.getReason() : "") + "）");
         return Result.ok();
     }
 
@@ -362,12 +441,38 @@ public class EduContractController {
         return Result.ok(m);
     }
 
-    /** 逻辑删除 */
+    /** 物理删除：有缴费/消课/退费记录的合同不允许删（数据不可再生）；删除后历史TAB仍可追溯 */
     @DeleteMapping("/{id}")
     @Log("删除合同")
     public Result<Void> delete(@PathVariable Long id) {
         EduContract c = contractMapper.selectById(id);
-        if (c != null) { c.setDeleted(1); contractMapper.updateById(c); }
+        if (c == null) return Result.ok();
+        Long pays = paymentMapper.selectCount(new LambdaQueryWrapper<EduPayment>()
+                .eq(EduPayment::getContractId, id));
+        if (pays != null && pays > 0) return Result.error("该合同已有缴费记录，不允许删除");
+        Long cons = consumeMapper.selectCount(new LambdaQueryWrapper<EduConsume>()
+                .eq(EduConsume::getContractId, id));
+        Long refs = refundMapper.selectCount(new LambdaQueryWrapper<EduRefund>()
+                .eq(EduRefund::getContractId, id));
+        // 消课/退费记录随合同一并物理清除（同生共死，避免悬挂引用），数量留痕到合同历史
+        if (cons != null && cons > 0)
+            consumeMapper.delete(new LambdaQueryWrapper<EduConsume>().eq(EduConsume::getContractId, id));
+        if (refs != null && refs > 0)
+            refundMapper.delete(new LambdaQueryWrapper<EduRefund>().eq(EduRefund::getContractId, id));
+        // 先留痕再删除（物理删除后合同行不存在，日志保留编号与摘要）
+        StringBuilder del = new StringBuilder("物理删除合同：").append(c.getContractNo())
+                .append("（购买 ").append(c.getPurchasedHours() == null ? "0"
+                        : c.getPurchasedHours().stripTrailingZeros().toPlainString())
+                .append(" 课时，总价 ¥").append(c.getTotalAmount() == null ? "0"
+                        : c.getTotalAmount().stripTrailingZeros().toPlainString()).append("）");
+        if (c.getRefundHours() != null && c.getRefundHours().compareTo(BigDecimal.ZERO) > 0)
+            del.append("，已退 ").append(c.getRefundHours().stripTrailingZeros().toPlainString())
+                    .append(" 课时 ¥").append(c.getRefundAmount() == null ? "0"
+                            : c.getRefundAmount().stripTrailingZeros().toPlainString());
+        if (cons != null && cons > 0) del.append("，随删消课记录 ").append(cons).append(" 条");
+        if (refs != null && refs > 0) del.append("，随删退费记录 ").append(refs).append(" 条");
+        logContract(c, "删除", del.toString());
+        contractMapper.deleteById(id);
         return Result.ok();
     }
 

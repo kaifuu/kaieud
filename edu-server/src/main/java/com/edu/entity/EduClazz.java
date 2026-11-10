@@ -24,8 +24,17 @@ public class EduClazz {
     private Long classTeacherUserId;
     private Long orgId;
     private Long classroomId;
-        private Integer capacity;
+    /** 满班人数（最多容纳学生数） */
+    private Integer capacity;
+    /** 最少开班人数（低于此人数不宜开班） */
+    private Integer minCapacity;
+    /** 每次上课：学生扣除课时 */
+    private java.math.BigDecimal studentHours;
+    /** 每次上课：教师获得课时 */
+    private java.math.BigDecimal teacherHours;
+    /** 开班日期 */
     private LocalDate startDate;
+    /** 结班日期 */
     private LocalDate endDate;
     /** 1招生中 2开课中 3已结课 */
     private Integer status;

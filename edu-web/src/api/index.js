@@ -29,6 +29,7 @@ export default {
   contractAdvisorCandidates: () => get('/edu/contract/advisor-candidates'),
   contractRefund: (id, d) => post(`/edu/contract/${id}/refund`, d),
   contractRefundInfo: (id) => get(`/edu/contract/${id}/refund-info`),
+  contractLogs: (p) => get('/edu/contract/logs', p),
   // 学生账户：充值管理（教务）+ 学生中心账户
   accountPage: (p) => get('/edu/account/page', p),
   accountSummary: (p) => get('/edu/account/summary', p),
@@ -150,6 +151,8 @@ export default {
   // 班级学生：候选（合同号/姓名/手机号）、加入（容量校验）、调班、班级学生列表
   clazzStudentCandidates: (p) => get('/edu/clazz/student-candidates', p),
   clazzAddStudent: (id, d) => post(`/edu/clazz/${id}/students`, d),
+  clazzAddCandidates: (id, p) => get(`/edu/clazz/${id}/student-add-candidates`, p),
+  clazzAddStudents: (id, d) => post(`/edu/clazz/${id}/add-students`, d),
   clazzTransfer: (fromId, d) => post(`/edu/clazz/${fromId}/transfer`, d),
   clazzStudents: (id) => get(`/edu/clazz/${id}/students`),
   clazzList: () => get('/edu/clazz/list'),
@@ -183,6 +186,11 @@ export default {
   enrollAssignTeacher: (id, teacherId) => post(`/edu/enroll/${id}/assign-teacher`, { teacherId }),
   enrollCompensateHours: (id, hours) => post(`/edu/enroll/${id}/compensate-hours`, { hours }),
   schedulePage: (p) => get('/edu/schedule/page', p),
+  auditionPage: (p) => get('/edu/audition/page', p),
+  auditionList: () => get('/edu/audition/list'),
+  auditionSave: (d) => post('/edu/audition', d),
+  auditionUpdate: (d) => put('/edu/audition', d),
+  auditionDel: (id) => del(`/edu/audition/${id}`),
   classroomPage: (p) => get('/edu/classroom/page', p),
   // 教室联系人候选：本企业在职员工（含手机号，选中联动回填）
   classroomContactCandidates: () => get('/edu/classroom/contact-candidates'),

@@ -12,7 +12,6 @@ import com.edu.mapper.SysDeployRecordMapper;
 import com.edu.mapper.SysDeployTargetMapper;
 import com.edu.security.AuthContext;
 import com.edu.security.DeployCrypto;
-import org.springframework.core.io.ClassPathResource;
 import com.edu.service.ContainerDeployService;
 import com.edu.service.SshService;
 import lombok.Data;
@@ -230,22 +229,18 @@ public class DeployController {
         if (!StringUtils.hasText(t.getDbHost()) || !StringUtils.hasText(t.getDbUsername()))
             return Result.error("请先保存并测试数据库连接");
 
-        String patch;
+        // 扫描 jar 内全部 sql/patch_*.sql，按文件名版本号升序逐个执行（新增补丁放进资源目录即可被升级）
+        org.springframework.core.io.Resource[] resources;
         try {
-            ClassPathResource res = new ClassPathResource("sql/patch_v2.55.sql");
-            byte[] buf = new byte[(int) res.contentLength()];
-            try (java.io.InputStream in = res.getInputStream()) {
-                int read = 0;
-                while (read < buf.length) {
-                    int n = in.read(buf, read, buf.length - read);
-                    if (n < 0) break;
-                    read += n;
-                }
-                patch = new String(buf, 0, read, java.nio.charset.StandardCharsets.UTF_8);
-            }
+            resources = new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                    .getResources("classpath:sql/patch_*.sql");
         } catch (Exception e) {
-            return Result.error("补丁文件读取失败：" + e.getMessage());
+            return Result.error("补丁文件扫描失败：" + e.getMessage());
         }
+        List<org.springframework.core.io.Resource> patches = new java.util.ArrayList<>();
+        for (org.springframework.core.io.Resource r : resources) patches.add(r);
+        patches.sort(java.util.Comparator.comparingLong(DeployController::patchVerOf));
+        if (patches.isEmpty()) return Result.error("未找到补丁文件（jar 内 sql/patch_*.sql）");
 
         String pass = t.getDbSecret() == null ? "" : crypto.decrypt(t.getDbSecret());
         String base = StringUtils.hasText(t.getDbName()) ? t.getDbName().trim() : "edu_course";
@@ -257,28 +252,39 @@ public class DeployController {
         int applied = 0, skipped = 0, failed = 0;
         try (java.sql.Connection c = java.sql.DriverManager.getConnection(url, t.getDbUsername(), pass);
              java.sql.Statement st = c.createStatement()) {
-            for (String raw : patch.split(";\\r?\\n")) {
-                // 去掉注释行后合并为单条语句
-                StringBuilder one = new StringBuilder();
-                for (String line : raw.split("\\r?\\n")) {
-                    if (line.trim().startsWith("--")) continue;
-                    one.append(line).append('\n');
+            for (org.springframework.core.io.Resource res : patches) {
+                String patch;
+                try (java.io.InputStream in = res.getInputStream()) {
+                    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                    byte[] b = new byte[8192];
+                    int n;
+                    while ((n = in.read(b)) > 0) bos.write(b, 0, n);
+                    patch = new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
                 }
-                String sql = one.toString().trim();
-                if (sql.isEmpty()) continue;
-                String head = sql.length() > 60 ? sql.substring(0, 60) + "…" : sql;
-                try {
-                    st.execute(sql);
-                    applied++;
-                    log.append("[OK]      ").append(head).append('\n');
-                } catch (java.sql.SQLException e) {
-                    int code = e.getErrorCode();
-                    if (code == 1050 || code == 1060 || code == 1061 || code == 1062) {
-                        skipped++;
-                        log.append("[SKIP]    ").append(head).append("  (").append(e.getMessage()).append(")\n");
-                    } else {
-                        failed++;
-                        log.append("[FAIL]    ").append(head).append("  (").append(e.getMessage()).append(")\n");
+                log.append("========== ").append(res.getFilename()).append(" ==========\n");
+                for (String raw : patch.split(";\\r?\\n")) {
+                    // 去掉注释行后合并为单条语句
+                    StringBuilder one = new StringBuilder();
+                    for (String line : raw.split("\\r?\\n")) {
+                        if (line.trim().startsWith("--")) continue;
+                        one.append(line).append('\n');
+                    }
+                    String sql = one.toString().trim();
+                    if (sql.isEmpty()) continue;
+                    String head = sql.length() > 60 ? sql.substring(0, 60) + "…" : sql;
+                    try {
+                        st.execute(sql);
+                        applied++;
+                        log.append("[OK]      ").append(head).append('\n');
+                    } catch (java.sql.SQLException e) {
+                        int code = e.getErrorCode();
+                        if (code == 1050 || code == 1060 || code == 1061 || code == 1062) {
+                            skipped++;
+                            log.append("[SKIP]    ").append(head).append("  (").append(e.getMessage()).append(")\n");
+                        } else {
+                            failed++;
+                            log.append("[FAIL]    ").append(head).append("  (").append(e.getMessage()).append(")\n");
+                        }
                     }
                 }
             }
@@ -293,6 +299,13 @@ public class DeployController {
         r.put("seconds", (System.currentTimeMillis() - t0) / 1000.0);
         r.put("log", log.toString());
         return Result.ok(r);
+    }
+
+    /** 补丁文件版本号：patch_v2.55.sql → 2*100000+55，用于升序执行 */
+    private static long patchVerOf(org.springframework.core.io.Resource r) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("v(\\d+)\\.(\\d+)").matcher(r.getFilename() == null ? "" : r.getFilename());
+        return m.find() ? Long.parseLong(m.group(1)) * 100000L + Long.parseLong(m.group(2)) : 0L;
     }
 
 

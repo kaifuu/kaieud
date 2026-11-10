@@ -29,11 +29,16 @@ public class EduStudentController {
     private final com.edu.service.DataScopeService dataScopeService;
     private final com.edu.mapper.SysUserMapper userMapper;
 
-    /** 学员下拉列表（合同/排课/消课等模块选择用） */
+    /** 学员下拉列表（合同/排课/消课等模块选择用）
+     *  仅真实学员：无账号的纯档案学员 + 关联账号用户类型为学生(type=5)；
+     *  排除非学生账号勾选「兼任学生」建的档案（如超管体验学生端） */
     @GetMapping("/list")
     public Result<?> list() {
         List<EduStudent> list = studentMapper.selectList(new LambdaQueryWrapper<EduStudent>()
-                .eq(EduStudent::getDeleted, 0).orderByDesc(EduStudent::getId));
+                .eq(EduStudent::getDeleted, 0)
+                .and(w -> w.isNull(EduStudent::getUserId)
+                        .or().inSql(EduStudent::getUserId, "SELECT id FROM sys_user WHERE user_type = 5"))
+                .orderByDesc(EduStudent::getId));
         fillEffectivePhone(list);
         return Result.ok(list);
     }

@@ -3,7 +3,7 @@
     <div class="page-header">
       <span class="page-title">{{ pageTitle }}</span>
       <div class="actions">
-        <el-button v-if="mode !== 'list'" @click="backToList">← 返回列表</el-button>
+        <el-button v-if="mode !== 'list'" @click="tryBackToList">← 返回列表</el-button>
       </div>
     </div>
 
@@ -190,7 +190,8 @@
         <span class="sec-title">学员信息</span>
         <div class="stu-bar">
           <el-select v-model="studentId" filterable remote :remote-method="searchStudents" :loading="searching"
-                     placeholder="输入学员姓名 / 手机号码进行搜索" clearable style="width: 280px" @change="onPick">
+                     placeholder="输入姓名 / 手机号搜索，双击查看全部" clearable style="width: 280px"
+                     @change="onPick" @dblclick="loadAllStudents">
             <el-option v-for="s in students" :key="s.studentId" :label="`${s.name}（${s.phone || '无手机号'}）`" :value="s.studentId" />
           </el-select>
           <el-button type="primary" @click="openCreate">创建学员</el-button>
@@ -202,6 +203,11 @@
         <span v-if="picked.grade">{{ picked.grade }}</span>
         <span v-if="picked.school">{{ picked.school }}</span>
         <span v-if="picked.phone">{{ picked.phone }}</span>
+        <!-- 各办理页通用扩展：在读课程数 + 报读校区（课/校 徽标） -->
+        <span class="pb-dash"></span>
+        <span class="pb-ext"><i class="texttag tt-course">课</i>在读课程：{{ subInfo.courseCount }}</span>
+        <span class="pb-dash"></span>
+        <span class="pb-ext"><i class="texttag tt-campus">校</i>报读校区：{{ subInfo.campuses || '—' }}</span>
         <el-tag v-if="mode === 'recharge' || mode === 'transfer' || mode === 'refund'" size="small" type="warning" effect="light">
           账户余额：¥{{ (Number(balanceAvail) || 0).toFixed(2) }}
         </el-tag>
@@ -1342,9 +1348,9 @@
         <span class="fee-label">使用余额</span>
         <el-input-number v-model="pay.balance" :min="0" :max="balanceAvail" :precision="2"
                          size="small" controls-position="right" style="width: 120px" />
-        <span class="fee-sub">可用：{{ (balanceAvail - Number(pay.balance || 0) + overpay).toFixed(2) }} 元</span>
-        <el-tag v-if="overpay > 0" size="small" type="success" effect="light" class="credit-tag">
-          本次充值 +{{ overpay.toFixed(2) }} 元（将充入账户）
+        <span class="fee-sub">可用：{{ (balanceAvail - Number(pay.balance || 0)).toFixed(2) }} 元</span>
+        <el-tag v-if="overpay > 0" size="small" type="danger" effect="light" class="credit-tag">
+          实收超出应收 ¥{{ overpay.toFixed(2) }}，请调整支付金额
         </el-tag>
       </div>
       <!-- 支付账户列表 -->
@@ -1724,11 +1730,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, CircleClose, CirclePlus, User, Tickets, ArrowDown, View, EditPen, Printer, Document,
   Wallet, Money, Switch, RefreshLeft, Reading, Medal, Right } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ColumnSetting from '../../components/ColumnSetting.vue'
 import api from '../../api'
 import { useDictStore } from '../../store/dict'
@@ -1863,6 +1869,54 @@ function backToList() {
   mode.value = 'list'
   loadList()
 }
+
+/* ===== 未保存拦截：各办理页有已填内容时，返回列表前先确认 ===== */
+/** 经办信息是否已填（销售来源/采单员/咨询顾问） */
+const handleFilled = (h) => !!(h && (h.source || h.orderTaker || h.consultant))
+/** 支付账户是否已填实收金额 */
+const payFilled = () => (pay.value?.rows || []).some((r) => Number(r.amount) > 0)
+/** 各办理页「有变更」判定：仅完成初始态（未选学员或未填任何内容）视为无变更，返回时不提示 */
+const formDirty = computed(() => {
+  if (mode.value === 'list' || !picked.value) return false
+  switch (mode.value) {
+    case 'form': return cards.value.length > 0 || payFilled() || handleFilled(handle.value)
+    case 'recharge': return recharge.value.rows.some((r) => Number(r.amount) > 0)
+      || handleFilled(recharge.value) || !!(recharge.value.remark || '').trim()
+    case 'transfer': return !!transferIn.value || handleFilled(handle.value)
+      || !!(transfer.value.remark || '').trim()
+    case 'refund': return !!refundFilter.value || payFilled() || handleFilled(handle.value)
+      || !!(refund.value.remark || '').trim()
+    case 'score': return Number(score.value.points) > 0 || handleFilled(handle.value)
+      || !!(score.value.remark || '').trim()
+    case 'material': return materialRows.value.length > 0 || payFilled() || handleFilled(handle.value)
+      || !!(material.value.remark || '').trim()
+    case 'supplement': return supplementRows.value.some((r) => Number(r.amount) > 0)
+      || payFilled() || handleFilled(handle.value) || !!(supplement.value.remark || '').trim()
+    default: return false
+  }
+})
+/** 返回列表（带未保存拦截）：有已填内容先确认，避免误触丢失 */
+async function tryBackToList() {
+  if (formDirty.value) {
+    try {
+      await ElMessageBox.confirm(
+        `当前「${pageTitle.value}」单据尚未保存，返回后已填写内容将丢失；<br/>如需保留请点「继续填写」，再点击页面底部按钮保存。`,
+        '未保存提醒',
+        { confirmButtonText: '放弃并返回', cancelButtonText: '继续填写', type: 'warning', dangerouslyUseHTMLString: true }
+      )
+    } catch (e) { return } // 继续填写：留在当前页
+  }
+  backToList()
+}
+
+/** 左侧菜单「办理中心」重复点击（已在办理中心页）→ 视同「返回列表」，同样走未保存拦截 */
+const route = useRoute()
+async function onMenuSelfClick(e) {
+  if (e.detail !== route.path || mode.value === 'list') return
+  tryBackToList()
+}
+onMounted(() => window.addEventListener('menu-self-click', onMenuSelfClick))
+onBeforeUnmount(() => window.removeEventListener('menu-self-click', onMenuSelfClick))
 
 /* 办理入口瓷贴：补费→缴费管理、转课→转课办理、退费→退费办理；教材杂费/积分功能规划中 */
 const router = useRouter()
@@ -2799,7 +2853,7 @@ async function openEdit(row) {
     try {
       const ps = (await api.coursePrices(c.courseId)) || []
       dlgPriceMap.value[c.courseId] = ps
-      c.priceRows = ps.filter((p) => p.chargeMode === 1)
+      c.priceRows = pricesOfCard(ps, c.campus)
       const m = matchPriceRow(c)
       if (m) { c.priceId = m.priceId; c.qty = m.qty }
     } catch (e) { /* 无定价按默认 */ }
@@ -2842,6 +2896,9 @@ async function saveEdit() {
   payErr.value = !hasPayRow.value
   if (!hasPayRow.value) missing.push('支付信息（至少一条实收金额大于 0 的支付记录）')
   if (missing.length) return requiredAlert(missing)
+  // 超收拦截：实收不能超过应收（预存请走「余额充值」），不再自动充入账户产生充值流水
+  if (overpay.value > 0)
+    return ElMessage.warning(`实收金额（¥${receivedTotal.value}）超过应收（¥${totalAmount.value}）¥${overpay.value.toFixed(2)}，请调整支付金额；预存款项请走「余额充值」办理`)
   saving.value = true
   try {
     // 支付明细 JSON 留档
@@ -2994,6 +3051,11 @@ const searching = ref(false)
 const studentId = ref(null)
 const picked = ref(null)
 
+/** 学员候选项统一映射（下拉选中即用，picked 直接取这些字段） */
+const mapStudents = (all) => (all || []).map((s) => ({
+  studentId: s.id, name: s.name, phone: s.phone,
+  grade: s.grade, school: s.school, idCard: s.idCard
+}))
 async function searchStudents(kw) {
   if (!kw || !kw.trim()) { students.value = []; return }
   searching.value = true
@@ -3002,13 +3064,16 @@ async function searchStudents(kw) {
     const k = kw.trim().toLowerCase()
     // s.phone 为后端拼好的有效联系电话（家长电话→备用电话→账号手机号），
     // 用户管理补录手机号后搜索即同步显示，不再出现"无手机号"
-    students.value = all.filter((s) =>
-      (s.name || '').toLowerCase().includes(k) || (s.phone || '').includes(k)).map((s) => ({
-      studentId: s.id, name: s.name,
-      phone: s.phone,
-      grade: s.grade, school: s.school, idCard: s.idCard
-    }))
+    students.value = mapStudents(all.filter((s) =>
+      (s.name || '').toLowerCase().includes(k) || (s.phone || '').includes(k)))
   } finally { searching.value = false }
+}
+/** 双击搜索框：无关键字全量检索，下拉直接展示全部学员 */
+async function loadAllStudents() {
+  if (searching.value) return
+  searching.value = true
+  try { students.value = mapStudents(await api.studentList()) }
+  finally { searching.value = false }
 }
 function onPick(id) {
   picked.value = students.value.find((s) => s.studentId === id) || null
@@ -3032,15 +3097,25 @@ async function loadBalance() {
   } catch (e) { balanceAvail.value = 0 }
 }
 
-/* 该学员在读课程集合（选课弹窗置灰用） */
+/* 该学员在读课程集合（选课弹窗置灰用）+ 在读课程数/报读校区（积分页学员信息） */
 const subscribedIds = ref(new Set())
+const subInfo = ref({ courseCount: 0, campuses: '' })
 async function loadSubscribed() {
   try {
     const en = (await api.enrollPage({ page: 1, size: 100, studentId: studentId.value })).records || []
+    const active = en.filter((e) => e.status === 1)
     // 在读判重按 课程+校区（同一课程不同校区可各报一条）
-    subscribedIds.value = new Set(en.filter((e) => e.status === 1 && e.courseId)
+    subscribedIds.value = new Set(active.filter((e) => e.courseId)
       .map((e) => e.courseId + '|' + (e.campus || '')))
-  } catch (e) { subscribedIds.value = new Set() }
+    // 在读课程数按课程去重；报读校区取在读单校区去重
+    subInfo.value = {
+      courseCount: new Set(active.map((e) => e.courseId).filter(Boolean)).size,
+      campuses: [...new Set(active.map((e) => e.campus).filter(Boolean))].join('、')
+    }
+  } catch (e) {
+    subscribedIds.value = new Set()
+    subInfo.value = { courseCount: 0, campuses: '' }
+  }
 }
 /** 欠费对报名单/教材杂费/补费单有意义；充值/转课/退费/积分流水无欠费概念 */
 const rowDue = (row) => row.kind && !['enroll', 'material', 'supplement'].includes(row.kind)
@@ -3087,18 +3162,22 @@ async function addCard(courseId, origin = 'course', campus = null) {
   // 定价行加载（弹窗缓存优先；空数组=预载失败留痕，视为未命中重取）
   const cached = dlgPriceMap.value[courseId]
   if (Array.isArray(cached) && cached.length) {
-    card.priceRows = cached.filter((p) => p.chargeMode === 1)
+    card.priceRows = pricesOfCard(cached, cardCampus)
     if (card.priceRows.length) card.priceId = card.priceRows[0].id
   } else {
     try {
       const ps = (await api.coursePrices(courseId)) || []
       dlgPriceMap.value[courseId] = ps
-      card.priceRows = ps.filter((p) => p.chargeMode === 1)
+      card.priceRows = pricesOfCard(ps, cardCampus)
       if (card.priceRows.length) card.priceId = card.priceRows[0].id
     } catch (e) { /* 无定价按默认 */ }
   }
   return true
 }
+
+/** 卡片可用定价行：按课时 × 卡片校区（本校区行 + 全部校区通用行） */
+const pricesOfCard = (ps, campus) => (ps || []).filter((p) => p.chargeMode === 1
+  && (!campus || p.campus === campus || p.campus === '全部校区'))
 
 /* 每卡价格计算：编辑卡片未改定价/数量前按记录实况显示（含套餐订阅），改后按所选定价行重算 */
 const cardName = (card) => card.courseId ? courseName(card.courseId) : (card.pkgName || '套餐订阅')
@@ -3366,6 +3445,9 @@ async function subscribeAll() {
   payErr.value = !hasPayRow.value
   if (!hasPayRow.value) missing.push('支付信息（至少一条实收金额大于 0 的支付记录）')
   if (missing.length) return requiredAlert(missing)
+  // 超收拦截：实收不能超过应收（预存请走「余额充值」），不再自动充入账户产生充值流水
+  if (overpay.value > 0)
+    return ElMessage.warning(`实收金额（¥${receivedTotal.value}）超过应收（¥${totalAmount.value}）¥${overpay.value.toFixed(2)}，请调整支付金额；预存款项请走「余额充值」办理`)
   saving.value = true
   try {
     const due = Number(totalAmount.value)
@@ -3410,18 +3492,7 @@ async function subscribeAll() {
     results.forEach((r, i) => { if (r.status !== 'fulfilled') keep.push(cards.value[i]) })
     cards.value = keep
     if (fail === 0) {
-      // 超收部分自动充入学员账户
-      if (overpay.value > 0) {
-        try {
-          await api.enrollCredit({ studentId: studentId.value, amount: overpay.value,
-            remark: '报名实收超额自动充入' })
-          ElMessage.success(`报名成功：${ok} 门课程，超额 ¥${overpay.value.toFixed(2)} 已充入账户`)
-        } catch (e) {
-          ElMessage.success(`报名成功：${ok} 门课程（超额 ¥${overpay.value.toFixed(2)} 充入账户失败，可在充值管理补录）`)
-        }
-      } else {
-        ElMessage.success(`报名成功：${ok} 门课程`)
-      }
+      ElMessage.success(`报名成功：${ok} 门课程`)
       pay.value = { campus: pay.value.campus, balance: 0, rows: [] }
       // 全部成功：回到列表页并刷新
       mode.value = 'list'
@@ -3520,12 +3591,24 @@ onMounted(async () => {
 .stu-bar { display: flex; gap: 10px; align-items: center; }
 /* 选中学员信息条 */
 .picked-bar {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 6px;
   background: #f5f9ff; border: 1px solid #dbe7fb; border-radius: 10px;
   padding: 8px 14px; font-size: 13px; color: #667c99;
 }
 .picked-bar b { color: #155EEF; font-size: 14px; }
 .picked-bar span { color: #8fa8c4; }
+/* 积分页学员信息扩展：竖分隔线 + 课/校 徽标 */
+.picked-bar .pb-dash { width: 1px; height: 13px; background: #d5e3f4; padding: 0; flex-shrink: 0; }
+.picked-bar .pb-ext { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.texttag {
+  font-style: normal; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+  font-size: 12px; font-weight: 700; line-height: 1; color: #fff;
+}
+/* 实底白字渐变章（同 sel-tag 风格），浅色描边底对比不足改为深底 */
+.tt-course { background: linear-gradient(135deg, #0f766e, #10a393); }
+.tt-campus { background: linear-gradient(135deg, #6d28d9, #8b5cf6); }
 /* 未选课程空态 */
 .ep-empty {
   display: flex; flex-direction: column; align-items: center; gap: 4px;

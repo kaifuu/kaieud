@@ -7,6 +7,8 @@
         <el-button @click="doExport">导出台账</el-button>
       </div>
     </div>
+    <el-tabs v-model="mainTab" class="page-tabs">
+      <el-tab-pane label="合同列表" name="list">
     <div class="panel table-panel">
       <div class="toolbar">
         <el-select v-model="filters.studentId" placeholder="学员" clearable filterable style="width: 150px">
@@ -71,6 +73,51 @@
                        :page-sizes="[10, 20, 50, 100]" @current-change="load" @size-change="onSizeChange" />
       </div>
     </div>
+      </el-tab-pane>
+
+      <!-- 合同历史：全部合同操作记录（新增/修改/退费/删除，物理删除后仍可追溯） -->
+      <el-tab-pane label="合同历史" name="history" lazy>
+        <div class="panel table-panel">
+          <div class="toolbar">
+            <el-input v-model="logQuery.keyword" placeholder="合同编号 / 操作人" clearable
+                      style="width: 180px" @keyup.enter="loadLogs(true)" />
+            <el-select v-model="logQuery.action" placeholder="操作类型" clearable style="width: 110px">
+              <el-option label="新增" value="新增" /><el-option label="修改" value="修改" />
+              <el-option label="退费" value="退费" /><el-option label="删除" value="删除" />
+            </el-select>
+            <el-button type="primary" @click="loadLogs(true)">查询</el-button>
+            <div style="flex: 1"></div>
+            <span v-if="logRows.length" style="font-size: 12.5px; color: #8fa8c4">共 {{ logPager.total }} 条操作记录</span>
+          </div>
+          <el-table :data="logRows" v-loading="logLoading" stripe height="100%" @sort-change="onLogSort">
+            <el-table-column type="index" label="序号" width="60"
+                             :index="(i) => (logPager.page - 1) * logPager.size + i + 1" />
+            <el-table-column prop="contractNo" label="合同编号" width="150" sortable="custom" show-overflow-tooltip />
+            <el-table-column label="学员" width="90" show-overflow-tooltip>
+              <template #default="{ row }">{{ studentName(row.studentId) }}</template>
+            </el-table-column>
+            <el-table-column prop="action" label="操作类型" width="86" align="center" sortable="custom">
+              <template #default="{ row }">
+                <el-tag size="small" effect="plain"
+                        :type="{ 新增: 'success', 修改: 'primary', 退费: 'danger', 删除: 'info' }[row.action] || 'info'">
+                  {{ row.action }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="content" label="操作内容" min-width="320" show-overflow-tooltip />
+            <el-table-column prop="createTime" label="操作时间" width="160" sortable="custom" show-overflow-tooltip>
+              <template #default="{ row }">{{ fmtLogTime(row.createTime) }}</template>
+            </el-table-column>
+            <el-table-column prop="operator" label="操作人" width="100" sortable="custom" show-overflow-tooltip />
+          </el-table>
+          <div class="pager-row">
+            <el-pagination background layout="total, prev, pager, next" :total="logPager.total"
+                           v-model:current-page="logPager.page" v-model:page-size="logPager.size"
+                           :page-size="20" @current-change="loadLogs" />
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 新增/修改合同抽屉：TAB 分组一屏展示（选套餐回填，可一客一价） -->
     <el-drawer v-model="createVisible" :title="editing ? '修改合同' : '新增合同'" size="680px">
@@ -302,6 +349,31 @@ const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
 const students = ref([])
 const courses = ref([])
 const packages = ref([])
+
+/* ===== 合同历史TAB：全部合同操作记录 ===== */
+const mainTab = ref('list')
+const logQuery = reactive({ keyword: '', action: null, sortBy: null, direction: null })
+const logRows = ref([])
+const logLoading = ref(false)
+const logPager = reactive({ page: 1, size: 20, total: 0 })
+async function loadLogs(resetPage) {
+  if (resetPage === true) logPager.page = 1
+  logLoading.value = true
+  try {
+    const d = await api.contractLogs({ page: logPager.page, size: logPager.size,
+      keyword: logQuery.keyword || undefined, action: logQuery.action || undefined,
+      sortBy: logQuery.sortBy || undefined, direction: logQuery.direction || undefined })
+    logRows.value = d.records || []
+    logPager.total = d.total || 0
+  } finally { logLoading.value = false }
+}
+/** 历史列表排序（后端排序：合同编号/操作类型/操作时间/操作人） */
+function onLogSort({ prop, order }) {
+  logQuery.sortBy = order ? prop : null
+  logQuery.direction = order === 'ascending' ? 'asc' : 'desc'
+  loadLogs(true)
+}
+const fmtLogTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '-')
 /** 可选套餐：启用中且截止日期未过（已过期套餐选择不到） */
 const selectablePackages = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
@@ -568,9 +640,11 @@ async function saveRefund() {
 }
 
 async function remove(id) {
-  await ElMessageBox.confirm('确认删除该合同？（逻辑删除，历史保留）', '提示', { type: 'warning' })
+  await ElMessageBox.confirm(
+    '确认删除该合同？<br/>删除为<b style="color:#f56c6c">物理删除</b>（不可恢复），合同的消课/退费记录将一并删除并留痕；已有<b>缴费记录</b>的合同将被拒绝删除，操作会留痕到「合同历史」。',
+    '删除合同', { type: 'warning', dangerouslyUseHTMLString: true, confirmButtonText: '确认删除', cancelButtonText: '取消' })
   await api.contractDel(id)
-  ElMessage.success('已删除')
+  ElMessage.success('已删除（操作已留痕到合同历史）')
   load()
 }
 
@@ -587,9 +661,14 @@ onMounted(async () => {
   packages.value = (await api.packageList()) || []
   advisorCandidates.value = (await api.contractAdvisorCandidates()) || []
 })
+
+/* 切到合同历史TAB时首次加载（lazy 渲染 + 首次激活拉取） */
+watch(mainTab, (v) => { if (v === 'history' && !logRows.value.length && !logPager.total) loadLogs(true) })
 </script>
 
 <style scoped>
+/* 页面级TAB（合同列表/合同历史） */
+.page-tabs :deep(.el-tabs__header) { margin: 0 0 10px; }
 /* 退费抽屉：说明小字（口径来源/上限提示） */
 .desc-tip { color: #909399; font-size: 12px; }
 /* 退费抽屉一屏布局：描述紧凑 + 课时/金额并排 */
