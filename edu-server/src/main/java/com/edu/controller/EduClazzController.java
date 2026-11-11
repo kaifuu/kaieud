@@ -47,6 +47,91 @@ public class EduClazzController {
     private final EduStudentMapper studentMapper;
     private final EduContractMapper contractMapper;
     private final com.edu.mapper.EduCourseMapper courseMapper;
+    private final com.edu.mapper.EduAuditionStudentMapper auditionStudentMapper;
+    private final com.edu.mapper.EduAuditionMapper auditionMapper;
+
+    /* ==================== 班级试听学员（功能页-试听学员TAB） ==================== */
+
+    /** 本班试听学员列表（快照 + 关联试听活动回填办试听时间/助教） */
+    @GetMapping("/{id}/audition-students")
+    public Result<List<Map<String, Object>>> auditionStudents(@PathVariable Long id) {
+        List<com.edu.entity.EduAuditionStudent> list = auditionStudentMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduAuditionStudent>()
+                        .eq(com.edu.entity.EduAuditionStudent::getClazzId, id)
+                        .orderByDesc(com.edu.entity.EduAuditionStudent::getId));
+        // 关联试听活动（快照缺办试听时间/助教时回填）
+        Map<Long, com.edu.entity.EduAudition> actMap = new HashMap<>();
+        java.util.Set<Long> actIds = new HashSet<>();
+        for (com.edu.entity.EduAuditionStudent s : list)
+            if (s.getAuditionId() != null) actIds.add(s.getAuditionId());
+        if (!actIds.isEmpty())
+            for (com.edu.entity.EduAudition a : auditionMapper.selectBatchIds(actIds)) actMap.put(a.getId(), a);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (com.edu.entity.EduAuditionStudent s : list) {
+            com.edu.entity.EduAudition a = s.getAuditionId() == null ? null : actMap.get(s.getAuditionId());
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", s.getId());
+            m.put("studentId", s.getStudentId());
+            m.put("studentName", s.getStudentName());
+            m.put("source", s.getSource());
+            m.put("auditionName", s.getAuditionName());
+            m.put("courseName", s.getCourseName());
+            m.put("teacherName", s.getTeacherName());
+            m.put("classroomName", s.getClassroomName());
+            m.put("timePeriod", s.getTimePeriod());
+            m.put("campus", s.getCampus());
+            m.put("auditionDate", s.getAuditionDate() != null ? s.getAuditionDate().toString()
+                    : (a != null && a.getAuditionDate() != null ? a.getAuditionDate().toString() : null));
+            m.put("assistantName", s.getAssistantName() != null ? s.getAssistantName()
+                    : (a != null ? a.getAssistantName() : null));
+            m.put("operator", s.getOperator());
+            m.put("createTime", s.getCreateTime() == null ? null : s.getCreateTime().toString());
+            rows.add(m);
+        }
+        return Result.ok(rows);
+    }
+
+    /** 添加试听学员：学员 + 试听活动/日程试听快照（同班同学员去重） */
+    @PostMapping("/{id}/audition-students")
+    @Log("班级添加试听学员")
+    public Result<Void> addAuditionStudent(@PathVariable Long id,
+            @RequestBody com.edu.entity.EduAuditionStudent s) {
+        EduClazz clazz = clazzMapper.selectById(id);
+        if (clazz == null) return Result.error("班级不存在");
+        if (s.getStudentId() == null) return Result.error("请先在学员信息区选择学员");
+        if (!StringUtils.hasText(s.getAuditionName())) return Result.error("请先选择试听活动或日程试听");
+        Long dup = auditionStudentMapper.selectCount(new LambdaQueryWrapper<com.edu.entity.EduAuditionStudent>()
+                .eq(com.edu.entity.EduAuditionStudent::getClazzId, id)
+                .eq(com.edu.entity.EduAuditionStudent::getStudentId, s.getStudentId()));
+        if (dup != null && dup > 0) return Result.error("该学员已在本班试听名单中");
+        // 名额校验：正式在读 + 已有试听 同样受满班限制
+        int cap = clazz.getCapacity() == null ? 0 : clazz.getCapacity();
+        if (cap > 0) {
+            Long studying = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                    .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+            Long auditioning = auditionStudentMapper.selectCount(
+                    new LambdaQueryWrapper<com.edu.entity.EduAuditionStudent>()
+                            .eq(com.edu.entity.EduAuditionStudent::getClazzId, id));
+            long occupied = studying + (auditioning == null ? 0 : auditioning);
+            if (occupied + 1 > cap)
+                return Result.error("班级容量不足：满班 " + cap + " 名，已占用 " + occupied
+                        + " 名（含试听），无法再办理试听");
+        }
+        s.setId(null);
+        s.setClazzId(id);
+        s.setTenantId(clazz.getTenantId());
+        s.setOperator(AuthContext.get().getRealName());
+        auditionStudentMapper.insert(s);
+        return Result.ok();
+    }
+
+    /** 移除试听学员 */
+    @DeleteMapping("/audition-student/{sid}")
+    @Log("移除试听学员")
+    public Result<Void> delAuditionStudent(@PathVariable Long sid) {
+        auditionStudentMapper.deleteById(sid);
+        return Result.ok();
+    }
 
     /** 员工类型（与用户管理"员工"TAB一致）：2教务 3班主任 6校区校长 7校区咨询师 8校区学管师 */
     private static final List<Integer> STAFF_TYPES = java.util.Arrays.asList(2, 3, 6, 7, 8);
@@ -419,10 +504,15 @@ public class EduClazzController {
         if (clazz == null) return Result.error("班级不存在");
         Long studying = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
                 .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+        // 试听学员同样占用名额（与学员TAB「已占用」口径一致）
+        Long auditioning = auditionStudentMapper.selectCount(
+                new LambdaQueryWrapper<com.edu.entity.EduAuditionStudent>()
+                        .eq(com.edu.entity.EduAuditionStudent::getClazzId, id));
         int cap = clazz.getCapacity() == null ? 0 : clazz.getCapacity();
-        if (studying + dto.getStudentIds().size() > cap)
-            return Result.error("班级容量不足：满班 " + cap + " 名，已占用 " + studying
-                    + " 名，本次需加入 " + dto.getStudentIds().size() + " 名");
+        long occupied = studying + (auditioning == null ? 0 : auditioning);
+        if (occupied + dto.getStudentIds().size() > cap)
+            return Result.error("班级容量不足：满班 " + cap + " 名，已占用 " + occupied
+                    + " 名（含试听），本次需加入 " + dto.getStudentIds().size() + " 名");
         int ok = 0;
         for (Long sid : dto.getStudentIds()) {
             // 与候选口径一致：本课程在读、不在本班的最新一单（clazz_id 为空=未分班，需包含）
@@ -440,6 +530,86 @@ public class EduClazzController {
         }
         return Result.ok("已加入 " + ok + " 名学员"
                 + (ok < dto.getStudentIds().size() ? "，" + (dto.getStudentIds().size() - ok) + " 名无可加报名单已跳过" : ""));
+    }
+
+    /**
+     * 批量办理试听（试听学员TAB-批量添加）：一次为多名学员登记本班试听。
+     * 快照由前端按本班日程组装（同单笔办理口径），服务端做去重与容量校验。
+     */
+    @PostMapping("/{id}/audition-students-batch")
+    @Log("班级批量办理试听")
+    public Result<String> addAuditionStudentsBatch(@PathVariable Long id, @RequestBody BatchAuditionDTO dto) {
+        EduClazz clazz = clazzMapper.selectById(id);
+        if (clazz == null) return Result.error("班级不存在");
+        if (dto.getItems() == null || dto.getItems().isEmpty()) return Result.error("请先选择学员");
+        // 已在本班试听名单的学员跳过
+        Set<Long> existing = new HashSet<>();
+        for (com.edu.entity.EduAuditionStudent s : auditionStudentMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduAuditionStudent>()
+                        .eq(com.edu.entity.EduAuditionStudent::getClazzId, id)
+                        .select(com.edu.entity.EduAuditionStudent::getStudentId)))
+            existing.add(s.getStudentId());
+        List<BatchAuditionItem> fresh = new ArrayList<>();
+        for (BatchAuditionItem it : dto.getItems())
+            if (it.getStudentId() != null && !existing.contains(it.getStudentId())) fresh.add(it);
+        if (fresh.isEmpty()) return Result.error("所选学员均已在本班试听名单中");
+        // 容量：正式在读 + 已有试听 + 本次 不能超满班
+        int cap = clazz.getCapacity() == null ? 0 : clazz.getCapacity();
+        if (cap > 0) {
+            Long studying = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                    .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+            long occupied = studying + existing.size();
+            if (occupied + fresh.size() > cap)
+                return Result.error("班级容量不足：满班 " + cap + " 名，已占用 " + occupied
+                        + " 名（含试听），本次需加入 " + fresh.size() + " 名");
+        }
+        int ok = 0;
+        for (BatchAuditionItem it : fresh) {
+            com.edu.entity.EduAuditionStudent s = new com.edu.entity.EduAuditionStudent();
+            s.setClazzId(id);
+            s.setTenantId(clazz.getTenantId());
+            s.setStudentId(it.getStudentId());
+            s.setStudentName(it.getStudentName());
+            s.setSource(it.getSource() == null ? 2 : it.getSource());
+            s.setAuditionId(it.getAuditionId());
+            s.setAuditionName(it.getAuditionName());
+            s.setCourseName(it.getCourseName());
+            s.setTeacherName(it.getTeacherName());
+            s.setClassroomName(it.getClassroomName());
+            s.setTimePeriod(it.getTimePeriod());
+            s.setCampus(it.getCampus());
+            s.setAssistantName(it.getAssistantName());
+            if (StringUtils.hasText(it.getAuditionDate())) {
+                try { s.setAuditionDate(java.time.LocalDate.parse(it.getAuditionDate())); }
+                catch (Exception ignore) { /* 日期格式异常按空处理 */ }
+            }
+            s.setOperator(AuthContext.get().getRealName());
+            auditionStudentMapper.insert(s);
+            ok++;
+        }
+        return Result.ok("已为 " + ok + " 名学员办理插班试听"
+                + (ok < dto.getItems().size() ? "，" + (dto.getItems().size() - ok) + " 名已在名单中跳过" : ""));
+    }
+
+    @lombok.Data
+    public static class BatchAuditionDTO {
+        private List<BatchAuditionItem> items;
+    }
+
+    @lombok.Data
+    public static class BatchAuditionItem {
+        private Long studentId;
+        private String studentName;
+        private Integer source;
+        private Long auditionId;
+        private String auditionName;
+        private String courseName;
+        private String teacherName;
+        private String classroomName;
+        private String timePeriod;
+        private String campus;
+        private String auditionDate;
+        private String assistantName;
     }
 
     @lombok.Data

@@ -23,7 +23,9 @@
           <template #default="{ row }">{{ row.campus || '-' }}</template>
         </el-table-column>
         <el-table-column prop="name" label="教室名称" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="capacity" label="可容纳人数" width="110" show-overflow-tooltip />
+        <el-table-column label="容纳人数(最低~最多)" width="140" align="center">
+          <template #default="{ row }">{{ row.minCapacity ?? '—' }} ~ {{ row.capacity ?? '—' }}</template>
+        </el-table-column>
         <el-table-column prop="contact" label="联系人" width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ row.contact || '-' }}</template>
         </el-table-column>
@@ -59,7 +61,17 @@
           </el-select>
         </el-form-item>
         <el-form-item label="教室名称" required><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="可容纳人数"><el-input-number v-model="form.capacity" :min="0" style="width: 100%" /></el-form-item>
+        <el-form-item label="容纳人数">
+          <div class="cap-box">
+            <span class="cap-label">最低</span>
+            <el-input-number v-model="form.minCapacity" :min="0" :max="999" size="small"
+                             controls-position="right" style="width: 100px" placeholder="最低" />
+            <span class="cap-label">最多</span>
+            <el-input-number v-model="form.capacity" :min="1" :max="999" size="small"
+                             controls-position="right" style="width: 100px" />
+            <span class="cap-unit">人</span>
+          </div>
+        </el-form-item>
         <el-form-item label="联系人">
           <el-select v-model="form.contact" filterable clearable allow-create default-first-option
                      style="width: 100%" placeholder="选择员工（支持搜索，也可手输）"
@@ -112,6 +124,13 @@
   </div>
 </template>
 
+<style scoped>
+/* 容纳人数：最低 ~ 最多 */
+.cap-box { display: flex; align-items: center; gap: 6px; }
+.cap-label { font-size: 12.5px; color: #667c99; white-space: nowrap; }
+.cap-unit { font-size: 12.5px; color: #8fa8c4; margin-left: 2px; }
+</style>
+
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -143,12 +162,15 @@ const occRange = ref([new Date().toISOString().slice(0, 10), new Date(Date.now()
 const occ = ref({})
 
 function openEdit(row) {
-  form.value = row ? { ...row } : { capacity: 30, campus: query.campus || null }
+  form.value = row ? { ...row } : { capacity: 30, minCapacity: null, campus: query.campus || null }
   visible.value = true
 }
 async function save() {
   if (!form.value.campus) return ElMessage.warning('所属校区为必填项')
   if (!form.value.name) return ElMessage.warning('教室名称不能为空')
+  if (form.value.minCapacity != null && form.value.capacity != null
+      && form.value.minCapacity > form.value.capacity)
+    return ElMessage.warning(`最低容纳（${form.value.minCapacity} 人）不能大于最多容纳（${form.value.capacity} 人）`)
   saving.value = true
   try {
     if (form.value.id) await api.classroomUpdate(form.value)

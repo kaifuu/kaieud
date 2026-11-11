@@ -20,7 +20,10 @@ public class EduClassroom {
     /** 所属校区名称（来源系统字典-校区） */
     private String campus;
     private String name;
+    /** 最多可容纳人数 */
     private Integer capacity;
+    /** 最低容纳人数 */
+    private Integer minCapacity;
     /** 联系人 */
     private String contact;
     /** 联系电话 */

@@ -145,6 +145,8 @@
             <li> 退费率：0.00%<span class="line">|</span></li>
             <li> 停课率：0.00%<span class="line">|</span></li>
             <li> 升期率：0.00%<span class="line">|</span></li>
+            <li> 试听学员：{{ auditionCount }}<span class="line">|</span></li>
+            <li> 试听转化率：{{ auditionRate }}%<span class="line">|</span></li>
             <li>出勤率：0.00%</li>
           </ul>
         </div>
@@ -155,13 +157,21 @@
           <!-- 学员TAB：容量条 + 学员表（复用添加学生/调班弹窗） -->
           <el-tab-pane label="学员" name="students">
             <div class="stu-cap-bar">
-              <el-tag effect="dark" type="success">已占用 {{ stuInfo.studying }} 名</el-tag>
-              <el-tag effect="dark" type="warning">空余 {{ Math.max((stuInfo.capacity || 0) - (stuInfo.studying || 0), 0) }} 名</el-tag>
+              <el-tag effect="dark" type="success">已占用 {{ occupiedTotal }} 名</el-tag>
+              <el-tag effect="dark" type="warning">空余 {{ Math.max((stuInfo.capacity || 0) - occupiedTotal, 0) }} 名</el-tag>
               <el-tag effect="dark">满班 {{ stuInfo.capacity }} 名</el-tag>
               <el-tag effect="light" type="info">最少开班 {{ detailClazz?.minCapacity ?? '—' }} 名</el-tag>
+              <span v-if="auditionCount > 0" class="aud-seat" title="试听学员（计入已占用名额）">
+                <svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true">
+                  <rect x="1" y="1" width="30" height="30" rx="7" fill="currentColor" />
+                  <text x="16" y="23" text-anchor="middle" font-size="19" font-weight="700"
+                        font-family="KaiTi, STKaiti, 'Kaiti SC', serif" fill="#fff">试</text>
+                </svg>
+                <b>{{ auditionCount }}</b>
+              </span>
               <div style="flex: 1"></div>
               <el-button type="primary" size="small"
-                         :disabled="(stuInfo.studying || 0) >= (stuInfo.capacity || 0)"
+                         :disabled="occupiedTotal >= (stuInfo.capacity || 0)"
                          @click="openAddStu">添加学生</el-button>
             </div>
             <el-table :data="stuInfo.rows || []" v-loading="stuLoading" stripe size="small">
@@ -196,36 +206,104 @@
                       description="暂无学生，点「添加学生」按合同/姓名/手机号加入" :image-size="70" />
           </el-tab-pane>
 
-          <!-- 试听学员TAB -->
-          <el-tab-pane label="试听学员" name="audition">
-            <el-empty description="试听学员功能规划中" :image-size="80" />
-          </el-tab-pane>
+          <!-- 试听学员TAB：办理试听入口 + 试听名单 -->
+          <el-tab-pane label="试听学员" name="audition" lazy>
+            <div class="aud-toolbar">
+              <el-button type="primary" size="small" @click="openHandleAudition">办理试听</el-button>
+              <el-button type="primary" plain size="small" @click="openBatchAudStu">批量添加学员</el-button>
+              <span class="aud-tip">批量添加 = 多学员一键登记本班日程试听</span>
+              <div style="flex: 1"></div>
+              <el-tag effect="light" type="info">共 {{ audStuRows.length }} 名试听学员</el-tag>
+            </div>
 
-          <!-- 排课TAB：该班全部课次 -->
-          <el-tab-pane label="排课" name="schedule" lazy>
-            <el-table :data="detailSchedules" stripe size="small" max-height="420">
+            <el-table :data="audStuRows" v-loading="audLoading" stripe size="small">
               <el-table-column type="index" label="序号" width="55" />
-              <el-table-column label="上课时间" min-width="170" show-overflow-tooltip>
-                <template #default="{ row }">{{ fmtTime(row.startTime) }} ~ {{ String(row.endTime || '').slice(11, 16) }}</template>
-              </el-table-column>
-              <el-table-column label="教师" width="100" show-overflow-tooltip>
-                <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
-              </el-table-column>
-              <el-table-column prop="classroom" label="教室" width="120" show-overflow-tooltip>
-                <template #default="{ row }">{{ row.classroom || '-' }}</template>
-              </el-table-column>
-              <el-table-column label="状态" width="86" align="center">
+              <el-table-column prop="studentName" label="学员" width="100" show-overflow-tooltip />
+              <el-table-column label="来源" width="92" align="center">
                 <template #default="{ row }">
-                  <el-tag size="small" :type="['warning', 'success', 'info'][row.status] || 'info'" effect="plain">
-                    {{ ['待上课', '已完成', '已取消'][row.status] || '-' }}
+                  <el-tag size="small" :type="row.source === 1 ? 'primary' : 'warning'" effect="plain">
+                    {{ row.source === 1 ? '试听活动' : '日程试听' }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip>
-                <template #default="{ row }">{{ row.remark || (row.cancelReason ? '取消：' + row.cancelReason : '-') }}</template>
+              <el-table-column prop="auditionName" label="试听名称" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="courseName" label="课程" min-width="100" show-overflow-tooltip />
+              <el-table-column prop="teacherName" label="教师" width="84" show-overflow-tooltip />
+              <el-table-column prop="classroomName" label="试听教室" width="92" show-overflow-tooltip />
+              <el-table-column prop="timePeriod" label="时间段" width="120" show-overflow-tooltip />
+              <el-table-column prop="auditionDate" label="办试听时间" width="100" />
+              <el-table-column prop="assistantName" label="助教" width="84" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.assistantName || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="operator" label="试听操作人" width="96" show-overflow-tooltip />
+              <el-table-column label="操作" width="70" fixed="right">
+                <template #default="{ row }">
+                  <el-popconfirm title="移除该试听学员?" @confirm="removeAudition(row.id)">
+                    <template #reference><el-button link type="danger">移除</el-button></template>
+                  </el-popconfirm>
+                </template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!detailSchedules.length" description="暂无排课记录" :image-size="70" />
+            <el-empty v-if="!audStuRows.length && !audLoading"
+                      description="暂无试听学员：上方搜索选学员 → 选择试听活动/日程试听 → 确认添加" :image-size="70" />
+          </el-tab-pane>
+
+          <!-- 排课TAB：工具条（新建/导出/视图切换）+ 图例 + 课表视图(日/周/月)/排课列表 -->
+          <el-tab-pane label="排课" name="schedule" lazy>
+            <div class="sch-toolbar">
+              <el-button type="primary" size="small" @click="openCreateSched">新建排课</el-button>
+              <el-button size="small" @click="exportSchedules">导出课表</el-button>
+              <el-button size="small" :type="schedView === 'cal' ? 'primary' : ''" @click="schedView = schedView === 'cal' ? 'list' : 'cal'">
+                <el-icon style="margin-right: 4px"><Switch /></el-icon>{{ schedView === 'cal' ? '排课列表' : '课程表' }}
+              </el-button>
+              <template v-if="schedView === 'cal'">
+                <el-radio-group v-model="calMode" size="small" style="margin-left: 8px" @change="onCalMode">
+                  <el-radio-button value="day">日</el-radio-button>
+                  <el-radio-button value="week">周</el-radio-button>
+                  <el-radio-button value="month">月</el-radio-button>
+                </el-radio-group>
+              </template>
+              <div style="flex: 1"></div>
+              <ul class="sch-legend">
+                <li><span class="color-square" style="background: #347ab7; border-color: #1f6099"></span>已记上课</li>
+                <li><span class="color-square" style="background: #ffb51f; border-color: #d99712"></span>冲突日程</li>
+                <li><span class="color-square" style="background: #129ca9; border-color: #046e78"></span>我的日程</li>
+                <li><span class="color-square" style="background: #5bc377; border-color: #3ba257"></span>其它日程</li>
+                <li><span class="color-square preview"></span>含试听学员</li>
+              </ul>
+            </div>
+
+            <!-- 课程表视图：FullCalendar（同排课管理），框选/点空白快速新建排课 -->
+            <div v-if="schedView === 'cal'" class="cal-wrap">
+              <FullCalendar ref="fcRef" :options="calOptions" />
+            </div>
+
+            <!-- 排课列表视图 -->
+            <template v-if="schedView === 'list'">
+              <el-table :data="detailSchedules" stripe size="small" max-height="420">
+                <el-table-column type="index" label="序号" width="55" />
+                <el-table-column label="上课时间" min-width="170" show-overflow-tooltip>
+                  <template #default="{ row }">{{ fmtTime(row.startTime) }} ~ {{ String(row.endTime || '').slice(11, 16) }}</template>
+                </el-table-column>
+                <el-table-column label="教师" width="100" show-overflow-tooltip>
+                  <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
+                </el-table-column>
+                <el-table-column prop="classroom" label="教室" width="120" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.classroom || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="86" align="center">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="['warning', 'success', 'info'][row.status] || 'info'" effect="plain">
+                      {{ ['待上课', '已完成', '已取消'][row.status] || '-' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.remark || (row.cancelReason ? '取消：' + row.cancelReason : '-') }}</template>
+                </el-table-column>
+              </el-table>
+              <el-empty v-if="!detailSchedules.length" description="暂无排课记录，点「新建排课」安排课次" :image-size="70" />
+            </template>
           </el-tab-pane>
 
           <!-- 上课记录TAB：已完成课次 -->
@@ -369,7 +447,7 @@
           <el-select v-model="form.classroomId" clearable filterable style="width: 100%"
                      placeholder="选择固定教室（选填）">
             <el-option v-for="r in classroomList" :key="r.id"
-                       :label="`${r.name}（${r.campus || '未设校区'}·容${r.capacity ?? 0}人）`" :value="r.id" />
+                       :label="`${r.name}（${r.campus || '未设校区'}·${r.minCapacity ?? '—'}~${r.capacity ?? 0}人）`" :value="r.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="班容人数">
@@ -453,17 +531,223 @@
         <el-button type="primary" @click="confirmCourseDlg">确 定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 新建排课（排课TAB）：本班课次，日期+时段+教师+教室 -->
+    <el-dialog v-model="schedCreateVisible" title="新建排课" width="440px" append-to-body>
+      <el-form label-width="80px">
+        <el-form-item label="班级">
+          <el-input :model-value="curClazz?.name" disabled />
+        </el-form-item>
+        <el-form-item label="日期" required>
+          <el-date-picker v-model="schedForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="时段" required>
+          <el-time-picker v-model="schedForm.range" is-range range-separator="至"
+                          start-placeholder="开始" end-placeholder="结束"
+                          format="HH:mm" value-format="HH:mm" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="教师" required>
+          <el-select v-model="schedForm.teacherId" filterable style="width: 100%">
+            <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="教室">
+          <el-select v-model="schedForm.classroomId" clearable filterable style="width: 100%">
+            <el-option v-for="r in classroomList" :key="r.id"
+                       :label="`${r.name}（${r.minCapacity ?? '—'}~${r.capacity ?? 0}人）`" :value="r.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="schedCreateVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="schedSaving" @click="saveSched">保 存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 办理试听弹窗（试听学员TAB）：学员信息区 + 活动信息区 -->
+    <el-dialog v-model="handleAudVisible" title="办理试听" width="560px">
+      <div class="aud-sec">
+        <div class="aud-sec-title">学员信息</div>
+        <el-select v-model="audStuId" filterable remote :remote-method="searchAudStudents"
+                   :loading="audSearching" clearable style="width: 100%"
+                   placeholder="输入学员姓名 / 手机号搜索，双击查看全部" @change="onPickAudStu"
+                   @dblclick="loadAllAudStudents">
+          <el-option v-for="s in audStuCands" :key="s.studentId"
+                     :label="`${s.name}（${s.phone || '无手机号'}）`" :value="s.studentId" />
+        </el-select>
+      </div>
+      <div class="aud-sec">
+        <div class="aud-sec-head">
+          <span class="aud-sec-title">活动信息</span>
+          <el-button v-if="audPickedAct" size="small" text type="danger" @click="audPickedAct = null">清空</el-button>
+        </div>
+        <div class="aud-acts">
+          <el-button type="primary" plain size="small" @click="openActDlg">选择试听活动</el-button>
+          <el-button type="primary" plain size="small" @click="openSchDlg">选择日程试听</el-button>
+        </div>
+        <div v-if="!audPickedAct" class="aud-empty-tip">请点击「选择试听活动」或「选择日程试听」，选中后回填项目信息</div>
+        <ul v-else class="aud-detail">
+          <li class="aud-detail-item aud-detail-name">
+            <label>名称</label>
+            <el-input v-model="audPickedAct.name" size="small" maxlength="100"
+                      placeholder="必填" style="width: 180px" />
+          </li>
+          <li class="aud-detail-item"><label>校区</label>
+            <span :title="audPickedAct.campus">{{ audPickedAct.campus || '—' }}</span></li>
+          <li class="aud-detail-item"><label>日期</label>
+            <span>{{ audPickedAct.date || '—' }}</span></li>
+          <li class="aud-detail-item"><label>教师</label>
+            <span :title="audPickedAct.teacherName">{{ audPickedAct.teacherName || '—' }}</span></li>
+          <li class="aud-detail-item"><label>课程</label>
+            <span :title="audPickedAct.courseName">{{ audPickedAct.courseName || '—' }}</span></li>
+          <li class="aud-detail-item"><label>教室</label>
+            <span :title="audPickedAct.classroomName">{{ audPickedAct.classroomName || '—' }}</span></li>
+          <li class="aud-detail-item"><label>时段</label>
+            <span>{{ audPickedAct.timePeriod || '—' }}</span></li>
+          <li class="aud-detail-item"><label>助教</label>
+            <span>{{ audPickedAct.assistantName || '—' }}</span></li>
+          <li class="aud-detail-item"><label>预招人数</label>
+            <span>{{ audPickedAct.plannedCount ?? '—' }}</span></li>
+        </ul>
+      </div>
+      <template #footer>
+        <el-button @click="handleAudVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="audSaving" @click="confirmAudition">确 定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量添加学员弹窗（试听学员TAB）：多选学员一键登记本班日程试听 -->
+    <el-dialog v-model="batchAudVisible" title="批量添加学员（本班日程试听）" width="560px" append-to-body>
+      <div class="aud-acts" style="margin-bottom: 8px">
+        <el-input v-model="batchAudKw" placeholder="输入学员姓名 / 手机号搜索，双击输入框查看全部" clearable
+                  size="small" :prefix-icon="Search" @dblclick="loadAllBatchAudStu" />
+      </div>
+      <el-table :data="batchAudCands" v-loading="batchAudSearching" size="small" stripe
+                max-height="300" row-key="studentId" @selection-change="batchAudSel = $event">
+        <el-table-column type="selection" width="44" />
+        <el-table-column prop="name" label="学员姓名" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="phone" label="手机号" width="130">
+          <template #default="{ row }">{{ row.phone || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="年级" width="80">
+          <template #default="{ row }">{{ row.grade || '-' }}</template>
+        </el-table-column>
+      </el-table>
+      <div class="add-sel-count">已选择学员 <b class="blue">{{ batchAudSel.length }}</b> 名，将统一登记为「{{ curClazz?.name }}（日程试听）」</div>
+      <template #footer>
+        <el-button @click="batchAudVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="batchAudSaving" :disabled="!batchAudSel.length"
+                   @click="confirmBatchAudStu">确 定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 选择试听活动弹窗（试听学员TAB）：点击行选中回填 -->
+    <el-dialog v-model="actDlgVisible" title="选择试听活动" width="820px" append-to-body>
+      <div class="dlg-toolbar">
+        <el-select v-model="actF.type" placeholder="试听类型" clearable size="small" style="width: 108px">
+          <el-option label="插班试听" :value="1" /><el-option label="开班试听" :value="2" />
+        </el-select>
+        <el-date-picker v-model="actF.range" type="daterange" value-format="YYYY-MM-DD" size="small"
+                        start-placeholder="日期起" end-placeholder="日期止" style="width: 215px" />
+        <el-select v-model="actF.campus" placeholder="校区" clearable filterable size="small" style="width: 104px">
+          <el-option v-for="c in campusOptions" :key="c" :label="c" :value="c" />
+        </el-select>
+        <el-select v-model="actF.courseName" placeholder="课程" clearable filterable size="small" style="width: 118px">
+          <el-option v-for="c in actCourseOptions" :key="c" :label="c" :value="c" />
+        </el-select>
+        <el-select v-model="actF.teacherName" placeholder="老师" clearable filterable size="small" style="width: 104px">
+          <el-option v-for="t in actTeacherOptions" :key="t" :label="t" :value="t" />
+        </el-select>
+      </div>
+      <el-table ref="actTableRef" :data="actFiltered" height="330" size="small" stripe highlight-current-row
+                @current-change="(r) => (actPickedRow = r)">
+        <el-table-column prop="name" label="试听活动名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="人数" width="64" align="center">
+          <template #default="{ row }">{{ row.plannedCount ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="courseName" label="课程" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="teacherName" label="教师" width="84" show-overflow-tooltip />
+        <el-table-column prop="classroomName" label="教室" width="88" show-overflow-tooltip />
+        <el-table-column prop="timePeriod" label="时间段" width="110" show-overflow-tooltip />
+        <el-table-column prop="auditionDate" label="日期" width="96" />
+        <el-table-column label="选择" width="64" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="actPickedRow && actPickedRow.id === row.id" size="small" type="primary" effect="plain">已选</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!actFiltered.length" description="暂无关联本班的试听活动（需在试听管理中办理关联本班的插班试听）" :image-size="70" />
+      <template #footer>
+        <el-button @click="actDlgVisible = false">取 消</el-button>
+        <el-button type="primary" :disabled="!actPickedRow" @click="confirmActPick">确 定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 选择日程试听弹窗（试听学员TAB）：已成班课列表，点击行选中回填 -->
+    <el-dialog v-model="schDlgVisible" title="选择日程试听" width="820px" append-to-body>
+      <div class="dlg-toolbar">
+        <el-date-picker v-model="schF.range" type="daterange" value-format="YYYY-MM-DD" size="small"
+                        start-placeholder="日期起" end-placeholder="日期止" style="width: 215px" />
+        <el-select v-model="schF.campus" placeholder="校区" clearable filterable size="small" style="width: 104px">
+          <el-option v-for="c in campusOptions" :key="c" :label="c" :value="c" />
+        </el-select>
+        <el-select v-model="schF.courseName" placeholder="课程" clearable filterable size="small" style="width: 118px">
+          <el-option v-for="c in schCourseOptions" :key="c" :label="c" :value="c" />
+        </el-select>
+        <el-select v-model="schF.clazzName" placeholder="班级" clearable filterable size="small" style="width: 118px">
+          <el-option v-for="c in schClazzOptions" :key="c" :label="c" :value="c" />
+        </el-select>
+        <el-select v-model="schF.teacherName" placeholder="老师" clearable filterable size="small" style="width: 104px">
+          <el-option v-for="t in schTeacherOptions" :key="t" :label="t" :value="t" />
+        </el-select>
+      </div>
+      <el-table ref="schTableRef" :data="schFiltered" v-loading="schLoading" height="330" size="small" stripe
+                highlight-current-row @current-change="(r) => (schPickedRow = r)">
+        <el-table-column prop="name" label="班级" min-width="140" show-overflow-tooltip />
+        <el-table-column label="人数" width="76" align="center">
+          <template #default="{ row }">{{ stuCount[row.id] ?? 0 }}/{{ row.capacity ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column label="课程" min-width="100" show-overflow-tooltip>
+          <template #default="{ row }">{{ courseName(row.courseId) }}</template>
+        </el-table-column>
+        <el-table-column label="教师" width="84" show-overflow-tooltip>
+          <template #default="{ row }">{{ teacherName(row.classTeacherId) || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="教室" width="92" show-overflow-tooltip>
+          <template #default="{ row }">{{ roomName(row.classroomId) || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="时间段" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ clazzTimeMap[row.id]?.text || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="选择" width="64" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="schPickedRow && schPickedRow.id === row.id" size="small" type="primary" effect="plain">已选</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!schFiltered.length && !schLoading" description="本班暂无日程（需为本班排课）" :image-size="70" />
+      <template #footer>
+        <el-button @click="schDlgVisible = false">取 消</el-button>
+        <el-button type="primary" :disabled="!schPickedRow" @click="confirmSchPick">确 定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import {reactive, ref, computed, onMounted, watch} from 'vue'
+import {reactive, ref, computed, nextTick, onMounted, onBeforeUnmount, watch} from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {Search, MoreFilled, ArrowDown, View, User, EditPen, Delete} from '@element-plus/icons-vue'
+import {Search, MoreFilled, ArrowDown, View, User, EditPen, Delete, Switch} from '@element-plus/icons-vue'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
 import ColumnSetting from '../../components/ColumnSetting.vue'
 import { exportXlsx } from '../../utils/export'
+import FullCalendar from '@fullcalendar/vue3'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import timeGridPlugin from '@fullcalendar/timegrid'
+import interactionPlugin from '@fullcalendar/interaction'
+import zhCnLocale from '@fullcalendar/core/locales/zh-cn'
 import { useDictStore } from '../../store/dict'
 
 const dictStore = useDictStore()
@@ -513,6 +797,17 @@ const detailRoomName = computed(() => detailRoom.value?.name || '—')
 /** 上课校区：优先固定教室的校区，退回课程首个开课校区 */
 const detailCampus = computed(() => detailRoom.value?.campus || (detailCourse.value.campuses || [])[0] || '—')
 const detailStudying = computed(() => stuCount.value[detailClazz.value?.id] ?? 0)
+/** 试听学员数（本班试听名单） */
+const auditionCount = computed(() => audStuRows.value.length)
+/** 已占用名额 = 正式在读 + 试听学员（试听同样占名额） */
+const occupiedTotal = computed(() => (stuInfo.studying || 0) + auditionCount.value)
+/** 试听转化率 = 试听名单中已转本班正式学员的占比 */
+const auditionRate = computed(() => {
+  if (!auditionCount.value) return '0.00'
+  const formal = new Set((stuInfo.rows || []).map((r) => r.studentId))
+  const converted = audStuRows.value.filter((a) => formal.has(a.studentId)).length
+  return ((converted / auditionCount.value) * 100).toFixed(2)
+})
 /** 满班率 = 在读 ÷ 满班人数 */
 const fillRate = computed(() => {
   const cap = Number(detailClazz.value?.capacity || 0)
@@ -544,14 +839,151 @@ const classTimeText = computed(() => {
 /** 上课记录：已完成课次 */
 const doneSchedules = computed(() => detailSchedules.value.filter((s) => s.status === 1))
 
+/* ===== 排课TAB：课程表(FullCalendar，同排课管理) + 新建排课 + 导出 ===== */
+const schedView = ref('list')        // list=排课列表 / cal=课程表
+const calMode = ref('month')         // day / week / month
+const todayStr = () => new Date().toISOString().slice(0, 10)
+/** 本班课次时间重叠 = 冲突日程 */
+const conflictIds = computed(() => {
+  const ids = new Set()
+  const list = detailSchedules.value.filter((s) => s.status !== 2)
+  for (let i = 0; i < list.length; i++)
+    for (let j = i + 1; j < list.length; j++) {
+      if (String(list[i].startTime) < String(list[j].endTime)
+        && String(list[j].startTime) < String(list[i].endTime)) {
+        ids.add(list[i].id); ids.add(list[j].id)
+      }
+    }
+  return ids
+})
+/** 试听日期集：本班试听学员的办试听时间 */
+const auditionDates = computed(() =>
+  new Set(audStuRows.value.map((a) => a.auditionDate).filter(Boolean)))
+const chipHasAud = (s) => auditionDates.value.has(String(s.startTime).slice(0, 10))
+const chipTitle = (s) => {
+  const parts = [`${fmtTime(s.startTime)} ~ ${String(s.endTime || '').slice(11, 16)}`,
+    teacherName(s.teacherId), s.classroom || '']
+  if (conflictIds.value.has(s.id)) parts.push('⚠ 时间冲突')
+  if (s.status === 1) parts.push('已记上课')
+  if (chipHasAud(s)) parts.push('含试听学员')
+  return parts.filter(Boolean).join(' · ')
+}
+/** 课次 → 日历事件：色块按图例（冲突橙/已记上课蓝/我的青/其它绿），含试听加「试」角标 */
+function schedEvent(s) {
+  let bg = '#5bc377'
+  if (conflictIds.value.has(s.id)) bg = '#ffb51f'
+  else if (s.status === 1) bg = '#347ab7'
+  else if (detailClazz.value && s.teacherId === detailClazz.value.classTeacherId) bg = '#129ca9'
+  return {
+    id: String(s.id),
+    title: `${teacherName(s.teacherId)}${s.classroom ? ' @' + s.classroom : ''}${chipHasAud(s) ? ' ·试' : ''}`,
+    start: String(s.startTime || '').replace(' ', 'T'),
+    end: String(s.endTime || '').replace(' ', 'T'),
+    backgroundColor: s.status === 2 ? '#c0c8d4' : bg,
+    borderColor: 'transparent',
+    editable: false,
+    extendedProps: { raw: s }
+  }
+}
+const fcRef = ref()
+const VIEW_MAP = { day: 'timeGridDay', week: 'timeGridWeek', month: 'dayGridMonth' }
+const calOptions = computed(() => ({
+  plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
+  locale: zhCnLocale,
+  initialView: VIEW_MAP[calMode.value],
+  headerToolbar: { left: 'prev,today,next', center: 'title', right: '' },
+  buttonText: { today: '今天' },
+  height: 520,
+  firstDay: 1,
+  allDaySlot: false,
+  slotMinTime: '08:00:00',
+  slotMaxTime: '22:00:00',
+  selectable: true,
+  selectMirror: true,
+  unselectAuto: true,
+  events: detailSchedules.value.map(schedEvent),
+  eventClick: onCalEventClick,
+  select: onCalSelect
+}))
+/** 日/周/月切换：通过 API 换视图 */
+function onCalMode(v) {
+  nextTick(() => fcRef.value?.getApi()?.changeView(VIEW_MAP[v]))
+}
+/** 点击课次：详情提示 */
+function onCalEventClick(info) {
+  const s = info.event.extendedProps.raw
+  ElMessageBox.alert(chipTitle(s), '课次详情', { confirmButtonText: '知道了' }).catch(() => {})
+}
+/** 框选/点击空白时段：带入时间快速新建排课 */
+function onCalSelect(info) {
+  const d = info.startStr.slice(0, 10)
+  const t0 = info.startStr.slice(11, 16)
+  const t1 = info.endStr.slice(11, 16)
+  schedForm.value = {
+    date: d,
+    range: [t0 || '18:00', t1 || '20:00'],
+    teacherId: detailClazz.value?.classTeacherId || null,
+    classroomId: detailClazz.value?.classroomId || null
+  }
+  schedCreateVisible.value = true
+}
+
+/* 新建排课 */
+const schedCreateVisible = ref(false)
+const schedSaving = ref(false)
+const schedForm = ref({})
+function openCreateSched() {
+  schedForm.value = {
+    date: todayStr(),
+    range: ['18:00', '20:00'],
+    teacherId: detailClazz.value?.classTeacherId || null,
+    classroomId: detailClazz.value?.classroomId || null
+  }
+  schedCreateVisible.value = true
+}
+async function saveSched() {
+  const f = schedForm.value
+  if (!f.date) return ElMessage.warning('请选择日期')
+  if (!f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择时段')
+  if (!f.teacherId) return ElMessage.warning('请选择教师')
+  schedSaving.value = true
+  try {
+    await api.scheduleCreate({
+      clazzId: curClazz.value.id,
+      teacherId: f.teacherId,
+      classroomId: f.classroomId || undefined,
+      startTime: `${f.date} ${f.range[0]}:00`,
+      endTime: `${f.date} ${f.range[1]}:00`
+    })
+    ElMessage.success('排课成功')
+    schedCreateVisible.value = false
+    loadDetailSchedules()
+  } finally { schedSaving.value = false }
+}
+/** 导出课表：当前班全部课次（时间/教师/教室/状态/备注） */
+function exportSchedules() {
+  if (!detailSchedules.value.length) return ElMessage.warning('暂无排课可导出')
+  exportXlsx(`课表_${curClazz.value?.name || ''}`, [
+    { label: '上课时间', prop: 'startTime' },
+    { label: '结束时间', prop: 'endTime' },
+    { label: '教师', prop: 'teacherId', fmt: (v) => teacherName(v) },
+    { label: '教室', prop: 'classroom' },
+    { label: '状态', prop: 'status', fmt: (v) => ['待上课', '已完成', '已取消'][v] || '-' },
+    { label: '冲突', prop: 'id', fmt: (v) => (conflictIds.value.has(v) ? '⚠ 时间冲突' : '') },
+    { label: '备注', prop: 'remark' }
+  ], detailSchedules.value)
+}
+
 /** 进入班级功能页：加载学员、排课与课程定价 */
 function openDetailPage(row, tab = 'students') {
   mode.value = 'detail'
   detailTab.value = tab
   detailClazz.value = row
-  curClazz.value = row // 添加学生/调班弹窗复用
+  curClazz.value = row // 添加学生/调班/试听弹窗复用
   loadStudents()
   loadDetailSchedules()
+  loadAuditionStudents()
+  resetAuditionForm()
   const cid = row.courseId
   if (cid && !priceMap.value[cid]) {
     api.coursePrices(cid).then((ps) => (priceMap.value[cid] = ps || [])).catch(() => (priceMap.value[cid] = []))
@@ -567,6 +999,278 @@ function backToList() {
   mode.value = 'list'
   detailClazz.value = null
   load()
+}
+
+/** 功能页时点击/双击左侧「班级管理」菜单 → 视同返回列表 */
+const route = useRoute()
+function onMenuSelfClick(e) {
+  if (e.detail !== route.path || mode.value === 'list') return
+  backToList()
+}
+onMounted(() => window.addEventListener('menu-self-click', onMenuSelfClick))
+onBeforeUnmount(() => window.removeEventListener('menu-self-click', onMenuSelfClick))
+
+/* ===== 试听学员TAB：办理试听（学员混合搜索 + 试听活动/日程试听选择） ===== */
+const audStuRows = ref([])
+const audLoading = ref(false)
+const audSaving = ref(false)
+const handleAudVisible = ref(false)
+const audStuId = ref(null)
+const audSearching = ref(false)
+const audStuCands = ref([])
+const audPickedStu = ref(null)
+const audPickedAct = ref(null)
+const allStudents = ref([])
+
+const roomName = (id) => classroomList.value.find((r) => r.id === id)?.name || ''
+/** 班级校区：教室校区优先，退回课程首个校区 */
+const clazzCampus = (c) => {
+  const room = classroomList.value.find((r) => r.id === c.classroomId)
+  return room?.campus || (courses.value.find((x) => x.id === c.courseId)?.campuses || [])[0] || ''
+}
+
+async function loadAuditionStudents() {
+  audLoading.value = true
+  try {
+    audStuRows.value = (await api.clazzAuditionStudents(curClazz.value.id)) || []
+  } finally { audLoading.value = false }
+}
+
+/** 学员候选统一映射（仅真实学员：studentList 已过滤兼任档案） */
+const mapAudStudents = (list) => (list || []).map((s) =>
+  ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade, school: s.school }))
+/** 混合搜索：姓名/手机号一个框（参考报名/续报学员搜索） */
+async function searchAudStudents(kw) {
+  if (!kw || !kw.trim()) { audStuCands.value = []; return }
+  audSearching.value = true
+  try {
+    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    const k = kw.trim().toLowerCase()
+    audStuCands.value = mapAudStudents(allStudents.value.filter((s) =>
+      (s.name || '').toLowerCase().includes(k) || (s.phone || '').includes(k)))
+  } finally { audSearching.value = false }
+}
+/** 双击搜索框：无关键字全量检索 */
+async function loadAllAudStudents() {
+  if (audSearching.value) return
+  audSearching.value = true
+  try {
+    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    audStuCands.value = mapAudStudents(allStudents.value)
+  } finally { audSearching.value = false }
+}
+function onPickAudStu(id) {
+  audPickedStu.value = audStuCands.value.find((s) => s.studentId === id) || null
+}
+function openHandleAudition() {
+  resetAuditionForm()
+  handleAudVisible.value = true
+}
+function resetAuditionForm() {
+  audStuId.value = null
+  audStuCands.value = []
+  audPickedStu.value = null
+  audPickedAct.value = null
+}
+async function confirmAudition() {
+  if (!audPickedStu.value) return ElMessage.warning('请先在「学员信息」区搜索并选择学员')
+  if (!audPickedAct.value) return ElMessage.warning('请先点击「选择试听活动」或「选择日程试听」')
+  if (!audPickedAct.value.name?.trim()) return ElMessage.warning('请填写活动名称')
+  const a = audPickedAct.value
+  audSaving.value = true
+  try {
+    await api.clazzAddAudition(curClazz.value.id, {
+      studentId: audPickedStu.value.studentId,
+      studentName: audPickedStu.value.name,
+      source: a.source,
+      auditionId: a.auditionId || undefined,
+      auditionName: a.name,
+      courseName: a.courseName || undefined,
+      teacherName: a.teacherName || undefined,
+      classroomName: a.classroomName || undefined,
+      timePeriod: a.timePeriod || undefined,
+      campus: a.campus || undefined,
+      auditionDate: a.date || undefined,
+      assistantName: a.assistantName || undefined
+    })
+    ElMessage.success(`已为 ${audPickedStu.value.name} 办理试听`)
+    handleAudVisible.value = false
+    resetAuditionForm()
+    loadAuditionStudents()
+  } finally { audSaving.value = false }
+}
+async function removeAudition(id) {
+  await api.clazzDelAudition(id)
+  ElMessage.success('已移除')
+  loadAuditionStudents()
+}
+
+/* ===== 批量添加学员（本班日程试听）：多选学员一键登记 ===== */
+const batchAudVisible = ref(false)
+const batchAudKw = ref('')
+const batchAudSearching = ref(false)
+const batchAudSaving = ref(false)
+const batchAudCands = ref([])
+const batchAudSel = ref([])
+let batchAudTimer = null
+watch(batchAudKw, () => {
+  clearTimeout(batchAudTimer)
+  batchAudTimer = setTimeout(() => searchBatchAudStu(batchAudKw.value), 300)
+})
+async function searchBatchAudStu(kw) {
+  const k = (kw || '').trim()
+  if (!k) { batchAudCands.value = []; return }
+  batchAudSearching.value = true
+  try {
+    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    batchAudCands.value = allStudents.value
+      .filter((s) => (s.name || '').toLowerCase().includes(k.toLowerCase()) || (s.phone || '').includes(k))
+      .map((s) => ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade }))
+  } finally { batchAudSearching.value = false }
+}
+async function loadAllBatchAudStu() {
+  if (batchAudSearching.value) return
+  batchAudSearching.value = true
+  try {
+    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    batchAudCands.value = allStudents.value
+      .map((s) => ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade }))
+  } finally { batchAudSearching.value = false }
+}
+function openBatchAudStu() {
+  batchAudKw.value = ''
+  batchAudCands.value = []
+  batchAudSel.value = []
+  batchAudVisible.value = true
+}
+async function confirmBatchAudStu() {
+  if (!batchAudSel.value.length) return ElMessage.warning('请先勾选要办理试听的学员')
+  const c = curClazz.value
+  const t = clazzTimeMap.value[c.id]
+  const room = classroomList.value.find((r) => r.id === c.classroomId)
+  batchAudSaving.value = true
+  try {
+    const msg = await api.clazzAddAuditionsBatch(c.id, {
+      items: batchAudSel.value.map((s) => ({
+        studentId: s.studentId, studentName: s.name,
+        source: 2, auditionId: null, auditionName: `${c.name}（日程试听）`,
+        courseName: courseName(c.courseId), teacherName: teacherName(c.classTeacherId) || '',
+        classroomName: room?.name || '', timePeriod: t?.text || '', campus: clazzCampus(c),
+        auditionDate: c.startDate, assistantName: ''
+      }))
+    })
+    ElMessage.success(msg || '批量办理成功')
+    batchAudVisible.value = false
+    loadAuditionStudents()
+  } finally { batchAudSaving.value = false }
+}
+
+/* 选择试听活动弹窗：试听管理记录（类型/日期/校区/课程/老师筛选）；行选中后点确定回填 */
+const actDlgVisible = ref(false)
+const actTableRef = ref(null)
+const actPickedRow = ref(null)
+const actF = reactive({ type: null, range: null, campus: null, courseName: null, teacherName: null })
+const auditions = ref([])
+const actCourseOptions = computed(() => [...new Set(auditions.value.map((a) => a.courseName).filter(Boolean))])
+const actTeacherOptions = computed(() => [...new Set(auditions.value.map((a) => a.teacherName).filter(Boolean))])
+const actFiltered = computed(() => auditions.value.filter((a) => {
+  // 仅本班相关的试听活动（插班试听关联本班）；开班试听为独立活动，在试听管理详情查看
+  if (a.relateClazzId !== curClazz.value?.id) return false
+  if (actF.type != null && a.type !== actF.type) return false
+  if (actF.campus && a.campus !== actF.campus) return false
+  if (actF.courseName && a.courseName !== actF.courseName) return false
+  if (actF.teacherName && a.teacherName !== actF.teacherName) return false
+  const [b, e] = actF.range || []
+  if (b && (a.auditionDate || '') < b) return false
+  if (e && (a.auditionDate || '') > e) return false
+  return true
+}))
+async function openActDlg() {
+  if (!auditions.value.length) {
+    try { auditions.value = (await api.auditionList()) || [] } catch (e) { auditions.value = [] }
+  }
+  Object.assign(actF, { type: null, range: null, campus: null, courseName: null, teacherName: null })
+  // 重置行选中态（修复：清空后重开点同一行不触发 current-change）
+  actPickedRow.value = null
+  nextTick(() => actTableRef.value?.setCurrentRow(null))
+  actDlgVisible.value = true
+}
+function confirmActPick() {
+  if (!actPickedRow.value) return ElMessage.warning('请先点击选择一条试听活动')
+  const row = actPickedRow.value
+  audPickedAct.value = { source: 1, auditionId: row.id, name: row.name,
+    courseName: row.courseName, teacherName: row.teacherName,
+    classroomName: row.classroomName, timePeriod: row.timePeriod, campus: row.campus,
+    date: row.auditionDate, assistantName: row.assistantName, plannedCount: row.plannedCount }
+  actDlgVisible.value = false
+  ElMessage.success(`已选择试听活动「${row.name}」，项目信息已回填`)
+}
+
+/* 选择日程试听弹窗：已成班课（日期/校区/课程/班级/老师筛选），时间段由排课推导；行选中后点确定回填 */
+const schDlgVisible = ref(false)
+const schTableRef = ref(null)
+const schPickedRow = ref(null)
+const schLoading = ref(false)
+const schF = reactive({ range: null, campus: null, courseName: null, clazzName: null, teacherName: null })
+/** clazzId -> { text: 时段文本, dates: 上课日期集 }（打开弹窗时一次性拉排课推导） */
+const clazzTimeMap = ref({})
+const schClasses = computed(() => clazzList.value.filter((c) => {
+  const course = courses.value.find((x) => x.id === c.courseId)
+  return course && bankeVal.value != null && course.teachMode === bankeVal.value && c.status !== 3
+}))
+const schCourseOptions = computed(() =>
+  [...new Set(schClasses.value.map((c) => courseName(c.courseId)).filter((x) => x && x !== '-'))])
+const schClazzOptions = computed(() => schClasses.value.map((c) => c.name))
+const schTeacherOptions = computed(() =>
+  [...new Set(schClasses.value.map((c) => teacherName(c.classTeacherId)).filter(Boolean))])
+const schFiltered = computed(() => schClasses.value.filter((c) => {
+  // 日程试听仅本班（本TAB即本班试听课）
+  if (c.id !== curClazz.value?.id) return false
+  if (schF.courseName && courseName(c.courseId) !== schF.courseName) return false
+  if (schF.clazzName && c.name !== schF.clazzName) return false
+  if (schF.teacherName && teacherName(c.classTeacherId) !== schF.teacherName) return false
+  if (schF.campus && clazzCampus(c) !== schF.campus) return false
+  const [b, e] = schF.range || []
+  if (b || e) {
+    const t = clazzTimeMap.value[c.id]
+    if (!t || !t.dates.length) return false
+    if (b && !t.dates.some((d) => d >= b)) return false
+    if (e && !t.dates.some((d) => d <= e)) return false
+  }
+  return true
+}))
+async function openSchDlg() {
+  Object.assign(schF, { range: null, campus: null, courseName: null, clazzName: null, teacherName: null })
+  // 重置行选中态（修复：清空后重开点同一行不触发 current-change）
+  schPickedRow.value = null
+  nextTick(() => schTableRef.value?.setCurrentRow(null))
+  schDlgVisible.value = true
+  if (Object.keys(clazzTimeMap.value).length) return
+  schLoading.value = true
+  try {
+    const rs = (await api.schedulePage({ page: 1, size: 500 })).records || []
+    const map = {}
+    rs.filter((s) => s.status !== 2 && s.clazzId).forEach((s) => {
+      const m = map[s.clazzId] || (map[s.clazzId] = { texts: new Set(), dates: new Set() })
+      const d = String(s.startTime)
+      m.dates.add(d.slice(0, 10))
+      m.texts.add(`周${'日一二三四五六'[new Date(d).getDay()]} ${d.slice(11, 16)}-${String(s.endTime || '').slice(11, 16)}`)
+    })
+    clazzTimeMap.value = Object.fromEntries(Object.entries(map).map(([k, v]) =>
+      [k, { text: [...v.texts].slice(0, 2).join('；'), dates: [...v.dates].sort() }]))
+  } catch (e) { /* 无排课 */ } finally { schLoading.value = false }
+}
+function confirmSchPick() {
+  if (!schPickedRow.value) return ElMessage.warning('请先点击选择一条班级日程')
+  const row = schPickedRow.value
+  const t = clazzTimeMap.value[row.id]
+  audPickedAct.value = { source: 2, auditionId: null, name: `${row.name}（日程试听）`,
+    courseName: courseName(row.courseId), teacherName: teacherName(row.classTeacherId) || '',
+    classroomName: roomName(row.classroomId), timePeriod: t?.text || '', campus: clazzCampus(row),
+    date: row.startDate, assistantName: '',
+    plannedCount: Math.max((row.capacity || 0) - (stuCount.value[row.id] ?? 0), 0) || row.capacity }
+  schDlgVisible.value = false
+  ElMessage.success(`已选择班级「${row.name}」的日程试听，项目信息已回填`)
 }
 /** 列表行点击进入功能页（勾选/操作列不触发） */
 function onRowClick(row, column) {
@@ -881,8 +1585,30 @@ onMounted(async () => {
 /* 功能TAB面板 */
 .cd-tab-panel { margin-top: 10px; padding: 4px 18px 14px; }
 .cd-tab-panel :deep(.el-tabs__header) { margin-bottom: 8px; }
+/* ===== 排课TAB：工具条 + 图例 + FullCalendar 课表 ===== */
+.sch-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 4px; margin-bottom: 10px; }
+/* 图例 */
+.sch-legend { display: flex; align-items: center; gap: 12px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.sch-legend li { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #667c99; white-space: nowrap; }
+.color-square { width: 12px; height: 12px; border-radius: 3px; border: 1px solid; display: inline-block; }
+.color-square.preview { background: #fff; border-style: dashed; }
+/* FullCalendar 容器 */
+.cal-wrap { border: 1px solid #e4edf7; border-radius: 10px; background: #fff; padding: 6px 10px; }
+.cal-wrap :deep(.fc) { font-size: 12.5px; }
+.cal-wrap :deep(.fc .fc-toolbar-title) { font-size: 15px; font-weight: 600; color: #344054; }
+.cal-wrap :deep(.fc .fc-button) { background: #fff; border: 1px solid #dfe7f3; color: #475467;
+  font-size: 12.5px; padding: 3px 10px; }
+.cal-wrap :deep(.fc .fc-button:hover) { background: #f5f9ff; color: #155EEF; border-color: #b9d0f7; }
+.cal-wrap :deep(.fc .fc-button-primary:not(:disabled).fc-button-active),
+.cal-wrap :deep(.fc .fc-button-primary:not(:disabled):active) { background: #155EEF; color: #fff; border-color: #155EEF; }
+.cal-wrap :deep(.fc-theme-standard td), .cal-wrap :deep(.fc-theme-standard th) { border-color: #edf2f9; }
+.cal-wrap :deep(.fc .fc-event) { border-radius: 6px; cursor: pointer; font-size: 12px; }
 /* 学生管理容量条：标签与「添加学生」按钮同行，按钮靠右 */
 .stu-cap-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+/* 试听学员占名印章（橙底白「试」字，微倾 6°）+ 数量 */
+.aud-seat { display: inline-flex; align-items: center; gap: 4px; color: #f79009; }
+.aud-seat svg { transform: rotate(-6deg); }
+.aud-seat b { font-size: 13px; }
 /* 班课印章（同课程卡片 origin-seal 风格）：蓝底白「班」字，微倾 6° 呈盖章手感 */
 .ban-seal { display: inline-flex; color: #155EEF; transform: rotate(-6deg); vertical-align: middle; }
 .ban-seal svg { display: block; }
@@ -894,6 +1620,36 @@ onMounted(async () => {
 .add-sel-count { margin-top: 8px; padding: 6px 12px; background: #f5f9ff; border: 1px solid #dbe7fb;
   border-radius: 8px; font-size: 12.5px; color: #667c99; }
 .add-sel-count .blue { color: #155EEF; }
+/* 试听学员TAB：分区 + 办理试听弹窗 + 活动选择 */
+.aud-sec { margin-bottom: 14px; }
+.aud-sec-title {
+  font-size: 13px; font-weight: 600; color: #344054;
+  padding-left: 8px; border-left: 3px solid #155EEF; margin-bottom: 8px;
+}
+.aud-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.aud-tip { font-size: 12.5px; color: #8fa8c4; }
+.aud-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* 活动信息区标题行：标题 + 清空按钮 */
+.aud-sec-head { display: flex; align-items: center; justify-content: space-between; }
+.aud-sec-head .aud-sec-title { margin-bottom: 0; }
+.aud-sec-head + .aud-acts { margin-top: 8px; }
+.aud-empty-tip {
+  margin-top: 8px; font-size: 12.5px; color: #98a2b3;
+  border: 1px dashed #dbe7f5; border-radius: 8px; background: #fafcff; padding: 10px 12px;
+}
+/* 回填项目信息明细：label + value 两列网格，名称可编辑 */
+.aud-detail {
+  list-style: none; margin: 8px 0 0; padding: 10px 12px;
+  background: #f5f9ff; border: 1px solid #dbe7fb; border-radius: 8px;
+  display: flex; flex-wrap: wrap; row-gap: 8px;
+}
+.aud-detail-item { display: flex; align-items: center; width: 50%; min-width: 200px; }
+.aud-detail-item.aud-detail-name { width: 100%; }
+.aud-detail-item label { flex-shrink: 0; width: 60px; font-size: 12.5px; color: #8fa8c4; }
+.aud-detail-item span {
+  font-size: 13px; color: #344054; max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* 选择课程弹窗 */
 .dlg-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .dlg-toolbar .fee-sub { font-size: 12.5px; color: #8fa8c4; margin-left: auto; }
