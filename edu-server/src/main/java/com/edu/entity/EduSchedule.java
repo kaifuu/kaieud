@@ -18,14 +18,20 @@ public class EduSchedule {
     private Long courseId;
     private Long clazzId;
     private Long teacherId;
+    /** 助教教师ID（可选） */
+    private Long assistantId;
     private Long studentId;
     private Long classroomId;
         private String classroom;
+    /** 上课主题（最多20字） */
+    private String topic;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     /** 0待上课 1已完成 2已取消 */
     private Long orgId;
     private Integer status;
+    /** 排课方式：0自由排课 1重复排课 */
+    private Integer schedType;
     private String cancelReason;
     private Long originId;
     private Integer compensation;

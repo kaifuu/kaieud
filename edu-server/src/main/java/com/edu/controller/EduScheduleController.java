@@ -89,7 +89,8 @@ public class EduScheduleController {
                 .eq(studentId != null, EduSchedule::getStudentId, studentId)
                 .eq(orgId != null, EduSchedule::getOrgId, orgId)
                 .eq(status != null, EduSchedule::getStatus, status)
-                .last(SafeSort.order(sortBy, direction, "startTime", "id", "startTime", "endTime", "status"));
+                .last(SafeSort.order(sortBy, direction, "startTime", "id", "startTime", "endTime", "status",
+                        "createTime", "updateTime"));
         // 阶段过滤（按当前系统时间推导，四个TAB互斥）：
         // today待上课：已排课且 start_time > now；ongoing上课中：start <= now <= end；
         // done已下课：end_time < now（含已完成与未登记完成，不含已取消）
@@ -220,6 +221,39 @@ public class EduScheduleController {
     @Log("新增排课")
     public Result<EduSchedule> create(@RequestBody EduSchedule schedule) {
         return Result.ok(scheduleService.create(schedule));
+    }
+
+    /** 重复排课：按规则（每周/隔周/隔天 + 周几 + 日期或次数结束 + 节假日过滤）批量生成课次 */
+    @PostMapping("/repeat")
+    @Log("重复排课")
+    public Result<Map<String, Object>> createRepeat(@RequestBody EduScheduleService.RepeatDTO dto) {
+        return Result.ok(scheduleService.createRepeat(dto));
+    }
+
+    /** 重复排课预览：预计排课次数 / 最后一次日期 / 节假日跳过数 */
+    @PostMapping("/repeat-preview")
+    public Result<Map<String, Object>> repeatPreview(@RequestBody EduScheduleService.RepeatDTO dto) {
+        return Result.ok(scheduleService.repeatPreview(dto));
+    }
+
+    /** 编辑排课：修改时间/时段/教师/助教/教室/上课主题 */
+    @PostMapping("/{id}/update")
+    @Log("编辑排课")
+    public Result<Void> update(@PathVariable Long id, @RequestBody UpdateDTO dto) {
+        scheduleService.update(id, dto.getStartTime(), dto.getEndTime(), dto.getTeacherId(),
+                dto.getAssistantId(), dto.getClassroomId(), dto.getTopic());
+        return Result.ok();
+    }
+
+    @Data
+    public static class UpdateDTO {
+        private LocalDateTime startTime;
+        private LocalDateTime endTime;
+        /** 换教师（可选）：不传沿用原教师 */
+        private Long teacherId;
+        private Long assistantId;
+        private Long classroomId;
+        private String topic;
     }
 
     /** 各阶段排课数量（TAB徽标用，口径与列表阶段过滤一致） */

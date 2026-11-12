@@ -2,8 +2,10 @@ package com.edu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.edu.common.exception.BizException;
+import com.edu.entity.EduClazz;
 import com.edu.entity.EduEnroll;
 import com.edu.entity.EduSchedule;
+import com.edu.mapper.EduClazzMapper;
 import com.edu.mapper.EduEnrollMapper;
 import com.edu.mapper.EduScheduleMapper;
 import com.edu.security.AuthContext;
@@ -21,6 +23,7 @@ public class EduScheduleService {
 
     private final EduScheduleMapper scheduleMapper;
     private final EduEnrollMapper enrollMapper;
+    private final EduClazzMapper clazzMapper;
     private final com.edu.mapper.EduTeacherMapper teacherMapper;
     private final com.edu.mapper.EduStudentMapper studentMapper;
     private final com.edu.mapper.EduCourseMapper courseMapper;
@@ -29,6 +32,7 @@ public class EduScheduleService {
     private final com.edu.mapper.EduAbsenceMapper absenceMapper;
     private final EduConsumeService consumeService;
     private final com.edu.mapper.EduScheduleLogMapper opLogMapper;
+    private final com.edu.mapper.SysDictMapper dictMapper;
 
     /** 旷课审批超时自动扣课的时限 */
     public static final int ABSENCE_DEADLINE_HOURS = 72;
@@ -50,7 +54,23 @@ public class EduScheduleService {
             com.edu.security.LoginUser lu = com.edu.security.AuthContext.get();
             if (lu != null && lu.getOrgId() != null) s.setOrgId(lu.getOrgId()); else s.setOrgId(1L);
         }
+        // 课程归属：edu_schedule.course_id 非空，入参未带时按班级/学员报名记录推导
+        if (s.getCourseId() == null) {
+            if (s.getClazzId() != null) {
+                EduClazz clazz = clazzMapper.selectById(s.getClazzId());
+                if (clazz != null) s.setCourseId(clazz.getCourseId());
+            } else if (s.getStudentId() != null) {
+                EduEnroll e = enrollMapper.selectOne(new LambdaQueryWrapper<EduEnroll>()
+                        .eq(EduEnroll::getStudentId, s.getStudentId())
+                        .eq(EduEnroll::getStatus, 1)
+                        .orderByDesc(EduEnroll::getCreateTime)
+                        .last("LIMIT 1"));
+                if (e != null) s.setCourseId(e.getCourseId());
+            }
+        }
+        if (s.getCourseId() == null) throw new BizException("未能确定上课课程，请检查班级或报名记录");
         s.setStatus(0);
+        s.setSchedType(s.getSchedType() == null ? 0 : s.getSchedType());
         scheduleMapper.insert(s);
         opLog(s, "排课", null);
         return s;
@@ -273,6 +293,205 @@ public class EduScheduleService {
         scheduleMapper.insert(neu);
         opLog(neu, "补课", "来源课次#" + originId);
         return neu;
+    }
+
+    /* ==================== 重复排课 / 编辑排课 ==================== */
+
+    /** 重复排课入参：开始/结束规则 + 周几 + 时段 + 教师/助教/教室/主题（clazzId 归属班级） */
+    @lombok.Data
+    public static class RepeatDTO {
+        private Long clazzId;
+        private Long teacherId;
+        private Long assistantId;
+        private Long classroomId;
+        private String topic;
+        /** 重复方式：1每周 2隔周 4隔天 */
+        private Integer repeatMode;
+        /** 周几上课：1~7（ISO，周一=1）；隔天重复时不适用 */
+        private java.util.List<Integer> weekdays;
+        private java.time.LocalDate beginDate;
+        /** 结束方式：date按日期 / count按次数 */
+        private String endMode;
+        private java.time.LocalDate endDate;
+        private Integer endCount;
+        /** 节假日过滤：true=节假日不排课 */
+        private Boolean skipHoliday;
+        /** 上课时段 HH:mm */
+        private String beginTime;
+        private String endTime;
+    }
+
+    /** 节假日集合：字典 dict_type=holiday（label=节日名，value=yyyy-MM-dd），租户在字典管理维护 */
+    private java.util.Set<java.time.LocalDate> holidaySet() {
+        java.util.Set<java.time.LocalDate> set = new java.util.HashSet<>();
+        for (com.edu.entity.SysDict d : dictMapper.selectList(new LambdaQueryWrapper<com.edu.entity.SysDict>()
+                .eq(com.edu.entity.SysDict::getDictType, "holiday"))) {
+            try { set.add(java.time.LocalDate.parse(d.getValue())); } catch (Exception ignore) { }
+        }
+        return set;
+    }
+
+    /**
+     * 按重复规则推算上课日期（未做节假日过滤的规则命中集）。
+     * 每周：选中周几每周排；隔周：以开始日期所在周为第0周，隔一周排；隔天：从开始日期起隔一天排一次（周几不适用）。
+     * 防御上限 3000 天 / 200 次，避免结束方式异常时死循环。
+     */
+    private java.util.List<java.time.LocalDate> computeRepeatDates(RepeatDTO dto) {
+        java.util.List<java.time.LocalDate> dates = new java.util.ArrayList<>();
+        java.time.LocalDate begin = dto.getBeginDate();
+        if (begin == null) return dates;
+        java.util.Set<Integer> wd = dto.getWeekdays() == null
+                ? new java.util.HashSet<Integer>() : new java.util.HashSet<>(dto.getWeekdays());
+        boolean byCount = "count".equals(dto.getEndMode());
+        int endCount = byCount && dto.getEndCount() != null ? Math.min(dto.getEndCount(), 200) : 200;
+        java.time.LocalDate beginMonday = begin.with(java.time.temporal.TemporalAdjusters
+                .previousOrSame(java.time.DayOfWeek.MONDAY));
+        int guard = 0;
+        for (java.time.LocalDate d = begin; guard++ < 3000; d = d.plusDays(1)) {
+            if (!byCount && (dto.getEndDate() == null || d.isAfter(dto.getEndDate()))) break;
+            boolean hit;
+            if (dto.getRepeatMode() != null && dto.getRepeatMode() == 4) {
+                hit = java.time.temporal.ChronoUnit.DAYS.between(begin, d) % 2 == 0;
+            } else if (wd.contains(d.getDayOfWeek().getValue())) {
+                if (dto.getRepeatMode() != null && dto.getRepeatMode() == 2) {
+                    long weeks = java.time.temporal.ChronoUnit.WEEKS.between(beginMonday,
+                            d.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)));
+                    hit = weeks % 2 == 0;
+                } else {
+                    hit = true;
+                }
+            } else {
+                hit = false;
+            }
+            if (hit) {
+                dates.add(d);
+                if (dates.size() >= endCount) break;
+            }
+        }
+        return dates;
+    }
+
+    /** 重复规则校验（新建与预览共用） */
+    private void validateRepeat(RepeatDTO dto) {
+        if (dto.getTeacherId() == null) throw new BizException("请选择上课教师");
+        if (dto.getClassroomId() == null) throw new BizException("请选择上课教室");
+        if (dto.getBeginTime() == null || dto.getEndTime() == null || dto.getBeginTime().isEmpty() || dto.getEndTime().isEmpty())
+            throw new BizException("请选择上课时段");
+        java.time.LocalTime t0, t1;
+        try {
+            t0 = java.time.LocalTime.parse(dto.getBeginTime());
+            t1 = java.time.LocalTime.parse(dto.getEndTime());
+        } catch (Exception e) { throw new BizException("上课时段格式不正确"); }
+        if (!t1.isAfter(t0)) throw new BizException("结束时间必须晚于开始时间");
+        if (dto.getBeginDate() == null) throw new BizException("请选择开始日期");
+        boolean byCount = "count".equals(dto.getEndMode());
+        if (byCount && (dto.getEndCount() == null || dto.getEndCount() < 1)) throw new BizException("请填写排课次数");
+        if (!byCount && dto.getEndDate() == null) throw new BizException("请选择结束日期");
+        if (!byCount && dto.getEndDate().isBefore(dto.getBeginDate())) throw new BizException("结束日期不能早于开始日期");
+        if (dto.getRepeatMode() == null) throw new BizException("请选择重复方式");
+        if (dto.getRepeatMode() != 4 && (dto.getWeekdays() == null || dto.getWeekdays().isEmpty()))
+            throw new BizException("请选择周几上课");
+    }
+
+    /**
+     * 重复排课：按规则逐次建课次。逐次走 create()（教师冲突/教室占用/禁排时段/过去时间各自校验），
+     * 单次失败不中断整批——汇总返回 成功数 + 跳过明细（日期+原因），前端弹窗展示。
+     */
+    @Transactional
+    public java.util.Map<String, Object> createRepeat(RepeatDTO dto) {
+        validateRepeat(dto);
+        java.util.Set<java.time.LocalDate> holidays = Boolean.TRUE.equals(dto.getSkipHoliday())
+                ? holidaySet() : new java.util.HashSet<java.time.LocalDate>();
+        java.util.List<java.time.LocalDate> dates = computeRepeatDates(dto);
+        if (dates.isEmpty()) throw new BizException("按当前规则没有命中的上课日期，请调整重复规则");
+        java.time.LocalTime t0 = java.time.LocalTime.parse(dto.getBeginTime());
+        java.time.LocalTime t1 = java.time.LocalTime.parse(dto.getEndTime());
+        int created = 0;
+        java.util.List<java.util.Map<String, String>> skipped = new java.util.ArrayList<>();
+        for (java.time.LocalDate d : dates) {
+            if (Boolean.TRUE.equals(dto.getSkipHoliday()) && holidays.contains(d)) {
+                skipped.add(skipItem(d, "节假日"));
+                continue;
+            }
+            EduSchedule s = new EduSchedule();
+            s.setClazzId(dto.getClazzId());
+            s.setTeacherId(dto.getTeacherId());
+            s.setAssistantId(dto.getAssistantId());
+            s.setClassroomId(dto.getClassroomId());
+            s.setTopic(dto.getTopic());
+            s.setSchedType(1);
+            s.setStartTime(d.atTime(t0));
+            s.setEndTime(d.atTime(t1));
+            try {
+                create(s);
+                created++;
+            } catch (BizException e) {
+                skipped.add(skipItem(d, e.getMessage()));
+            }
+        }
+        java.util.Map<String, Object> r = new java.util.HashMap<>();
+        r.put("created", created);
+        r.put("total", dates.size());
+        r.put("skipped", skipped);
+        return r;
+    }
+
+    private java.util.Map<String, String> skipItem(java.time.LocalDate d, String reason) {
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        m.put("date", d.toString());
+        m.put("reason", reason);
+        return m;
+    }
+
+    /** 重复排课预览：预计排课次数 / 最后一次日期 / 节假日跳过数（弹窗"预计排课 N 次"提示） */
+    public java.util.Map<String, Object> repeatPreview(RepeatDTO dto) {
+        java.util.Map<String, Object> r = new java.util.HashMap<>();
+        if (dto.getBeginDate() == null) { r.put("count", 0); return r; }
+        java.util.Set<java.time.LocalDate> holidays = Boolean.TRUE.equals(dto.getSkipHoliday())
+                ? holidaySet() : new java.util.HashSet<java.time.LocalDate>();
+        java.util.List<java.time.LocalDate> dates = computeRepeatDates(dto);
+        java.util.List<java.time.LocalDate> kept = new java.util.ArrayList<>();
+        int holidaySkipped = 0;
+        for (java.time.LocalDate d : dates) {
+            if (Boolean.TRUE.equals(dto.getSkipHoliday()) && holidays.contains(d)) holidaySkipped++;
+            else kept.add(d);
+        }
+        r.put("count", kept.size());
+        r.put("holidaySkipped", holidaySkipped);
+        r.put("lastDate", kept.isEmpty() ? null : kept.get(kept.size() - 1).toString());
+        return r;
+    }
+
+    /**
+     * 编辑排课（班级排课列表「编辑」）：时间/时段/教师/助教/教室/主题一并修改。
+     * 仅待上课课次可编辑；时间或教师变化时按新值重新做 禁排/冲突/教室占用 校验。
+     */
+    @Transactional
+    public void update(Long id, LocalDateTime startTime, LocalDateTime endTime, Long teacherId,
+                       Long assistantId, Long classroomId, String topic) {
+        EduSchedule s = mustGet(id);
+        if (s.getStatus() == null || s.getStatus() != 0) throw new BizException("仅待上课的课次可编辑");
+        Long tid = teacherId != null ? teacherId : s.getTeacherId();
+        LocalDateTime start = startTime != null ? startTime : s.getStartTime();
+        LocalDateTime end = endTime != null ? endTime : s.getEndTime();
+        checkFutureStart(start);
+        checkBanTime(tid, start, end);
+        checkConflict(tid, start, end, id);
+        Long roomId = classroomId != null ? classroomId : s.getClassroomId();
+        String roomName = classroomId != null ? classroomName(classroomId) : s.getClassroom();
+        checkRoomConflict(roomId, roomName, start, end, id, true);
+        s.setTeacherId(tid);
+        s.setAssistantId(assistantId);
+        s.setTopic(topic == null || topic.trim().isEmpty() ? null : topic.trim());
+        if (classroomId != null) {
+            s.setClassroomId(classroomId);
+            s.setClassroom(roomName);
+        }
+        s.setStartTime(start);
+        s.setEndTime(end);
+        s.setUpdateTime(LocalDateTime.now());
+        scheduleMapper.updateById(s);
+        opLog(s, "编辑排课", null);
     }
 
     /** 排课操作日志：操作人记录当前登录账号的用户名（排课历史展示用） */

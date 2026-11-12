@@ -269,40 +269,77 @@
                 <li><span class="color-square" style="background: #ffb51f; border-color: #d99712"></span>冲突日程</li>
                 <li><span class="color-square" style="background: #129ca9; border-color: #046e78"></span>我的日程</li>
                 <li><span class="color-square" style="background: #5bc377; border-color: #3ba257"></span>其它日程</li>
-                <li><span class="color-square preview"></span>含试听学员</li>
+                <li><span class="legend-badge">试</span>含试听学员</li>
+                <li><span class="color-square" style="background: #9aa8bd; border-color: #8593a8"></span>已归档（取消/请假/旷课）</li>
+                <li><span class="color-square" style="background: #94a3b8; border-color: #7c8798"></span>其它课程（只读）</li>
               </ul>
             </div>
 
-            <!-- 课程表视图：FullCalendar（同排课管理），框选/点空白快速新建排课 -->
+            <!-- 课程表视图：FullCalendar。日/周：框选空白排课、拖拽课次调课；月：点日期排课、点课次调课/取消 -->
             <div v-if="schedView === 'cal'" class="cal-wrap">
               <FullCalendar ref="fcRef" :options="calOptions" />
             </div>
+            <div v-if="schedView === 'cal'" class="cal-tip">
+              <el-icon style="margin-right: 4px"><InfoFilled /></el-icon>
+              日/周视图框选空白时段即可排课，拖拽课次块可调课；月视图点空白日期排课，点课次块调课/取消。仅本班课次可调整时间，灰色块为本班教师在其它课程的课次（只读，不可调整）。
+            </div>
 
-            <!-- 排课列表视图 -->
+            <!-- 排课列表视图：服务端分页 + 表头排序（上课时间/状态/创建时间/编辑时间），列均单行不折行 -->
             <template v-if="schedView === 'list'">
-              <el-table :data="detailSchedules" stripe size="small" max-height="420">
-                <el-table-column type="index" label="序号" width="55" />
-                <el-table-column label="上课时间" min-width="170" show-overflow-tooltip>
-                  <template #default="{ row }">{{ fmtTime(row.startTime) }} ~ {{ String(row.endTime || '').slice(11, 16) }}</template>
+              <el-table :data="schedListRows" stripe size="small" max-height="420"
+                        :default-sort="{ prop: 'createTime', order: 'descending' }" @sort-change="onSchedSort">
+                <el-table-column type="index" label="序号" width="55" :index="schedRowNo" />
+                <el-table-column label="排课方式" width="92" align="center">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.schedType === 1 ? 'warning' : 'info'" effect="plain">
+                      {{ row.schedType === 1 ? '重复排课' : '自由排课' }}
+                    </el-tag>
+                  </template>
                 </el-table-column>
-                <el-table-column label="教师" width="100" show-overflow-tooltip>
+                <el-table-column prop="startTime" label="上课时间" width="110" sortable="custom" show-overflow-tooltip>
+                  <template #default="{ row }">{{ fmtDateWeek(row.startTime) }}</template>
+                </el-table-column>
+                <el-table-column label="上课时段" width="110" align="center" show-overflow-tooltip>
+                  <template #default="{ row }">{{ String(row.startTime || '').slice(11, 16) }} ~ {{ String(row.endTime || '').slice(11, 16) }}</template>
+                </el-table-column>
+                <el-table-column label="上课教师" width="90" show-overflow-tooltip>
                   <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
                 </el-table-column>
-                <el-table-column prop="classroom" label="教室" width="120" show-overflow-tooltip>
-                  <template #default="{ row }">{{ row.classroom || '-' }}</template>
+                <el-table-column label="助教" width="90" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.assistantId ? teacherName(row.assistantId) : '-' }}</template>
                 </el-table-column>
-                <el-table-column label="状态" width="86" align="center">
+                <el-table-column label="上课教室" width="110" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.classroom || roomName(row.classroomId) || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="topic" label="上课主题" min-width="120" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.topic || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="status" label="状态" width="82" align="center" sortable="custom">
                   <template #default="{ row }">
                     <el-tag size="small" :type="['warning', 'success', 'info'][row.status] || 'info'" effect="plain">
                       {{ ['待上课', '已完成', '已取消'][row.status] || '-' }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip>
-                  <template #default="{ row }">{{ row.remark || (row.cancelReason ? '取消：' + row.cancelReason : '-') }}</template>
+                <el-table-column prop="createTime" label="创建时间" width="150" sortable="custom" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.createTime || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="updateTime" label="编辑时间" width="150" sortable="custom" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.updateTime || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="118" fixed="right">
+                  <template #default="{ row }">
+                    <el-button link type="primary" size="small" :disabled="row.status !== 0" @click="openEditSched(row)">编辑</el-button>
+                    <el-button link type="warning" size="small" :disabled="row.status !== 0" @click="cancelSchedRow(row)">取消排课</el-button>
+                  </template>
                 </el-table-column>
               </el-table>
-              <el-empty v-if="!detailSchedules.length" description="暂无排课记录，点「新建排课」安排课次" :image-size="70" />
+              <el-empty v-if="!schedPager.total" description="暂无排课记录，点「新建排课」安排课次" :image-size="70" />
+              <div class="pager-row">
+                <el-pagination background layout="total, sizes, prev, pager, next" :total="schedPager.total"
+                               v-model:current-page="schedPager.page" v-model:page-size="schedPager.size"
+                               :page-sizes="[10, 20, 50, 100]" @current-change="onSchedPage" @size-change="onSchedSize" />
+              </div>
             </template>
           </el-tab-pane>
 
@@ -532,35 +569,156 @@
       </template>
     </el-dialog>
 
-    <!-- 新建排课（排课TAB）：本班课次，日期+时段+教师+教室 -->
-    <el-dialog v-model="schedCreateVisible" title="新建排课" width="440px" append-to-body>
-      <el-form label-width="80px">
+    <!-- 新建/编辑排课（排课TAB）：排课方式（自由/重复）+ 日期规则 + 时段(预设/自定义) + 教师/助教/教室/主题 -->
+    <el-dialog v-model="schedCreateVisible" :title="schedEditId ? '编辑排课' : '新建排课'" width="560px" append-to-body>
+      <el-form label-width="90px">
         <el-form-item label="班级">
           <el-input :model-value="curClazz?.name" disabled />
         </el-form-item>
-        <el-form-item label="日期" required>
-          <el-date-picker v-model="schedForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        <el-form-item v-if="!schedEditId" label="排课方式">
+          <el-radio-group v-model="schedMode">
+            <el-radio-button value="free">自由排课</el-radio-button>
+            <el-radio-button value="repeat">重复排课</el-radio-button>
+          </el-radio-group>
+          <span v-if="schedMode === 'repeat'" class="sched-mode-tip">按规则批量生成多次课次</span>
         </el-form-item>
-        <el-form-item label="时段" required>
-          <el-time-picker v-model="schedForm.range" is-range range-separator="至"
+
+        <!-- 自由排课 / 编辑：单次上课日期 -->
+        <el-form-item v-if="schedMode === 'free'" label="上课日期" required>
+          <el-date-picker v-model="schedForm.date" type="date" value-format="YYYY-MM-DD"
+                          :disabled-date="noPastDate" style="width: 100%" />
+        </el-form-item>
+
+        <!-- 重复排课：开始日期/结束方式/重复方式/周几上课/节假日过滤 -->
+        <template v-else>
+          <el-form-item label="开始日期" required>
+            <el-date-picker v-model="schedForm.beginDate" type="date" value-format="YYYY-MM-DD"
+                            :disabled-date="noPastDate" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="结束方式" required>
+            <div class="sched-end-row">
+              <el-select v-model="schedForm.endMode" style="width: 130px">
+                <el-option label="按日期结束" value="date" />
+                <el-option label="按次数结束" value="count" />
+              </el-select>
+              <el-date-picker v-if="schedForm.endMode !== 'count'" v-model="schedForm.endDate" type="date"
+                              value-format="YYYY-MM-DD" :disabled-date="noPastDate" style="flex: 1" />
+              <el-input-number v-else v-model="schedForm.endCount" :min="1" :max="200" :controls="false" style="width: 110px" />
+              <span v-if="schedForm.endMode === 'count'" class="sched-end-unit">次</span>
+            </div>
+            <div v-if="repeatPreview && repeatPreview.count" class="repeat-preview-tip">
+              预计排课 <b>{{ repeatPreview.count }}</b> 次<template v-if="repeatPreview.holidaySkipped">（节假日跳过 {{ repeatPreview.holidaySkipped }} 次）</template><template v-if="schedForm.endMode === 'count' && repeatPreview.lastDate">，最后一次 {{ repeatPreview.lastDate }}</template>
+            </div>
+          </el-form-item>
+          <el-form-item label="重复方式" required>
+            <el-radio-group v-model="schedForm.repeatMode">
+              <el-radio :value="1">每周重复</el-radio>
+              <el-radio :value="2">隔周重复</el-radio>
+              <el-radio :value="4">隔天重复</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="schedForm.repeatMode !== 4" label="周几上课" required>
+            <el-checkbox :model-value="allWeekPicked" style="margin-right: 4px" @change="toggleAllWeek">全选</el-checkbox>
+            <el-checkbox-group v-model="schedForm.weekdays">
+              <el-checkbox v-for="(w, i) in WEEK_NAMES" :key="w" :value="i + 1">{{ w }}</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item label="节假日过滤">
+            <el-radio-group v-model="schedForm.skipHoliday">
+              <el-radio :value="true">节假日不排课</el-radio>
+              <el-radio :value="false">节假日排课</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </template>
+
+        <!-- 共用：上课时段（预设下拉/自定义时间）+ 教师 + 助教 + 教室 + 主题 -->
+        <el-form-item label="上课时段" required>
+          <el-select v-if="!schedCustomRange" v-model="schedRangePreset" style="width: 170px" @change="onPresetRange">
+            <el-option v-for="p in TIME_PRESETS" :key="p" :label="p" :value="p" />
+          </el-select>
+          <el-time-picker v-else v-model="schedForm.range" is-range range-separator="至"
                           start-placeholder="开始" end-placeholder="结束"
-                          format="HH:mm" value-format="HH:mm" style="width: 100%" />
+                          format="HH:mm" value-format="HH:mm" style="width: 210px" />
+          <el-button link type="primary" style="margin-left: 10px" @click="toggleCustomRange">
+            {{ schedCustomRange ? '选择预设时段' : '自定义时段' }}
+          </el-button>
         </el-form-item>
-        <el-form-item label="教师" required>
+        <el-form-item label="上课教师" required>
           <el-select v-model="schedForm.teacherId" filterable style="width: 100%">
             <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="教室">
-          <el-select v-model="schedForm.classroomId" clearable filterable style="width: 100%">
+        <el-form-item label="助教">
+          <el-select v-model="schedForm.assistantId" clearable filterable placeholder="选填" style="width: 100%">
+            <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="上课教室" required>
+          <el-select v-model="schedForm.classroomId" filterable style="width: 100%">
             <el-option v-for="r in classroomList" :key="r.id"
                        :label="`${r.name}（${r.minCapacity ?? '—'}~${r.capacity ?? 0}人）`" :value="r.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="上课主题">
+          <el-input v-model="schedForm.topic" maxlength="20" show-word-limit placeholder="选填，最多20字" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="schedCreateVisible = false">取 消</el-button>
         <el-button type="primary" :loading="schedSaving" @click="saveSched">保 存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 课次操作（排课TAB 日/周/月视图点课次块）：信息 + 调课/取消；其它课程课次只读 -->
+    <el-dialog v-model="schedOpVisible" title="课次详情" width="460px" append-to-body>
+      <div v-if="schedOpRow" class="sch-op">
+        <div class="sch-op-row"><span>上课时间</span><b>{{ fmtTime(schedOpRow.startTime) }} ~ {{ String(schedOpRow.endTime || '').slice(11, 16) }}</b></div>
+        <div class="sch-op-row"><span>教师</span><b>{{ teacherName(schedOpRow.teacherId) }}</b></div>
+        <div class="sch-op-row"><span>助教</span><b>{{ schedOpRow.assistantId ? teacherName(schedOpRow.assistantId) : '-' }}</b></div>
+        <div class="sch-op-row"><span>教室</span><b>{{ schedOpRow.classroom || '-' }}</b></div>
+        <div class="sch-op-row"><span>上课主题</span><b>{{ schedOpRow.topic || '-' }}</b></div>
+        <div class="sch-op-row"><span>状态</span><b>{{ schedStatusText(schedOpRow) }}</b></div>
+        <div class="sch-op-row">
+          <span>标记</span>
+          <span class="sch-op-tags">
+            <el-tag v-for="t in schedTags(schedOpRow)" :key="t.text" size="small" effect="dark"
+                    :style="{ background: t.color, borderColor: t.color, color: '#fff' }">{{ t.text }}</el-tag>
+          </span>
+        </div>
+        <el-alert v-if="schedOpReadOnly" type="info" :closable="false" show-icon class="sch-op-alert"
+                  title="该课次属于其它课程/其它班级，不可在班级管理中调整时间或取消" />
+        <el-alert v-else-if="!schedOpAdjustable" type="warning" :closable="false" show-icon class="sch-op-alert"
+                  title="仅待上课的课次可调课或取消" />
+      </div>
+      <template #footer>
+        <el-button @click="schedOpVisible = false">关 闭</el-button>
+        <el-button v-if="!schedOpReadOnly" type="warning" :disabled="!schedOpAdjustable" @click="openAdjustFromOp">调 课</el-button>
+        <el-button v-if="!schedOpReadOnly" type="danger" :disabled="!schedOpCancellable" @click="cancelFromOp">取消课次</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 调课（排课TAB）：改上课日期/时段 + 原因 -->
+    <el-dialog v-model="schedAdjustVisible" title="调整上课时间" width="440px" append-to-body>
+      <el-form label-width="80px">
+        <el-form-item label="原时间">
+          <el-input :model-value="`${fmtTime(schedAdjustRow?.startTime)} ~ ${String(schedAdjustRow?.endTime || '').slice(11, 16)}`" disabled />
+        </el-form-item>
+        <el-form-item label="日期" required>
+          <el-date-picker v-model="schedAdjustForm.date" type="date" value-format="YYYY-MM-DD"
+                          :disabled-date="noPastDate" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="时段" required>
+          <el-time-picker v-model="schedAdjustForm.range" is-range range-separator="至"
+                          start-placeholder="开始" end-placeholder="结束"
+                          format="HH:mm" value-format="HH:mm" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="调课原因">
+          <el-input v-model="schedAdjustForm.reason" type="textarea" :rows="2" placeholder="选填，如：教师临时有事" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="schedAdjustVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="schedAdjustSaving" @click="saveAdjust">保 存</el-button>
       </template>
     </el-dialog>
 
@@ -738,7 +896,7 @@
 import {reactive, ref, computed, nextTick, onMounted, onBeforeUnmount, watch} from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {Search, MoreFilled, ArrowDown, View, User, EditPen, Delete, Switch} from '@element-plus/icons-vue'
+import {Search, MoreFilled, ArrowDown, View, User, EditPen, Delete, Switch, InfoFilled} from '@element-plus/icons-vue'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
 import ColumnSetting from '../../components/ColumnSetting.vue'
@@ -865,28 +1023,101 @@ const chipTitle = (s) => {
     teacherName(s.teacherId), s.classroom || '']
   if (conflictIds.value.has(s.id)) parts.push('⚠ 时间冲突')
   if (s.status === 1) parts.push('已记上课')
-  if (chipHasAud(s)) parts.push('含试听学员')
+  if (isOwnClass(s) && chipHasAud(s)) parts.push('含试听学员')
+  if (!isOwnClass(s)) parts.push('（其它课程/班级，只读）')
   return parts.filter(Boolean).join(' · ')
 }
-/** 课次 → 日历事件：色块按图例（冲突橙/已记上课蓝/我的青/其它绿），含试听加「试」角标 */
+/** 课次标记：底色 + 角标，5 种状态（已记上课/冲突/我的日程/其它日程/含试听学员）可同时区分 */
+const TAG_COLORS = {
+  done: { text: '已记上课', color: '#347ab7' },
+  conflict: { text: '冲突', color: '#ffb51f' },
+  mine: { text: '我的', color: '#129ca9' },
+  aud: { text: '试', color: '#f79009' },
+  archived: { text: '已归档', color: '#8a99ad' },
+  other: { text: '其它课程', color: '#7c8798' }
+}
+/** 课次状态：0待上课 1已记上课 2已取消 3教师请假 4学生请假 5旷课 */
+const SCHED_STATUS = { 0: '待上课', 1: '已记上课', 2: '已取消', 3: '教师请假', 4: '学生请假', 5: '旷课' }
+const schedStatusText = (s) => SCHED_STATUS[s?.status] || '待上课'
+/** 已归档状态（已取消/请假/旷课）：不可再调整 */
+const isArchived = (s) => s?.status != null && s.status !== 0
+/** 是否本班课次：本页只允许改本班排课，其它课程课次一律只读 */
+const isOwnClass = (s) => !!s && String(s.clazzId) === String(detailClazz.value?.id)
+/** 本班课次标记角标：已记上课 / 冲突 / 我的日程 / 含试听学员（可并存） */
+function schedTags(s) {
+  const tags = []
+  if (s.status === 1) tags.push(TAG_COLORS.done)
+  else if (isArchived(s)) tags.push(TAG_COLORS.archived)
+  if (conflictIds.value.has(s.id)) tags.push(TAG_COLORS.conflict)
+  if (detailClazz.value && s.teacherId === detailClazz.value.classTeacherId) tags.push(TAG_COLORS.mine)
+  if (chipHasAud(s)) tags.push(TAG_COLORS.aud)
+  return tags
+}
+/** 本班课次底色：已归档 > 冲突 > 已记上课 > 我的日程 > 其它日程 */
+function schedBg(s) {
+  if (isArchived(s)) return '#9aa8bd'
+  if (conflictIds.value.has(s.id)) return '#ffb51f'
+  if (s.status === 1) return '#347ab7'
+  if (detailClazz.value && s.teacherId === detailClazz.value.classTeacherId) return '#129ca9'
+  return '#5bc377'
+}
+const clazzNameOf = (cid) => clazzList.value.find((c) => c.id === cid)?.name || '其它班级'
+/** 本班课次 → 日历事件：仅待上课课次可拖拽调课（月视图统一走弹窗调课） */
 function schedEvent(s) {
-  let bg = '#5bc377'
-  if (conflictIds.value.has(s.id)) bg = '#ffb51f'
-  else if (s.status === 1) bg = '#347ab7'
-  else if (detailClazz.value && s.teacherId === detailClazz.value.classTeacherId) bg = '#129ca9'
+  const own = isOwnClass(s)
   return {
     id: String(s.id),
-    title: `${teacherName(s.teacherId)}${s.classroom ? ' @' + s.classroom : ''}${chipHasAud(s) ? ' ·试' : ''}`,
+    title: `${teacherName(s.teacherId)}${s.classroom ? ' @' + s.classroom : ''}`,
     start: String(s.startTime || '').replace(' ', 'T'),
     end: String(s.endTime || '').replace(' ', 'T'),
-    backgroundColor: s.status === 2 ? '#c0c8d4' : bg,
+    backgroundColor: own ? schedBg(s) : '#94a3b8',
+    borderColor: 'transparent',
+    editable: own && s.status === 0 && calMode.value !== 'month',
+    extendedProps: { raw: s, own, tags: own ? schedTags(s) : [TAG_COLORS.other] }
+  }
+}
+/** 其它课程课次：本班教师在其它班级的课次（只读参考，用于发现教师占用冲突） */
+const otherSchedules = ref([])
+function otherEvent(s) {
+  return {
+    id: 'other-' + s.id,
+    title: `${clazzNameOf(s.clazzId)} · ${teacherName(s.teacherId)}`,
+    start: String(s.startTime || '').replace(' ', 'T'),
+    end: String(s.endTime || '').replace(' ', 'T'),
+    backgroundColor: '#94a3b8',
     borderColor: 'transparent',
     editable: false,
-    extendedProps: { raw: s }
+    extendedProps: { raw: s, own: false, tags: [TAG_COLORS.other] }
   }
 }
 const fcRef = ref()
 const VIEW_MAP = { day: 'timeGridDay', week: 'timeGridWeek', month: 'dayGridMonth' }
+/** 课次块内容：时间 + 标题 + 标记角标（DOM 构建，文本安全） */
+function renderCalEvent(arg) {
+  const p = arg.event.extendedProps
+  const s = p.raw
+  const box = document.createElement('div')
+  box.className = 'cz-ev'
+  const l1 = document.createElement('div')
+  l1.className = 'cz-ev-t'
+  const txt = s ? `${teacherName(s.teacherId)}${s.classroom ? ' @' + s.classroom : ''}` : (arg.event.title || '')
+  l1.textContent = (arg.timeText ? arg.timeText + ' ' : '') + txt
+  box.appendChild(l1)
+  if (s) box.title = chipTitle(s)   // 悬停显示完整课次信息（含冲突/已记上课/含试听学员标记）
+  if (p.tags && p.tags.length) {
+    const l2 = document.createElement('div')
+    l2.className = 'cz-ev-tags'
+    for (const t of p.tags) {
+      const b = document.createElement('span')
+      b.className = 'cz-ev-tag'
+      b.style.background = t.color
+      b.textContent = t.text
+      l2.appendChild(b)
+    }
+    box.appendChild(l2)
+  }
+  return { domNodes: [box] }
+}
 const calOptions = computed(() => ({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
   locale: zhCnLocale,
@@ -896,68 +1127,384 @@ const calOptions = computed(() => ({
   height: 520,
   firstDay: 1,
   allDaySlot: false,
-  slotMinTime: '08:00:00',
-  slotMaxTime: '22:00:00',
+  slotMinTime: '05:00:00',
+  slotMaxTime: '23:00:00',
   selectable: true,
   selectMirror: true,
   unselectAuto: true,
-  events: detailSchedules.value.map(schedEvent),
+  eventDisplay: 'block',
+  dayMaxEvents: true,                                  // 月视图一天课次过多时折叠，多出的收进"另外 N 个"
+  moreLinkText: (args) => `另外 ${args.num} 个`,        // more 链接文案（默认 +more），点击弹层展示当日全部课次
+  events: (info, successCallback, failureCallback) => {
+    try {
+      successCallback([
+        // 已取消课次不进日历：时段已释放（后端冲突校验同样排除），显示出来会挡住该时段重新排课
+        ...detailSchedules.value.filter((s) => s.status !== 2).map(schedEvent),
+        ...otherSchedules.value.map(otherEvent)
+      ])
+    } catch (e) { failureCallback(e) }
+  },
+  eventContent: renderCalEvent,
   eventClick: onCalEventClick,
-  select: onCalSelect
+  eventDrop: onCalEventDrop,
+  eventResize: onCalEventDrop,
+  select: onCalSelect,
+  datesSet: onCalDatesSet
 }))
 /** 日/周/月切换：通过 API 换视图 */
 function onCalMode(v) {
-  nextTick(() => fcRef.value?.getApi()?.changeView(VIEW_MAP[v]))
+  nextTick(() => {
+    fcRef.value?.getApi()?.changeView(VIEW_MAP[v])
+    refreshCalEvents()
+  })
 }
-/** 点击课次：详情提示 */
+/** 刷新日历课次块（重新拉取事件，角标/底色随状态更新） */
+function refreshCalEvents() {
+  fcRef.value?.getApi?.()?.refetchEvents?.()
+}
+/** 视图区间变化：加载本班教师在其它班级的课次（只读） */
+async function onCalDatesSet(info) {
+  await loadOtherSchedules((info.startStr || '').slice(0, 10), (info.endStr || '').slice(0, 10))
+  refreshCalEvents()
+}
+/** 加载本班教师在其它班级的课次（区间内、排除已取消与本班课次） */
+async function loadOtherSchedules(begin, end) {
+  const tid = detailClazz.value?.classTeacherId
+  if (!tid || !begin || !end) { otherSchedules.value = []; return }
+  try {
+    const d = await api.schedulePage({ page: 1, size: 200, teacherId: tid, begin, end })
+    const cid = String(detailClazz.value.id)
+    otherSchedules.value = (d.records || [])
+      .filter((r) => String(r.clazzId) !== cid && r.status !== 2)
+  } catch (e) { otherSchedules.value = [] }
+}
+
+/* ===== 课次操作：点课次块 → 调课 / 取消（其它课程课次只读，不可调整） ===== */
+const schedOpVisible = ref(false)
+const schedOpRow = ref(null)
+const schedOpReadOnly = ref(false)
+const schedOpAdjustable = computed(() => !!schedOpRow.value && schedOpRow.value.status === 0)
+const schedOpCancellable = computed(() => !!schedOpRow.value && schedOpRow.value.status === 0)
+/** 点击课次：打开操作弹窗（其它课程课次只读） */
 function onCalEventClick(info) {
-  const s = info.event.extendedProps.raw
-  ElMessageBox.alert(chipTitle(s), '课次详情', { confirmButtonText: '知道了' }).catch(() => {})
+  const s = info.event.extendedProps?.raw
+  if (!s) return
+  schedOpRow.value = s
+  schedOpReadOnly.value = !isOwnClass(s)
+  schedOpVisible.value = true
 }
-/** 框选/点击空白时段：带入时间快速新建排课 */
+/** Date → 后端时间格式 yyyy-MM-dd HH:mm:ss */
+function fmtLocalDT(dt) {
+  if (!dt) return ''
+  const p = (n) => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`
+}
+/** 调课日期禁选：不允许把课次调到过去的日期（今天可选，时段校验兜底拦"今天已过的时刻"） */
+const noPastDate = (d) => {
+  const t0 = new Date()
+  t0.setHours(0, 0, 0, 0)
+  return d.getTime() < t0.getTime()
+}
+/** 拖拽/拉伸调课：仅本班待上课课次可改，其它课程课次一律拒绝并回滚 */
+async function onCalEventDrop(info) {
+  const s = info.event.extendedProps?.raw
+  if (!s || !isOwnClass(s)) {
+    ElMessage.warning('该课次属于其它课程/其它班级，不可在班级管理中调整时间')
+    info.revert()
+    return
+  }
+  if (s.status !== 0) {
+    ElMessage.warning('仅待上课的课次可调整时间')
+    info.revert()
+    return
+  }
+  const startTime = fmtLocalDT(info.event.start)
+  const endTime = fmtLocalDT(info.event.end)
+  if (!startTime || !endTime || new Date(startTime.replace(' ', 'T')).getTime() <= Date.now()) {
+    ElMessage.warning('开始时间必须晚于当前时间')
+    info.revert()
+    return
+  }
+  try {
+    await api.scheduleAdjust(s.id, { startTime, endTime, reason: '日历拖拽调整' })
+    ElMessage.success('上课时间已调整')
+    await loadDetailSchedules()   // 先拿到调课后的最新数据再刷新日历，否则日历仍显示旧时间
+    refreshCalEvents()
+  } catch (e) { info.revert() }
+}
+/** 调课弹窗：由课次操作弹窗进入 */
+const schedAdjustVisible = ref(false)
+const schedAdjustSaving = ref(false)
+const schedAdjustRow = ref(null)
+const schedAdjustForm = ref({})
+function openAdjustFromOp() {
+  const s = schedOpRow.value
+  if (!s || !isOwnClass(s)) return ElMessage.warning('该课次属于其它课程/其它班级，不可在班级管理中调整时间')
+  schedAdjustRow.value = s
+  schedAdjustForm.value = {
+    date: String(s.startTime).slice(0, 10),
+    range: [String(s.startTime).slice(11, 16), String(s.endTime || '').slice(11, 16)],
+    reason: ''
+  }
+  schedOpVisible.value = false
+  schedAdjustVisible.value = true
+}
+async function saveAdjust() {
+  const f = schedAdjustForm.value
+  const s = schedAdjustRow.value
+  if (!s) return
+  if (!isOwnClass(s)) return ElMessage.warning('该课次属于其它课程/其它班级，不可在班级管理中调整时间')
+  if (!f.date || !f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择完整的上课时段')
+  if (f.range[1] <= f.range[0]) return ElMessage.warning('结束时间必须晚于开始时间')
+  const startTime = `${f.date} ${f.range[0]}:00`
+  const endTime = `${f.date} ${f.range[1]}:00`
+  if (new Date(startTime.replace(' ', 'T')).getTime() <= Date.now()) return ElMessage.warning('开始时间必须晚于当前时间')
+  schedAdjustSaving.value = true
+  try {
+    await api.scheduleAdjust(s.id, { startTime, endTime, reason: f.reason || '班级管理调课' })
+    ElMessage.success('上课时间已调整')
+    schedAdjustVisible.value = false
+    await loadDetailSchedules()   // 先拿到调课后的最新数据再刷新日历，否则日历仍显示旧时间
+    refreshCalEvents()
+  } finally { schedAdjustSaving.value = false }
+}
+/** 取消课次：二次确认 + 取消原因 */
+async function cancelFromOp() {
+  const s = schedOpRow.value
+  if (!s) return
+  if (!isOwnClass(s)) return ElMessage.warning('该课次属于其它课程/其它班级，不可在班级管理中取消')
+  let reason = ''
+  try {
+    const r = await ElMessageBox.prompt('请输入取消原因', '取消课次', {
+      inputPlaceholder: '如：教师临时请假', confirmButtonText: '确认取消', cancelButtonText: '返回'
+    })
+    reason = r.value || ''
+  } catch { return }
+  await api.scheduleCancel(s.id, { reason })
+  ElMessage.success('课次已取消')
+  schedOpVisible.value = false
+  await loadDetailSchedules()   // 先拿到取消后的最新数据再刷新日历
+  refreshCalEvents()
+}
+/** 时段默认 +N 小时 */
+const plusHM = (hm, h) => {
+  const [hh, mm] = String(hm).split(':').map(Number)
+  const total = hh * 60 + mm + h * 60
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(Math.floor(total / 60) % 24)}:${p(total % 60)}`
+}
+/** 框选/点击空白时段：带入时间快速新建排课（月视图点日期用默认时段 18:00-20:00） */
 function onCalSelect(info) {
   const d = info.startStr.slice(0, 10)
-  const t0 = info.startStr.slice(11, 16)
-  const t1 = info.endStr.slice(11, 16)
-  schedForm.value = {
-    date: d,
-    range: [t0 || '18:00', t1 || '20:00'],
-    teacherId: detailClazz.value?.classTeacherId || null,
-    classroomId: detailClazz.value?.classroomId || null
-  }
+  const isMonth = info.view.type === 'dayGridMonth'
+  const t0 = isMonth ? '18:00' : (info.startStr.slice(11, 16) || '18:00')
+  let t1 = isMonth ? '20:00' : (info.endStr.slice(11, 16) || '')
+  if (!t1 || t1 <= t0) t1 = plusHM(t0, 2)
+  resetSchedForm()
+  schedForm.value = { ...schedForm.value, date: d, range: [t0, t1] }
+  syncRangeInput()
   schedCreateVisible.value = true
 }
 
-/* 新建排课 */
+/* ===== 新建/编辑排课：自由排课 + 重复排课（每周/隔周/隔天 + 周几 + 节假日过滤） ===== */
 const schedCreateVisible = ref(false)
 const schedSaving = ref(false)
 const schedForm = ref({})
-function openCreateSched() {
+const schedEditId = ref(null)        // 编辑课次ID：null=新建
+const schedMode = ref('free')        // free=自由排课 repeat=重复排课
+const schedCustomRange = ref(false)  // 上课时段：预设下拉 / 自定义时间范围
+const schedRangePreset = ref('18:00~20:00')
+const repeatPreview = ref(null)      // 重复排课预览：{count, lastDate, holidaySkipped}
+/** 预设上课时段（高频时段下拉快捷选择，可切自定义 el-time-picker） */
+const TIME_PRESETS = ['08:00~10:00', '10:00~12:00', '14:00~16:00', '16:00~18:00', '18:00~20:00', '19:00~21:00']
+const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const allWeekPicked = computed(() => schedForm.value.weekdays?.length === 7)
+function toggleAllWeek(v) { schedForm.value.weekdays = v ? [1, 2, 3, 4, 5, 6, 7] : [] }
+/** 预设时段 → range；打开弹窗时反查：命中预设走下拉，否则切自定义 */
+function onPresetRange(p) { const [a, b] = String(p).split('~'); schedForm.value.range = [a, b] }
+function syncRangeInput() {
+  const r = schedForm.value.range || []
+  const hit = TIME_PRESETS.find((p) => { const [a, b] = p.split('~'); return a === r[0] && b === r[1] })
+  schedCustomRange.value = !hit
+  schedRangePreset.value = hit || '18:00~20:00'
+}
+function toggleCustomRange() {
+  schedCustomRange.value = !schedCustomRange.value
+  if (!schedCustomRange.value) onPresetRange(schedRangePreset.value)
+}
+/** 新建排课表单默认值（自由/重复规则字段都初始化，切换模式不丢值） */
+function resetSchedForm() {
+  schedEditId.value = null
+  schedMode.value = 'free'
   schedForm.value = {
     date: todayStr(),
     range: ['18:00', '20:00'],
     teacherId: detailClazz.value?.classTeacherId || null,
-    classroomId: detailClazz.value?.classroomId || null
+    assistantId: null,
+    classroomId: detailClazz.value?.classroomId || null,
+    topic: '',
+    beginDate: todayStr(),
+    endMode: 'date',
+    endDate: '',
+    endCount: 10,
+    repeatMode: 1,
+    weekdays: [1, 2, 3, 4, 5],
+    skipHoliday: true
   }
+  syncRangeInput()
+  repeatPreview.value = null
+}
+function openCreateSched() {
+  resetSchedForm()
   schedCreateVisible.value = true
+}
+/** 编辑排课（列表「编辑」）：按课次回填，仅改本次（重复生成的课次也只改这一课次） */
+function openEditSched(row) {
+  resetSchedForm()
+  schedEditId.value = row.id
+  schedForm.value = {
+    ...schedForm.value,
+    date: String(row.startTime || '').slice(0, 10),
+    range: [String(row.startTime || '').slice(11, 16), String(row.endTime || '').slice(11, 16)],
+    teacherId: row.teacherId,
+    assistantId: row.assistantId || null,
+    classroomId: row.classroomId || detailClazz.value?.classroomId || null,
+    topic: row.topic || ''
+  }
+  syncRangeInput()
+  schedCreateVisible.value = true
+}
+/** 列表「取消排课」：输入取消原因后取消（同日历取消课次） */
+async function cancelSchedRow(row) {
+  let reason = ''
+  try {
+    const r = await ElMessageBox.prompt('请输入取消原因', '取消排课', {
+      inputPlaceholder: '如：教师临时请假', confirmButtonText: '确认取消', cancelButtonText: '返回'
+    })
+    reason = r.value || ''
+  } catch { return }
+  await api.scheduleCancel(row.id, { reason })
+  ElMessage.success('课次已取消')
+  await loadDetailSchedules()
+  refreshCalEvents()
+}
+/** 重复排课提交参数（预览与提交共用） */
+function repeatPayload() {
+  const f = schedForm.value
+  return {
+    clazzId: curClazz.value?.id,
+    teacherId: f.teacherId,
+    assistantId: f.assistantId || null,
+    classroomId: f.classroomId,
+    topic: f.topic || null,
+    repeatMode: f.repeatMode,
+    weekdays: f.repeatMode === 4 ? [] : f.weekdays,
+    beginDate: f.beginDate,
+    endMode: f.endMode,
+    endDate: f.endMode === 'count' ? null : f.endDate,
+    endCount: f.endMode === 'count' ? f.endCount : null,
+    skipHoliday: !!f.skipHoliday,
+    beginTime: f.range?.[0],
+    endTime: f.range?.[1]
+  }
+}
+/** 重复规则变化 → 防抖调后端预览（弹窗"预计排课 N 次 / 最后一次日期"提示） */
+let schedPreviewTimer = null
+watch([
+  () => schedMode.value,
+  () => schedCreateVisible.value,
+  () => schedForm.value.beginDate, () => schedForm.value.endMode, () => schedForm.value.endDate,
+  () => schedForm.value.endCount, () => schedForm.value.repeatMode, () => schedForm.value.skipHoliday,
+  () => (schedForm.value.weekdays || []).join(',')
+], () => {
+  repeatPreview.value = null
+  if (schedMode.value !== 'repeat' || !schedCreateVisible.value) return
+  clearTimeout(schedPreviewTimer)
+  schedPreviewTimer = setTimeout(async () => {
+    const f = schedForm.value
+    if (!f.beginDate) return
+    if (f.endMode !== 'count' && !f.endDate) return
+    if (f.repeatMode !== 4 && !f.weekdays?.length) return
+    try { repeatPreview.value = await api.scheduleRepeatPreview(repeatPayload()) } catch { /* 预览失败不打扰填写 */ }
+  }, 300)
+})
+/** 列表「上课时间」列：MM-dd 周X */
+const WEEK_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+function fmtDateWeek(t) {
+  const s = String(t || '')
+  if (s.length < 10) return '-'
+  const d = new Date(s.slice(0, 10) + 'T00:00:00')
+  return `${s.slice(5, 10)} ${WEEK_CN[d.getDay()]}`
 }
 async function saveSched() {
   const f = schedForm.value
-  if (!f.date) return ElMessage.warning('请选择日期')
-  if (!f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择时段')
-  if (!f.teacherId) return ElMessage.warning('请选择教师')
+  if (!f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择上课时段')
+  if (String(f.range[1]) <= String(f.range[0])) return ElMessage.warning('结束时间必须晚于开始时间')
+  if (!f.teacherId) return ElMessage.warning('请选择上课教师')
+  if (!f.classroomId) return ElMessage.warning('请选择上课教室')
+  // 编辑：更新本课次（时间/时段/教师/助教/教室/主题）
+  if (schedEditId.value) {
+    if (!f.date) return ElMessage.warning('请选择上课日期')
+    const startTime = `${f.date} ${f.range[0]}:00`
+    const endTime = `${f.date} ${f.range[1]}:00`
+    if (new Date(startTime.replace(' ', 'T')).getTime() <= Date.now()) return ElMessage.warning('开始时间必须晚于当前时间')
+    schedSaving.value = true
+    try {
+      await api.scheduleUpdate(schedEditId.value, {
+        startTime, endTime, teacherId: f.teacherId,
+        assistantId: f.assistantId || null, classroomId: f.classroomId, topic: f.topic || null
+      })
+      ElMessage.success('排课已更新')
+      schedCreateVisible.value = false
+      await loadDetailSchedules()
+      refreshCalEvents()
+    } finally { schedSaving.value = false }
+    return
+  }
+  // 新建·自由排课：单次
+  if (schedMode.value === 'free') {
+    if (!f.date) return ElMessage.warning('请选择上课日期')
+    const startTime = `${f.date} ${f.range[0]}:00`
+    const endTime = `${f.date} ${f.range[1]}:00`
+    if (new Date(startTime.replace(' ', 'T')).getTime() <= Date.now()) return ElMessage.warning('开始时间必须晚于当前时间')
+    schedSaving.value = true
+    try {
+      await api.scheduleCreate({
+        clazzId: curClazz.value.id,
+        courseId: curClazz.value.courseId,
+        teacherId: f.teacherId,
+        assistantId: f.assistantId || null,
+        classroomId: f.classroomId,
+        topic: f.topic || null,
+        schedType: 0,
+        startTime, endTime
+      })
+      ElMessage.success('排课成功')
+      schedCreateVisible.value = false
+      await loadDetailSchedules()
+      refreshCalEvents()
+    } finally { schedSaving.value = false }
+    return
+  }
+  // 新建·重复排课：按规则批量生成，逐次校验冲突，失败汇总跳过
+  if (!f.beginDate) return ElMessage.warning('请选择开始日期')
+  if (f.endMode !== 'count' && !f.endDate) return ElMessage.warning('请选择结束日期')
+  if (f.endMode !== 'count' && String(f.endDate) < String(f.beginDate)) return ElMessage.warning('结束日期不能早于开始日期')
+  if (f.endMode === 'count' && !f.endCount) return ElMessage.warning('请填写排课次数')
+  if (f.repeatMode !== 4 && !f.weekdays?.length) return ElMessage.warning('请选择周几上课')
   schedSaving.value = true
   try {
-    await api.scheduleCreate({
-      clazzId: curClazz.value.id,
-      teacherId: f.teacherId,
-      classroomId: f.classroomId || undefined,
-      startTime: `${f.date} ${f.range[0]}:00`,
-      endTime: `${f.date} ${f.range[1]}:00`
-    })
-    ElMessage.success('排课成功')
+    const r = await api.scheduleRepeat(repeatPayload())
     schedCreateVisible.value = false
-    loadDetailSchedules()
+    await loadDetailSchedules()
+    refreshCalEvents()
+    const skipped = r.skipped || []
+    ElMessage.success(`重复排课完成：成功 ${r.created} 次${skipped.length ? `，跳过 ${skipped.length} 次` : ''}`)
+    if (skipped.length) {
+      ElMessageBox.alert(
+        skipped.slice(0, 50).map((x) => `${x.date}：${x.reason}`).join('<br>'),
+        `跳过明细（共 ${skipped.length} 条）`, { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' })
+    }
   } finally { schedSaving.value = false }
 }
 /** 导出课表：当前班全部课次（时间/教师/教室/状态/备注） */
@@ -981,9 +1528,12 @@ function openDetailPage(row, tab = 'students') {
   detailClazz.value = row
   curClazz.value = row // 添加学生/调班/试听弹窗复用
   loadStudents()
+  schedPager.page = 1   // 换班级后排课列表回到第1页
   loadDetailSchedules()
   loadAuditionStudents()
   resetAuditionForm()
+  // 班级清单（排课TAB「其它课程」课次块显示班级名用）
+  if (!clazzList.value.length) api.clazzList().then((r) => (clazzList.value = r || [])).catch(() => {})
   const cid = row.courseId
   if (cid && !priceMap.value[cid]) {
     api.coursePrices(cid).then((ps) => (priceMap.value[cid] = ps || [])).catch(() => (priceMap.value[cid] = []))
@@ -991,10 +1541,37 @@ function openDetailPage(row, tab = 'students') {
 }
 async function loadDetailSchedules() {
   try {
+    // 全量缓存（上限500，重复排课一次可达200条）：日历视图/冲突检测/导出课表/上课记录TAB 共用
     detailSchedules.value = (await api.schedulePage(
-      { page: 1, size: 100, clazzId: detailClazz.value.id })).records || []
+      { page: 1, size: 500, clazzId: detailClazz.value.id })).records || []
   } catch (e) { detailSchedules.value = [] }
+  loadSchedPage()   // 排课列表视图（分页）同步刷新
 }
+
+/* ===== 排课列表视图：服务端分页 + 表头排序（detailSchedules 是全量缓存，列表单独取当前页） ===== */
+const schedListRows = ref([])
+const schedPager = reactive({ page: 1, size: 20, total: 0 })
+const schedSort = reactive({ sortBy: 'createTime', direction: 'desc' })
+async function loadSchedPage() {
+  if (!detailClazz.value) { schedListRows.value = []; schedPager.total = 0; return }
+  try {
+    const r = await api.schedulePage({ page: schedPager.page, size: schedPager.size,
+      clazzId: detailClazz.value.id, sortBy: schedSort.sortBy, direction: schedSort.direction })
+    schedListRows.value = r.records || []
+    schedPager.total = Number(r.total || 0)
+  } catch (e) { schedListRows.value = []; schedPager.total = 0 }
+}
+function onSchedPage() { loadSchedPage() }
+function onSchedSize() { schedPager.page = 1; loadSchedPage() }
+/** 表头排序（sortable=custom）：prop 须在后端白名单内；取消排序恢复默认 创建时间倒序 */
+function onSchedSort({ prop, order }) {
+  if (!order) { schedSort.sortBy = 'createTime'; schedSort.direction = 'desc' }
+  else { schedSort.sortBy = prop; schedSort.direction = order === 'ascending' ? 'asc' : 'desc' }
+  schedPager.page = 1
+  loadSchedPage()
+}
+/** 序号跨页连续：(当前页-1)×页大小 + 行号 */
+const schedRowNo = (i) => (schedPager.page - 1) * schedPager.size + i + 1
 function backToList() {
   mode.value = 'list'
   detailClazz.value = null
@@ -1499,7 +2076,8 @@ const transferTargets = computed(() =>
   clazzList.value.filter((c) => c.id !== curClazz.value?.id && c.status !== 3))
 
 function openTransfer(row) {
-  if (!clazzList.value.length) clazzList.value = (api.clazzList()) || []
+  // 注意：此处不能直接赋值为 api.clazzList() 的 Promise（会让 clazzList.value 变成 Promise，后续 .filter/.find 报错）
+  if (!clazzList.value.length) api.clazzList().then((r) => (clazzList.value = r || [])).catch(() => {})
   transferStu.value = row
   transferTargetId.value = null
   transferVisible.value = true
@@ -1591,7 +2169,10 @@ onMounted(async () => {
 .sch-legend { display: flex; align-items: center; gap: 12px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
 .sch-legend li { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #667c99; white-space: nowrap; }
 .color-square { width: 12px; height: 12px; border-radius: 3px; border: 1px solid; display: inline-block; }
-.color-square.preview { background: #fff; border-style: dashed; }
+/* 图例角标（试听学员「试」字章） */
+.legend-badge { display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 3px; background: #f79009; color: #fff;
+  font-size: 10px; font-weight: 600; line-height: 1; }
 /* FullCalendar 容器 */
 .cal-wrap { border: 1px solid #e4edf7; border-radius: 10px; background: #fff; padding: 6px 10px; }
 .cal-wrap :deep(.fc) { font-size: 12.5px; }
@@ -1603,6 +2184,34 @@ onMounted(async () => {
 .cal-wrap :deep(.fc .fc-button-primary:not(:disabled):active) { background: #155EEF; color: #fff; border-color: #155EEF; }
 .cal-wrap :deep(.fc-theme-standard td), .cal-wrap :deep(.fc-theme-standard th) { border-color: #edf2f9; }
 .cal-wrap :deep(.fc .fc-event) { border-radius: 6px; cursor: pointer; font-size: 12px; }
+/* 月视图"另外 N 个"链接 + 点击展开的当日课次弹层 */
+.cal-wrap :deep(.fc .fc-daygrid-more-link) { font-size: 12px; color: #155EEF; font-weight: 600; }
+.cal-wrap :deep(.fc .fc-more-popover) { border-radius: 10px; border-color: #e4edf7;
+  box-shadow: 0 10px 28px rgba(21, 94, 239, 0.1); font-size: 12.5px; }
+.cal-wrap :deep(.fc .fc-more-popover .fc-popover-header) {
+  background: #f5f9ff; border-bottom: 1px solid #e4edf7; padding: 6px 10px; }
+.cal-wrap :deep(.fc .fc-more-popover .fc-popover-title) { font-size: 13px; font-weight: 600; color: #344054; }
+.cal-wrap :deep(.fc .fc-more-popover .fc-popover-close) { color: #8fa8c4; }
+/* 课次块：标题行 + 标记角标行（已记上课/冲突/我的/试/其它课程，可并存） */
+.cal-wrap :deep(.fc .fc-event .cz-ev) { color: #fff; line-height: 1.35; overflow: hidden; }
+.cal-wrap :deep(.fc .fc-event .cz-ev-t) { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-wrap :deep(.fc .fc-event .cz-ev-tags) { display: flex; gap: 3px; margin-top: 2px; flex-wrap: wrap; }
+.cal-wrap :deep(.fc .fc-event .cz-ev-tag) {
+  color: #fff; border-radius: 3px; padding: 0 4px; font-size: 10px; line-height: 14px; white-space: nowrap;
+}
+/* 日历操作提示 */
+.cal-tip { margin-top: 6px; font-size: 12px; color: #8fa8c4; display: flex; align-items: center; }
+/* 新建/编辑排课弹窗：排课方式提示 + 结束方式行 + 预计次数提示 */
+.sched-mode-tip { margin-left: 10px; font-size: 12px; color: #8fa8c4; }
+.sched-end-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.sched-end-unit { font-size: 13px; color: #667c99; }
+.repeat-preview-tip { width: 100%; margin-top: 4px; font-size: 12px; color: #667c99; }
+.repeat-preview-tip b { color: #f79009; padding: 0 2px; }
+/* 课次操作弹窗（时间/教师/教室/状态/标记 + 调课取消） */
+.sch-op-row { display: flex; gap: 10px; font-size: 13px; color: #344054; padding: 4px 0; align-items: flex-start; }
+.sch-op-row > span:first-child { width: 62px; color: #8fa8c4; flex-shrink: 0; }
+.sch-op-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.sch-op-alert { margin-top: 10px; }
 /* 学生管理容量条：标签与「添加学生」按钮同行，按钮靠右 */
 .stu-cap-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 /* 试听学员占名印章（橙底白「试」字，微倾 6°）+ 数量 */
