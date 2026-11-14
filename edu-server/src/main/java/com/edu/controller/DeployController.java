@@ -377,6 +377,97 @@ public class DeployController {
         return Result.ok();
     }
 
+    /** 批量删除记录（构建日志/远程日志勾选行） */
+    @DeleteMapping("/records")
+    @Log("批量删除记录")
+    public Result<Integer> deleteRecords(@RequestParam String ids) {
+        platformOnly();
+        int n = 0;
+        for (String s : ids.split(",")) {
+            try { n += recordMapper.deleteById(Long.parseLong(s.trim())); }
+            catch (NumberFormatException ignore) { }
+        }
+        return Result.ok(n);
+    }
+
+    /** 一键清空记录：type=BUILD 清构建日志，REMOTE 清远程日志（部署+服务操作） */
+    @DeleteMapping("/records/clear")
+    @Log("清空记录")
+    public Result<Integer> clearRecords(@RequestParam String type) {
+        platformOnly();
+        return Result.ok(recordMapper.delete(new LambdaQueryWrapper<SysDeployRecord>()
+                .eq("BUILD".equals(type), SysDeployRecord::getType, "BUILD")
+                .in("REMOTE".equals(type), SysDeployRecord::getType, java.util.Arrays.asList("DEPLOY", "SERVICE"))));
+    }
+
+    /**
+     * 升级简述：jar 内 CHANGELOG.md（人工维护的功能/BUG清单）+ sql/patch_*.sql 头部注释自动汇总，
+     * 按版本号倒序返回 [{version, items[]}]，供容器管理「升级简述」TAB展示。
+     */
+    @GetMapping("/changelog")
+    public Result<List<Map<String, Object>>> changelog() {
+        platformOnly();
+        Map<String, List<String>> byVer = new java.util.LinkedHashMap<>();
+        // 1) CHANGELOG.md：## v2.82 开版本块，其后 - 行为条目（流读取，兼容 jar 内资源）
+        try {
+            org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("CHANGELOG.md");
+            if (res.exists()) {
+                String md;
+                try (java.io.InputStream in = res.getInputStream()) {
+                    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                    byte[] b = new byte[4096]; int n;
+                    while ((n = in.read(b)) > 0) bos.write(b, 0, n);
+                    md = new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+                }
+                String cur = null;
+                for (String line : md.split("\\r?\\n")) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("^##\\s*(v?[0-9]+\\.[0-9]+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(line.trim());
+                    if (m.find()) { cur = m.group(1).toLowerCase(); byVer.putIfAbsent(cur, new java.util.ArrayList<>()); continue; }
+                    if (cur != null && line.trim().startsWith("-")) byVer.get(cur).add(line.trim().substring(1).trim());
+                }
+            }
+        } catch (Exception ignore) { }
+        // 2) 补丁文件头注释（未写进 CHANGELOG 的版本兜底展示）
+        try {
+            org.springframework.core.io.Resource[] patches = new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                    .getResources("classpath:sql/patch_*.sql");
+            List<org.springframework.core.io.Resource> list = new java.util.ArrayList<>();
+            for (org.springframework.core.io.Resource r : patches) list.add(r);
+            list.sort(java.util.Comparator.comparingLong(DeployController::patchVerOf).reversed());
+            for (org.springframework.core.io.Resource r : list) {
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("v(\\d+)\\.(\\d+)").matcher(r.getFilename() == null ? "" : r.getFilename());
+                if (!m.find()) continue;
+                String ver = ("v" + m.group(1) + "." + m.group(2));
+                if (byVer.containsKey(ver)) continue;   // 已有维护版简述，跳过
+                try (java.io.InputStream in = r.getInputStream()) {
+                    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                    byte[] b = new byte[4096]; int n;
+                    while ((n = in.read(b)) > 0) bos.write(b, 0, n);
+                    for (String line : new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8).split("\\r?\\n")) {
+                        String t = line.trim();
+                        if (t.isEmpty()) continue;
+                        if (t.startsWith("--")) byVer.computeIfAbsent(ver, k -> new java.util.ArrayList<>()).add(t.substring(2).trim());
+                    }
+                }
+            }
+        } catch (Exception ignore) { }
+        // 版本倒序输出
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        byVer.entrySet().stream()
+                .sorted((a, b2) -> Double.compare(Double.parseDouble(b2.getKey().replace("v", "")),
+                        Double.parseDouble(a.getKey().replace("v", ""))))
+                .forEach(e -> {
+                    if (e.getValue().isEmpty()) return;
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("version", e.getKey());
+                    m.put("items", e.getValue());
+                    out.add(m);
+                });
+        return Result.ok(out);
+    }
+
     @Data
     public static class TargetDTO {
         private Long id;

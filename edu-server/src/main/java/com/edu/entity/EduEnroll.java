@@ -33,13 +33,19 @@ public class EduEnroll {
     /** 优惠明细JSON [{type,amount}]：编辑时按原样恢复多行优惠，不合并 */
     private String discountDetail;
     private BigDecimal paidAmount;
+    /** 到款状态：0未确认 1已确认到款（办理中心手动确认，与金额推导并存） */
+    private Integer payStatus;
     /** 支付明细JSON [{channel,account,serial,amount}] */
     private String payDetail;
     /** 1在读 2已结课 3已退订 4已转课 */
     private Integer status;
     private LocalDateTime createTime;
+    /** 编辑时间（DB ON UPDATE 自动刷新，只读展示用） */
+    private LocalDateTime updateTime;
     /** 有效期（报名时勾选指定） */
     private java.time.LocalDate validDate;
+    /** 停课日期（status=6 停课时记录，复课清空） */
+    private java.time.LocalDate suspendDate;
     /** 备注（对内） */
     private String remark;
     /** 销售来源 */
@@ -55,4 +61,7 @@ public class EduEnroll {
     /** 套餐名称（查询时填充，非表字段） */
     @TableField(exist = false)
     private String packageName;
+    /** 数量单位（查询时填充：课时/天/周/月，按课程真实收费模式推导，非表字段） */
+    @TableField(exist = false)
+    private String hoursUnit;
 }

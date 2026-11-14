@@ -245,6 +245,50 @@ public class EduScheduleController {
         return Result.ok();
     }
 
+    /** 班级上课记录：课次出勤聚合行 + 学员考勤明细（到课/请假/旷课） */
+    @GetMapping("/class-records")
+    public Result<Map<String, Object>> classRecords(@RequestParam Long clazzId,
+                                                    @RequestParam(required = false) String begin,
+                                                    @RequestParam(required = false) String end) {
+        return Result.ok(scheduleService.classRecords(clazzId, begin, end));
+    }
+
+    /** 未排课记上课：补录历史课次并立即登记扣课（跳过未来/冲突校验） */
+    @PostMapping("/record")
+    @Log("未排课记上课")
+    public Result<Integer> record(@RequestBody EduScheduleService.RecordDTO dto) {
+        return Result.ok(scheduleService.record(dto));
+    }
+
+    /** 补课学员候选：同课程已分班的请假学员（按校区/班级/姓名前端筛选） */
+    @GetMapping("/makeup-candidates")
+    public Result<List<Map<String, Object>>> makeupCandidates(@RequestParam Long courseId,
+                                                              @RequestParam(required = false) Long clazzId) {
+        return Result.ok(scheduleService.makeupCandidates(courseId, clazzId));
+    }
+
+    /** 已排课次按学员登记上课（排课管理-编辑上课） */
+    @PostMapping("/{id}/mark-attendance")
+    @Log("编辑上课")
+    public Result<Integer> markAttendance(@PathVariable Long id,
+                                          @RequestBody EduScheduleService.RecordDTO dto) {
+        return Result.ok(scheduleService.markAttendance(id, dto.getStudents(), dto.getMemo()));
+    }
+
+    /** 课次出勤摘要（课程表弹窗 实到/应到） */
+    @GetMapping("/{id}/attend-summary")
+    public Result<Map<String, Object>> attendSummary(@PathVariable Long id) {
+        return Result.ok(scheduleService.attendSummary(id));
+    }
+
+    /** 编辑重复系列：同班级+教师+周几+时段的未来课次统一改时段（可换教师/教室），冲突跳过汇总 */
+    @PostMapping("/{id}/repeat-update")
+    @Log("编辑重复")
+    public Result<Map<String, Object>> repeatUpdate(@PathVariable Long id, @RequestBody AdjustDTO dto) {
+        return Result.ok(scheduleService.repeatUpdate(id, dto.getStartTime(), dto.getEndTime(),
+                dto.getTeacherId(), dto.getClassroomId()));
+    }
+
     @Data
     public static class UpdateDTO {
         private LocalDateTime startTime;
@@ -496,6 +540,8 @@ public class EduScheduleController {
         private String reason;
         /** 换教室（可选）：不传则沿用原教室 */
         private Long classroomId;
+        /** 换教师（可选，编辑重复用）：不传则沿用原教师 */
+        private Long teacherId;
     }
 
     /** 调整上课时间（可同时更换教室；目标时段教室已占用则拒绝并提示空闲教室） */

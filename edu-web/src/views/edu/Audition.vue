@@ -82,12 +82,29 @@
         <el-table-column v-if="cols.operator" prop="operator" label="经办人" width="90" show-overflow-tooltip>
           <template #default="{ row }">{{ row.operator || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除该试听记录?" @confirm="remove(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑</b><i>修改试听信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>确认后删除记录</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -350,7 +367,7 @@
 <script setup>
 import { reactive, ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
@@ -453,7 +470,7 @@ async function searchAudStu(kw) {
   if (!k) { addAudStuCands.value = []; return }
   addAudStuSearching.value = true
   try {
-    if (!allAudStudents.value.length) allAudStudents.value = (await api.studentList()) || []
+    allAudStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
     addAudStuCands.value = allAudStudents.value
       .filter((s) => (s.name || '').toLowerCase().includes(k.toLowerCase()) || (s.phone || '').includes(k))
       .map((s) => ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade }))
@@ -464,7 +481,7 @@ async function loadAllAudStu() {
   if (addAudStuSearching.value) return
   addAudStuSearching.value = true
   try {
-    if (!allAudStudents.value.length) allAudStudents.value = (await api.studentList()) || []
+    allAudStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
     addAudStuCands.value = allAudStudents.value
       .map((s) => ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade }))
   } finally { addAudStuSearching.value = false }
@@ -626,6 +643,15 @@ async function remove(id) {
   await api.auditionDel(id)
   ElMessage.success('已删除')
   load()
+}
+
+/** 列表行「更多」下拉分发：删除沿用原 popconfirm 的二次确认文案 */
+async function onRowCommand(cmd, row) {
+  if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'del') {
+    await ElMessageBox.confirm('确认删除该试听记录?', '删除试听', { type: 'warning' })
+    remove(row.id)
+  }
 }
 
 /* ===== 插班试听：选择班课弹窗（行选中后点确定回填，重开可改选） ===== */

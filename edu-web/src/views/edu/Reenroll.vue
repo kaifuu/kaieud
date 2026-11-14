@@ -67,7 +67,9 @@
           <ColumnSetting storage-key="reenroll-list" :columns="allColumns" @change="onCols" />
         </div>
         <div class="rec-summary" style="margin-bottom: 8px">
-          当前结果：总计 <b>{{ filteredList.length }}</b> 条记录，
+          当前结果：总计 <b>{{ filteredList.length }}</b> 条记录，学员总计 <b>{{ listStats.students }}</b> 人，
+          报课总计 <b>{{ listStats.courses }}</b>，优惠总计 <b style="color: #f79009">¥{{ listStats.discount }}</b>，
+          退费合计 <b style="color: #f04438">¥{{ listStats.refund }}</b>，
           应收款项总计 <b>¥{{ listSum.due }}</b> ｜ 实收总计 <b>¥{{ listSum.paid }}</b> ｜ 欠费总计 <b class="sum-money">¥{{ listSum.arrears }}</b>
         </div>
         <el-table :data="pagedList" size="small" stripe height="480" v-loading="listLoading">
@@ -88,22 +90,23 @@
           <el-table-column v-if="cols.content" label="交易内容" min-width="220" show-overflow-tooltip>
             <template #default="{ row }">
               <template v-if="row.kind === 'enroll'">
-                {{ row.packageName || courseName(row.courseId) }}，{{ row.totalHours }}课时×¥{{ row.price }}
+                {{ row.packageName || courseName(row.courseId) }}，{{ row.totalHours }}{{ row.hoursUnit || '课时' }}×¥{{ row.price }}
                 {{ row.discountAmount > 0 ? `，优惠¥${row.discountAmount}` : '' }}
               </template>
               <span v-else>{{ row.content }}</span>
             </template>
           </el-table-column>
-          <el-table-column v-if="cols.totalAmount" label="应收" width="96" sortable>
+          <el-table-column v-if="cols.totalAmount" label="应收/应退" width="104" sortable>
             <template #default="{ row }">
-              <div class="amt-cell" v-if="row.kind === 'enroll' || row.kind === 'material'"><span class="tag-in">收</span><b>{{ row.totalAmount }}</b></div>
-              <div class="amt-cell" v-else-if="row.type === '退费'"><span></span><b>-{{ row.amount }}</b></div>
+              <div class="amt-cell" v-if="row.kind === 'enroll' || row.kind === 'material' || row.kind === 'supplement'"><span class="tag-in">收</span><b>{{ row.totalAmount }}</b></div>
+              <div class="amt-cell" v-else-if="row.type === '退费'"><span class="tag-out">退</span><b>-{{ row.totalAmount || row.amount }}</b></div>
               <div class="amt-cell" v-else><span class="tag-in">收</span><b>{{ row.amount }}</b></div>
             </template>
           </el-table-column>
-          <el-table-column v-if="cols.paidAmount" label="实收" width="96" sortable>
+          <el-table-column v-if="cols.paidAmount" label="实收/实退" width="104" sortable>
             <template #default="{ row }">
-              <div class="amt-cell" v-if="row.kind === 'enroll' || row.kind === 'material'"><span class="tag-in">收</span><b>{{ row.paidAmount ?? '0.00' }}</b></div>
+              <div class="amt-cell" v-if="row.kind === 'enroll' || row.kind === 'material' || row.kind === 'supplement'"><span class="tag-in">收</span><b>{{ row.paidAmount ?? '0.00' }}</b></div>
+              <div class="amt-cell" v-else-if="row.type === '退费'"><span class="tag-out">退</span><b>-{{ row.paidAmount ?? '0.00' }}</b></div>
               <div class="amt-cell" v-else><span class="tag-in">收</span><b>{{ row.amount ?? '0.00' }}</b></div>
             </template>
           </el-table-column>
@@ -128,16 +131,17 @@
           <el-table-column v-if="cols.status" label="报名状态" width="82" align="center" sortable
                            :sort-method="(a, b) => (a.status || 0) - (b.status || 0)">
             <template #default="{ row }">
-              <el-tag v-if="row.kind === 'enroll'" size="small" :type="{ 1: 'success', 2: 'info', 3: 'danger', 4: 'warning' }[row.status]" effect="plain">
-                {{ { 1: '在读', 2: '已结课', 3: '已退订', 4: '已转课' }[row.status] || '-' }}
+              <el-tag v-if="row.kind === 'enroll'" size="small" :type="{ 1: 'success', 2: 'info', 3: 'danger', 4: 'warning', 5: 'info' }[row.status]" effect="plain">
+                {{ { 1: '在读', 2: '已结课', 3: '已退订', 4: '已转课', 5: '已作废' }[row.status] || '-' }}
               </el-tag>
               <span v-else class="fee-sub">—</span>
             </template>
           </el-table-column>
           <el-table-column v-if="cols.payStatus" label="到款状态" width="82" align="center" sortable
-                           :sort-method="(a, b) => rowDue(a) - rowDue(b)">
+                           :sort-method="(a, b) => (a.payStatus || 0) - (b.payStatus || 0) || rowDue(a) - rowDue(b)">
             <template #default="{ row }">
-              <span v-if="row.kind === 'enroll' || row.kind === 'material'" class="order-status" :class="rowDue(row) > 0 ? 'st-owing' : 'st-done'">
+              <span v-if="row.payStatus === 1" class="order-status st-paid">已到款</span>
+              <span v-else-if="row.kind === 'enroll' || row.kind === 'material'" class="order-status" :class="rowDue(row) > 0 ? 'st-owing' : 'st-done'">
                 {{ rowDue(row) > 0 ? '欠费' : '已完成' }}
               </span>
               <span v-else class="order-status st-done">已完成</span>
@@ -158,13 +162,25 @@
                       <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
                       <span class="mi-txt"><b>查看</b><i>业务凭证详情</i></span>
                     </el-dropdown-item>
-                    <el-dropdown-item command="edit" class="more-item">
+                    <el-dropdown-item v-if="row.status !== 5" command="edit" class="more-item">
                       <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
                       <span class="mi-txt"><b>编辑</b><i>{{ editHintOf(row) }}</i></span>
                     </el-dropdown-item>
-                    <el-dropdown-item v-if="row.kind === 'enroll'" command="print" class="more-item">
+                    <el-dropdown-item v-if="row.kind === 'enroll' && row.status !== 5" command="print" class="more-item">
                       <span class="mi mi-blue"><el-icon :size="13"><Printer /></el-icon></span>
                       <span class="mi-txt"><b>打印</b><i>业务凭证打印</i></span>
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="row.kind === 'enroll' && row.status !== 5 && row.payStatus !== 1" command="pay" class="more-item">
+                      <span class="mi mi-green"><el-icon :size="13"><CircleCheck /></el-icon></span>
+                      <span class="mi-txt"><b>确认到款</b><i>标记本单已收款</i></span>
+                    </el-dropdown-item>
+                    <el-dropdown-item v-else-if="row.kind === 'enroll' && row.status !== 5 && row.payStatus === 1" command="unpay" class="more-item">
+                      <span class="mi mi-orange"><el-icon :size="13"><RefreshLeft /></el-icon></span>
+                      <span class="mi-txt"><b>取消到款</b><i>撤销到款标记</i></span>
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="row.kind === 'enroll' && row.status === 1" command="void" divided class="more-item">
+                      <span class="mi mi-red"><el-icon :size="13"><CircleClose /></el-icon></span>
+                      <span class="mi-txt"><b>作废订单</b><i>填写作废原因</i></span>
                     </el-dropdown-item>
                     <el-dropdown-item v-if="row.kind === 'enroll'" command="log" class="more-item">
                       <span class="mi mi-orange"><el-icon :size="13"><Document /></el-icon></span>
@@ -197,20 +213,34 @@
           <el-button type="primary" @click="openCreate">创建学员</el-button>
         </div>
       </div>
-      <div v-if="picked" class="picked-bar">
-        <el-icon color="#155EEF"><User /></el-icon>
-        <b>{{ picked.name }}</b>
-        <span v-if="picked.grade">{{ picked.grade }}</span>
-        <span v-if="picked.school">{{ picked.school }}</span>
-        <span v-if="picked.phone">{{ picked.phone }}</span>
-        <!-- 各办理页通用扩展：在读课程数 + 报读校区（课/校 徽标） -->
-        <span class="pb-dash"></span>
-        <span class="pb-ext"><i class="texttag tt-course">课</i>在读课程：{{ subInfo.courseCount }}</span>
-        <span class="pb-dash"></span>
-        <span class="pb-ext"><i class="texttag tt-campus">校</i>报读校区：{{ subInfo.campuses || '—' }}</span>
-        <el-tag v-if="mode === 'recharge' || mode === 'transfer' || mode === 'refund'" size="small" type="warning" effect="light">
-          账户余额：¥{{ (Number(balanceAvail) || 0).toFixed(2) }}
-        </el-tag>
+      <div v-if="picked" class="picked-bar pb-block">
+        <div class="pb-row">
+          <el-icon color="#155EEF"><User /></el-icon>
+          <b>{{ picked.name }}</b>
+          <span v-if="picked.grade">{{ picked.grade }}</span>
+          <span v-if="picked.school">{{ picked.school }}</span>
+          <span v-if="picked.phone">{{ picked.phone }}</span>
+          <el-tag v-if="mode === 'recharge' || mode === 'transfer' || mode === 'refund'" size="small" type="warning" effect="light">
+            账户余额：¥{{ (Number(balanceAvail) || 0).toFixed(2) }}
+          </el-tag>
+        </div>
+        <!-- 各办理页通用扩展：按校区分行呈现（每行 = 一个校区 + 该校区在读课程，先校区后课程） -->
+        <div v-for="g in subInfo.groups" :key="g.campus" class="pb-row pb-campus-row">
+          <i class="texttag tt-campus">校</i><b class="pb-campus">{{ g.campus }}</b>
+          <span class="pb-dash"></span>
+          <i class="texttag tt-course">课</i>
+          <el-tooltip v-if="g.courses.length > 2" placement="bottom" effect="light" popper-class="pb-list-tip">
+            <span class="pb-ext-hover">{{ pbCoursesText(g) }}</span>
+            <template #content>
+              <div class="pb-tip-title">{{ g.campus }} 在读课程（{{ g.courses.length }} 门）</div>
+              <div v-for="c in g.courses" :key="c" class="pb-tip-row">{{ c }}</div>
+            </template>
+          </el-tooltip>
+          <span v-else>{{ g.courses.join('、') || '—' }}</span>
+        </div>
+        <div v-if="!subInfo.groups.length" class="pb-row pb-campus-row">
+          <i class="texttag tt-campus">校</i><span>暂无在读报读记录</span>
+        </div>
       </div>
     </div>
 
@@ -282,14 +312,6 @@
         <div class="handle-item">
           <label>经办人</label>
           <el-input :model-value="recharge.handler" disabled size="small" style="width: 200px" />
-        </div>
-        <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="recharge.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': rechargeErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
         </div>
         <div class="handle-item">
           <label class="req">咨询顾问</label>
@@ -572,14 +594,6 @@
           <el-input :model-value="handle.handler" disabled size="small" style="width: 200px" />
         </div>
         <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="handle.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
-        </div>
-        <div class="handle-item">
           <label class="req">咨询顾问</label>
           <el-select v-model="handle.consultant" filterable clearable size="small"
                      :class="{ 'is-err': handleErrs.consultant }"
@@ -758,14 +772,6 @@
           <el-input :model-value="handle.handler" disabled size="small" style="width: 200px" />
         </div>
         <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="handle.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
-        </div>
-        <div class="handle-item">
           <label class="req">咨询顾问</label>
           <el-select v-model="handle.consultant" filterable clearable size="small"
                      :class="{ 'is-err': handleErrs.consultant }"
@@ -848,14 +854,6 @@
         <div class="handle-item">
           <label>经办人</label>
           <el-input :model-value="handle.handler" disabled size="small" style="width: 200px" />
-        </div>
-        <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="handle.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
         </div>
         <div class="handle-item">
           <label class="req">咨询顾问</label>
@@ -995,14 +993,6 @@
         <div class="handle-item">
           <label>经办人</label>
           <el-input :model-value="handle.handler" disabled size="small" style="width: 200px" />
-        </div>
-        <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="handle.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
         </div>
         <div class="handle-item">
           <label class="req">咨询顾问</label>
@@ -1145,14 +1135,6 @@
           <el-input :model-value="handle.handler" disabled size="small" style="width: 200px" />
         </div>
         <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="handle.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
-        </div>
-        <div class="handle-item">
           <label class="req">咨询顾问</label>
           <el-select v-model="handle.consultant" filterable clearable size="small"
                      :class="{ 'is-err': handleErrs.consultant }"
@@ -1225,6 +1207,7 @@
             grp.name === '套餐订阅' ? '套' : '校' }}</span>
           <b class="campus-group-name">{{ grp.name }}</b>
           <span class="fee-sub">（{{ grp.cards.length }} 门课程）</span>
+          <span class="fee-sub" style="margin-left: auto">优惠总计：<b style="color: #f79009">¥{{ groupDiscount(grp) }}</b></span>
         </div>
         <div v-for="card in grp.cards" :key="card.__editingId || (card.courseId + '@' + (card.campus || ''))" class="sel-card">
         <div class="sel-line">
@@ -1232,7 +1215,7 @@
           <b class="sel-name">{{ cardName(card) }}</b>
           <span v-if="card.courseId" class="sel-sub">{{ card.campus || '-' }}</span>
           <div class="sel-sum">
-            <span class="sum-item">共：<b>{{ cardHours(card) }}</b> 课时</span>
+            <span class="sum-item">共：<b>{{ cardHours(card) }}</b> {{ priceUnit(card) }}</span>
             <span class="sum-item">课程价格合计：<b>¥{{ cardSubtotal(card) }}</b></span>
             <span class="sum-item">优惠合计：<b>¥{{ cardDiscount(card) }}</b></span>
             <span class="sum-item">实收：<b class="sum-money">¥{{ cardFinal(card) }}</b></span>
@@ -1267,10 +1250,9 @@
               <div class="fee-ctrl1">
                 <el-select v-if="card.priceRows.length" v-model="card.priceId" size="small"
                            style="width: 190px" placeholder="选择定价标准" @change="card.customized = true">
-                  <el-option v-for="p in card.priceRows" :key="p.id" :value="p.id"
-                             :label="`${fmt(p.hours)}课时=${fmt(p.totalAmount)}元`" />
+                  <el-option v-for="p in card.priceRows" :key="p.id" :value="p.id" :label="priceLabel(p)" />
                 </el-select>
-                <span v-else class="fee-sub fee-hint" title="该课程未配置按课时定价，按课程默认价">未配置课时定价，按默认价</span>
+                <span v-else class="fee-sub fee-hint" title="该课程未配置定价标准，按课程默认价">未配置定价标准，按默认价</span>
               </div>
               <span class="fee-label fee-pair">数量</span>
               <el-input-number v-model="card.qty" :min="1" :max="99" :precision="0" size="small"
@@ -1402,14 +1384,6 @@
         <div class="handle-item">
           <label>经办人</label>
           <el-input :model-value="handle.handler" disabled size="small" style="width: 200px" />
-        </div>
-        <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="handle.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
         </div>
         <div class="handle-item">
           <label class="req">咨询顾问</label>
@@ -1556,14 +1530,6 @@
                           size="small" placeholder="请输入经办日期" style="width: 200px" />
         </div>
         <div class="handle-item">
-          <label class="req">采单员</label>
-          <el-select v-model="logEditForm.orderTaker" filterable clearable size="small"
-                     :class="{ 'is-err': handleErrs.orderTaker }"
-                     placeholder="请选择采单员" style="width: 200px">
-            <el-option v-for="a in staffOptions" :key="a.name" :label="`${a.name}（${a.typeName}）`" :value="a.name" />
-          </el-select>
-        </div>
-        <div class="handle-item">
           <label class="req">咨询顾问</label>
           <el-select v-model="logEditForm.consultant" filterable clearable size="small"
                      :class="{ 'is-err': handleErrs.consultant }"
@@ -1615,8 +1581,12 @@
         <el-table-column label="授课模式" width="86">
           <template #default="{ row }">{{ row.teachMode ? dictStore.label('class_type', row.teachMode) : '-' }}</template>
         </el-table-column>
-        <el-table-column label="开班数" width="64" align="center">
-          <template #default="{ row }">{{ clazzCount(row.id) }}</template>
+        <el-table-column label="开班数" width="76" align="center">
+          <template #default="{ row }">
+            <span :title="dlgCampus ? `${dlgCampus}开班 ${clazzCount(row.id, dlgCampus)} 个` : `全部校区合计 ${clazzCount(row.id)} 个`">
+              {{ dlgCampus ? clazzCount(row.id, dlgCampus) : clazzCount(row.id) }}
+            </span>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="74" align="center">
           <template #default="{ row }">
@@ -1629,6 +1599,10 @@
       </el-table>
       <div class="picked-clazz-bar">
         <span class="fee-sub">已选择课程 <b style="color: #155EEF">{{ dlgSelCount }}</b> 门</span>
+        <span v-if="dlgSubGroups.total" class="fee-sub" style="margin-left: 14px">
+          已订阅共 <b style="color: #12b76a">{{ dlgSubGroups.total }}</b> 门：
+          <span v-for="(g, i) in dlgSubGroups.list" :key="g.campus">{{ i > 0 ? '；' : '' }}{{ g.campus }}（{{ g.names.join('、') }}）</span>
+        </span>
       </div>
       <template #footer>
         <el-button @click="courseDialog = false">取 消</el-button>
@@ -1806,8 +1780,8 @@ const pagedList = computed(() =>
 /* 列设置（参考班级管理） */
 const allColumns = [
   { prop: 'id', label: '订单号' }, { prop: 'studentId', label: '学员姓名' },
-  { prop: 'content', label: '交易内容' }, { prop: 'totalAmount', label: '应收' },
-  { prop: 'paidAmount', label: '实收' }, { prop: 'due', label: '欠费' },
+  { prop: 'content', label: '交易内容' }, { prop: 'totalAmount', label: '应收/应退' },
+  { prop: 'paidAmount', label: '实收/实退' }, { prop: 'due', label: '欠费' },
   { prop: 'consultant', label: '咨询顾问' }, { prop: 'handleDate', label: '经办日期' },
   { prop: 'handler', label: '经办人' }, { prop: 'remark', label: '备注' },
   { prop: 'status', label: '报名状态' }, { prop: 'payStatus', label: '到款状态' }
@@ -1822,6 +1796,35 @@ function onListCommand(cmd, row) {
   else if (cmd === 'edit') editRecord(row)
   else if (cmd === 'print') printOrder(row)
   else if (cmd === 'log') openLog(row)
+  else if (cmd === 'pay') togglePayStatus(row, 1)
+  else if (cmd === 'unpay') togglePayStatus(row, 0)
+  else if (cmd === 'void') voidOrder(row)
+}
+
+/** 确认到款/取消到款（互斥操作：确认后仅显示取消，取消后仅显示确认） */
+async function togglePayStatus(row, status) {
+  try {
+    await api.enrollPayStatus(row.id, status)
+    ElMessage.success(status === 1 ? '已确认到款' : '已取消到款')
+    loadList()
+  } catch (e) { /* 接口已弹错误提示 */ }
+}
+
+/** 作废订单：弹窗输入作废原因（必填），确认后记录作废并写回备注 */
+async function voidOrder(row) {
+  let reason = ''
+  try {
+    const r = await ElMessageBox.prompt(
+      `作废后订单「${row.rid}」将标记为已作废（不可再编辑/收款），作废原因将展示在备注中`, '作废订单',
+      { inputPlaceholder: '请输入作废原因', confirmButtonText: '确认作废', cancelButtonText: '取 消', type: 'warning' })
+    reason = (r.value || '').trim()
+  } catch { return }
+  if (!reason) return ElMessage.warning('请填写作废原因')
+  try {
+    await api.enrollVoid(row.id, reason)
+    ElMessage.success('订单已作废')
+    loadList()
+  } catch (e) { /* 接口已弹错误提示 */ }
 }
 
 /** 编辑提示语（按记录类型） */
@@ -1858,6 +1861,25 @@ const listSum = computed(() => {
   const paid = billable.reduce((a, r) => a + Number(r.paidAmount || 0), 0)
   return { due: due.toFixed(2), paid: paid.toFixed(2), arrears: Math.max(due - paid, 0).toFixed(2) }
 })
+/** 汇总扩展：学员去重数 + 报课总计（按收费模式单位分组计量，课时与天/周/月不混加）+ 优惠总计 + 退费合计 */
+const listStats = computed(() => {
+  const students = new Set()
+  const units = new Map()
+  let discount = 0
+  let refund = 0
+  for (const r of filteredList.value) {
+    if (r.studentId) students.add(r.studentId)
+    if (r.kind === 'enroll') {
+      const u = r.hoursUnit || '课时'
+      units.set(u, (units.get(u) || 0) + Number(r.totalHours || 0))
+      discount += Number(r.discountAmount || 0)
+    }
+    if (r.type === '退费') refund += Number(r.paidAmount || 0)
+  }
+  const courses = [...units].map(([u, n]) => `${n}${u}`).join(' + ')
+  return { students: students.size, courses: courses || '0',
+    discount: discount.toFixed(2), refund: refund.toFixed(2) }
+})
 
 /** 返回列表页：清空编辑态并刷新订单列表（顺带复位提交/校验状态，避免卡死态带入下次办理） */
 function backToList() {
@@ -1871,8 +1893,8 @@ function backToList() {
 }
 
 /* ===== 未保存拦截：各办理页有已填内容时，返回列表前先确认 ===== */
-/** 经办信息是否已填（销售来源/采单员/咨询顾问） */
-const handleFilled = (h) => !!(h && (h.source || h.orderTaker || h.consultant))
+/** 经办信息是否已填（销售来源/咨询顾问；采单员已下线） */
+const handleFilled = (h) => !!(h && (h.source || h.consultant))
 /** 支付账户是否已填实收金额 */
 const payFilled = () => (pay.value?.rows || []).some((r) => Number(r.amount) > 0)
 /** 各办理页「有变更」判定：仅完成初始态（未选学员或未填任何内容）视为无变更，返回时不提示 */
@@ -2818,30 +2840,24 @@ async function openEdit(row) {
   const stu = { studentId: row.studentId, name: stuName(row.studentId) }
   students.value = [stu]
   onPick(row.studentId)
-  // 构建课程卡片（主记录 + 该学员其余在读记录，含套餐订阅）
-  // 优惠在 buildEditCard 内同步恢复，合计从渲染首帧起即为核减后的应收
+  // 构建课程卡片（仅本条订单记录；优惠在 buildEditCard 内同步恢复，合计从首帧起即为核减后的应收）
   const card = buildEditCard(row)
   cards.value = [card]
-  // 加载该学员所有在读报名记录（含套餐订阅），作为额外卡片
-  try {
-    const all = (await api.enrollPage({ page: 1, size: 100, studentId: row.studentId })).records || []
-    for (const e of all) {
-      if (e.status !== 1 || e.id === row.id) continue
-      cards.value.push(buildEditCard(e))
-    }
-  } catch (err) { /* 忽略 */ }
-  // 支付信息：从 payDetail JSON 恢复，或按 paidAmount 构建单行（先于异步定价加载，实收/欠费不闪变）
+  // 编辑只呈现本条订单记录（不再并入该学员其它在读记录，避免多卡混看）；
+  // 需要调整其它课程时从列表分别进入对应记录编辑
+  // 支付信息：恢复本条记录实收（payDetail 留档逐行恢复，缺留档按 paidAmount 补行），与应收总计同口径
   pay.value.balance = 0
   pay.value.rows = []
   if (row.payDetail) {
     try {
       const detail = JSON.parse(row.payDetail)
       if (Array.isArray(detail) && detail.length)
-        pay.value.rows = detail.map((d) => ({ channel: d.channel || '现金', account: d.account || '', serial: d.serial || '', amount: Number(d.amount) || 0 }))
-    } catch (e) { /* JSON 解析失败按默认 */ }
+        detail.forEach((d) => pay.value.rows.push(
+          { channel: d.channel || '现金', account: d.account || '', serial: d.serial || '', amount: Number(d.amount) || 0 }))
+    } catch (e) { /* JSON 解析失败按 paidAmount 补行 */ }
   }
-  if (!pay.value.rows.length)
-    pay.value.rows = [{ channel: '现金', account: '', serial: '', amount: Number(row.paidAmount || 0) }]
+  if (!pay.value.rows.length && Number(row.paidAmount || 0) > 0)
+    pay.value.rows.push({ channel: '现金', account: '', serial: '', amount: Number(row.paidAmount) })
   // 经办信息
   handle.value.source = row.source || null
   handle.value.orderTaker = row.orderTaker || null
@@ -2891,7 +2907,6 @@ async function saveEdit() {
   handleErrs.orderTaker = !handle.value.orderTaker
   handleErrs.consultant = !handle.value.consultant
   if (!handle.value.source) missing.push('销售来源（经办信息）')
-  if (!handle.value.orderTaker) missing.push('采单员（经办信息）')
   if (!handle.value.consultant) missing.push('咨询顾问（经办信息）')
   payErr.value = !hasPayRow.value
   if (!hasPayRow.value) missing.push('支付信息（至少一条实收金额大于 0 的支付记录）')
@@ -3017,18 +3032,14 @@ const handle = ref({
 const handleErrs = reactive({ source: false, orderTaker: false, consultant: false })
 const rechargeErrs = reactive({ source: false, orderTaker: false, consultant: false })
 watch(() => handle.value.source, (v) => { if (v) handleErrs.source = false })
-watch(() => handle.value.orderTaker, (v) => { if (v) handleErrs.orderTaker = false })
 watch(() => handle.value.consultant, (v) => { if (v) handleErrs.consultant = false })
 watch(() => recharge.value.source, (v) => { if (v) rechargeErrs.source = false })
-watch(() => recharge.value.orderTaker, (v) => { if (v) rechargeErrs.orderTaker = false })
 watch(() => recharge.value.consultant, (v) => { if (v) rechargeErrs.consultant = false })
-/** 校验销售来源/采单员/咨询顾问：未填项标红并逐项弹提示，全部通过返回 true */
+/** 校验销售来源/咨询顾问：未填项标红并逐项弹提示，全部通过返回 true（采单员已下线） */
 function validateHandle(h, errs) {
   errs.source = !h.source
-  errs.orderTaker = !h.orderTaker
   errs.consultant = !h.consultant
   if (!h.source) { ElMessage.warning('请在「经办信息」中填写销售来源'); return false }
-  if (!h.orderTaker) { ElMessage.warning('请在「经办信息」中选择采单员'); return false }
   if (!h.consultant) { ElMessage.warning('请在「经办信息」中选择咨询顾问'); return false }
   return true
 }
@@ -3097,9 +3108,13 @@ async function loadBalance() {
   } catch (e) { balanceAvail.value = 0 }
 }
 
-/* 该学员在读课程集合（选课弹窗置灰用）+ 在读课程数/报读校区（积分页学员信息） */
+/* 该学员在读课程集合（选课弹窗置灰用）+ 学员信息条：按校区分组的在读课程（每行=校区+课程） */
 const subscribedIds = ref(new Set())
-const subInfo = ref({ courseCount: 0, campuses: '' })
+const subInfo = ref({ groups: [] })
+/** 校区行课程文案：≤2 门直接展示，>2 门前两门 +「等N门」悬停看全部 */
+const pbCoursesText = (g) => g.courses.length <= 2
+  ? (g.courses.join('、') || '—')
+  : `${g.courses.slice(0, 2).join('、')} 等${g.courses.length}门`
 async function loadSubscribed() {
   try {
     const en = (await api.enrollPage({ page: 1, size: 100, studentId: studentId.value })).records || []
@@ -3107,14 +3122,20 @@ async function loadSubscribed() {
     // 在读判重按 课程+校区（同一课程不同校区可各报一条）
     subscribedIds.value = new Set(active.filter((e) => e.courseId)
       .map((e) => e.courseId + '|' + (e.campus || '')))
-    // 在读课程数按课程去重；报读校区取在读单校区去重
-    subInfo.value = {
-      courseCount: new Set(active.map((e) => e.courseId).filter(Boolean)).size,
-      campuses: [...new Set(active.map((e) => e.campus).filter(Boolean))].join('、')
+    // 按校区分组：每校区一行，行内为该校区在读课程名（courseMap 取中文，按课程去重）
+    const gmap = new Map()
+    for (const e of active) {
+      const campus = String(e.campus || '').trim() || '未分校区'
+      if (!gmap.has(campus)) gmap.set(campus, new Set())
+      if (e.courseId) {
+        const n = courseName(e.courseId)
+        if (n && n !== '-') gmap.get(campus).add(n)
+      }
     }
+    subInfo.value = { groups: [...gmap].map(([campus, set]) => ({ campus, courses: [...set] })) }
   } catch (e) {
     subscribedIds.value = new Set()
-    subInfo.value = { courseCount: 0, campuses: '' }
+    subInfo.value = { groups: [] }
   }
 }
 /** 欠费对报名单/教材杂费/补费单有意义；充值/转课/退费/积分流水无欠费概念 */
@@ -3124,12 +3145,18 @@ const rowDue = (row) => row.kind && !['enroll', 'material', 'supplement'].includ
 /* ===== 基础数据 ===== */
 const courses = ref([])
 const clazzes = ref([])
+const classrooms = ref([])   // 班级→教室→校区 映射用（开班数按校区统计）
 const teachers = ref([])
 const courseMap = ref({})
 const courseName = (id) => courseMap.value[id] || '-'
 const courseOf = (id) => courses.value.find((c) => c.id === id) || {}
 const clazzesOf = (cid) => clazzes.value.filter((c) => c.courseId === cid)
-const clazzCount = (cid) => clazzes.value.filter((c) => c.courseId === cid).length
+/** 班级所属校区：经教室（edu_classroom.campus）解析，教室缺失时归入空校区 */
+const classroomCampus = (id) => classrooms.value.find((r) => r.id === id)?.campus || ''
+const clazzCampus = (c) => classroomCampus(c.classroomId)
+/** 开班数：选了校区时只数该校区该课程的班级；未选校区为数全部校区合计 */
+const clazzCount = (cid, campus) => clazzes.value.filter((c) =>
+  c.courseId === cid && (!campus || clazzCampus(c) === campus)).length
 const fmt = (n) => String(Number(n ?? 0))
 const feeModeText = (c) => {
   const modes = []
@@ -3175,9 +3202,9 @@ async function addCard(courseId, origin = 'course', campus = null) {
   return true
 }
 
-/** 卡片可用定价行：按课时 × 卡片校区（本校区行 + 全部校区通用行） */
-const pricesOfCard = (ps, campus) => (ps || []).filter((p) => p.chargeMode === 1
-  && (!campus || p.campus === campus || p.campus === '全部校区'))
+/** 卡片可用定价行：按课时 + 按时间收费 × 卡片校区（本校区行 + 全部校区通用行） */
+const pricesOfCard = (ps, campus) => (ps || []).filter((p) =>
+  (!campus || p.campus === campus || p.campus === '全部校区'))
 
 /* 每卡价格计算：编辑卡片未改定价/数量前按记录实况显示（含套餐订阅），改后按所选定价行重算 */
 const cardName = (card) => card.courseId ? courseName(card.courseId) : (card.pkgName || '套餐订阅')
@@ -3195,6 +3222,9 @@ const cardSubtotal = (card) => {
 }
 const cardDiscount = (card) =>
   card.discounts.reduce((a, d) => a + Number(d.amount || 0), 0).toFixed(2)
+/** 校区分组优惠总计：组内各课程卡片优惠合计之和 */
+const groupDiscount = (grp) =>
+  grp.cards.reduce((s, c) => s + Number(cardDiscount(c) || 0), 0).toFixed(2)
 const cardFinal = (card) => {
   const v = Number(cardSubtotal(card)) - Number(cardDiscount(card))
   return (v > 0 ? v : 0).toFixed(2)
@@ -3206,6 +3236,11 @@ const cardHours = (card) => {
   if (p) return fmt(Number(p.hours) * q)
   const c = courseOf(card.courseId)
   return c.totalHours ? String(c.totalHours) : '-'
+}
+/** 数量单位：选中按时间定价时为周期（天/周/月/季/年），否则为课时 */
+const priceUnit = (card) => {
+  const p = cardSelectedPrice(card)
+  return p && p.chargeMode === 2 ? (p.timePeriod || '天') : '课时'
 }
 const totalHours = computed(() =>
   cards.value.reduce((a, c) => {
@@ -3253,15 +3288,31 @@ const dlgSelCount = computed(() =>
   Object.values(dlgSelMap.value).reduce((a, s) => a + (s ? s.size : 0), 0))
 /** 勾选变化：记入当前校区桶（转课转入时单选，后选的顶掉先选的） */
 function onCourseSelChange(rows) {
-  if (coursePurpose.value === 'transfer' && rows.length > 1) {
-    const keep = rows[rows.length - 1]
+  if (dlgRestoring.value) return   // 程序勾选已订阅行期间不处理，避免污染选择桶
+  const pickable = rows.filter((r) => canPickCourse(r))   // 已订阅行仅展示勾选态，不计入选择
+  if (coursePurpose.value === 'transfer' && pickable.length > 1) {
+    const keep = pickable[pickable.length - 1]
     courseTableRef.value?.clearSelection()
-    nextTick(() => courseTableRef.value?.toggleRowSelection(keep, true))
+    nextTick(() => {
+      courseTableRef.value?.toggleRowSelection(keep, true)
+      checkSubscribedRows()
+    })
     return
   }
   const set = dlgSelMap.value[dlgCampus.value] || (dlgSelMap.value[dlgCampus.value] = new Set())
   set.clear()
-  rows.forEach((r) => set.add(r.id))
+  pickable.forEach((r) => set.add(r.id))
+}
+/** 已订阅课程行勾为「选中+禁用」态（信息展示：当前学员已在该校区订阅此课） */
+const dlgRestoring = ref(false)
+function checkSubscribedRows() {
+  dlgRestoring.value = true
+  nextTick(() => {
+    courseFiltered.value.forEach((row) => {
+      if (!canPickCourse(row)) courseTableRef.value?.toggleRowSelection(row, true)
+    })
+    nextTick(() => { dlgRestoring.value = false })
+  })
 }
 /** 切换校区：快照旧校区勾选 → 恢复新校区勾选（表格数据换批前快照，避免丢失） */
 watch(dlgCampus, (nv, ov) => {
@@ -3269,13 +3320,28 @@ watch(dlgCampus, (nv, ov) => {
   const rows = courseTableRef.value?.getSelectionRows?.() || []
   const prevSet = dlgSelMap.value[ov] || (dlgSelMap.value[ov] = new Set())
   prevSet.clear()
-  rows.forEach((r) => prevSet.add(r.id))
+  rows.filter((r) => canPickCourse(r)).forEach((r) => prevSet.add(r.id))
   const target = [...(dlgSelMap.value[nv] || [])]
   nextTick(() => {
     courseFiltered.value.forEach((row) => {
       if (target.includes(row.id)) courseTableRef.value?.toggleRowSelection(row, true)
     })
+    checkSubscribedRows()
   })
+})
+/** 该学员已订阅统计（弹窗底部汇总）：总数 + 各校区订阅课程名 */
+const dlgSubGroups = computed(() => {
+  const byCampus = new Map()
+  for (const key of subscribedIds.value) {
+    const [cid, campus] = String(key).split('|')
+    const name = courseName(Number(cid))
+    if (!name || name === '-') continue
+    const c = campus || '未分校区'
+    if (!byCampus.has(c)) byCampus.set(c, [])
+    byCampus.get(c).push(name)
+  }
+  const list = [...byCampus].map(([campus, names]) => ({ campus, names }))
+  return { total: list.reduce((a, g) => a + g.names.length, 0), list }
 })
 const campusOptions = computed(() =>
   dictStore.options('campus').map((d) => d.label).filter((l) => l !== '全部校区'))
@@ -3317,9 +3383,14 @@ const courseFiltered = computed(() => {
 })
 const canPickCourse = (c) => editingEnrollId.value != null
   || !subscribedIds.value.has(c.id + '|' + (dlgCampus.value || ''))
+/** 定价行展示：按课时「X课时=Y元」；按时间「X天/周/月=Y元」（chargeMode 2） */
+const priceLabel = (p) => p.chargeMode === 2
+  ? `${fmt(p.hours)}${p.timePeriod || '天'}=${fmt(p.totalAmount)}元`
+  : `${fmt(p.hours)}课时=${fmt(p.totalAmount)}元`
 const feeStdText = (c) => {
-  const p = (dlgPriceMap.value[c.id] || []).find((x) => x.chargeMode === 1)
-  return p ? `${fmt(p.hours)}课时=${fmt(p.totalAmount)}元` : '—'
+  const ps = dlgPriceMap.value[c.id] || []
+  const p = ps.find((x) => x.chargeMode === 1) || ps.find((x) => x.chargeMode === 2)
+  return p ? priceLabel(p) : '—'
 }
 function openCourseDialog(purpose = 'form') {
   coursePurpose.value = purpose
@@ -3332,6 +3403,7 @@ function openCourseDialog(purpose = 'form') {
   dlgFeeMode.value = null; dlgCategory.value = null
   dlgSelMap.value = {}
   courseDialog.value = true
+  nextTick(() => checkSubscribedRows())   // 已订阅课程勾为「选中+禁用」展示态
   // 预载在售课程定价（勾选不回显，由用户按需自行选择）；
   // 失败不写缓存（留 undefined），下次打开/选课会重试，避免空数组被当成有效缓存
   courses.value.filter((c) => c.status === 1 && dlgPriceMap.value[c.id] === undefined)
@@ -3440,7 +3512,6 @@ async function subscribeAll() {
   handleErrs.orderTaker = !handle.value.orderTaker
   handleErrs.consultant = !handle.value.consultant
   if (!handle.value.source) missing.push('销售来源（经办信息）')
-  if (!handle.value.orderTaker) missing.push('采单员（经办信息）')
   if (!handle.value.consultant) missing.push('咨询顾问（经办信息）')
   payErr.value = !hasPayRow.value
   if (!hasPayRow.value) missing.push('支付信息（至少一条实收金额大于 0 的支付记录）')
@@ -3561,6 +3632,7 @@ onMounted(async () => {
   courses.value = (await api.courseList()) || []
   courses.value.forEach((c) => (courseMap.value[c.id] = c.name))
   clazzes.value = (await api.clazzList()) || []
+  try { classrooms.value = (await api.classroomList()) || [] } catch { classrooms.value = [] }
   teachers.value = (await api.teacherList()) || []
   // 经办信息人员候选：用户管理中员工类型在职账号
   try {
@@ -3577,6 +3649,16 @@ onMounted(async () => {
   })
   walk(tree, '')
   orgOptions.value = Object.keys(flat).map((id) => ({ value: Number(id), label: flat[id] }))
+  // 报名管理「转课」跳转带参：预进转课页 + 预选学员 + 定位转出报名单
+  if (route.query.mode === 'transfer' && route.query.studentId) {
+    enterTransfer()
+    const sid = Number(route.query.studentId)
+    const stu = students.value.find((s) => s.studentId === sid)
+      || { studentId: sid, name: stuMaps.value[sid] || `学员#${sid}` }
+    students.value = [stu, ...students.value.filter((s) => s.studentId !== sid)]
+    await onPick(sid)
+    if (route.query.enrollId) transferFilter.value = Number(route.query.enrollId)
+  }
 })
 </script>
 
@@ -3600,6 +3682,16 @@ onMounted(async () => {
 /* 积分页学员信息扩展：竖分隔线 + 课/校 徽标 */
 .picked-bar .pb-dash { width: 1px; height: 13px; background: #d5e3f4; padding: 0; flex-shrink: 0; }
 .picked-bar .pb-ext { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* 学员信息条分行版：首行身份，其后每校区一行（校区名+该校区课程） */
+.picked-bar.pb-block { flex-direction: column; align-items: flex-start; gap: 5px; }
+.picked-bar .pb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 20px; }
+.picked-bar .pb-campus-row .pb-campus { color: #344054; font-size: 13px; }
+.picked-bar .pb-campus-row > span:not(.pb-dash):not(.pb-ext-hover) { color: #475467; font-size: 12.5px; }
+/* 多课程/多校区摘要：可悬停样式 + 弹层明细 */
+.picked-bar .pb-ext-hover { cursor: pointer; border-bottom: 1px dashed #b9d0f7; }
+.pb-list-tip { max-width: 260px; }
+.pb-tip-title { font-size: 12px; font-weight: 600; color: #344054; margin-bottom: 4px; }
+.pb-tip-row { font-size: 12.5px; color: #475467; line-height: 1.7; }
 .texttag {
   font-style: normal; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -3820,12 +3912,20 @@ onMounted(async () => {
   padding: 2px 4px; border-radius: 4px; margin-right: 2px;
   color: #60bab2; border: 1px solid #60bab2; background: #ddf8ef;
 }
+/* 「退」标：与「收」标同字体同结构，浅红底红字 */
+.tag-out {
+  display: inline-block; font-size: 11px; line-height: 1;
+  padding: 2px 4px; border-radius: 4px; margin-right: 2px;
+  color: #f04438; border: 1px solid #f9a8a0; background: #feeceb;
+}
 .order-status {
   display: inline-block; font-size: 12px; width: 64px; text-align: center;
   padding: 2px 0; border-radius: 4px; color: #fff;
 }
 .st-done { background: #ffb51f; }
 .st-owing { background: #f04438; }
+/* 已确认到款（手动确认标记） */
+.st-paid { background: #12b76a; }
 /* 弹窗工具栏 */
 .dlg-toolbar {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;

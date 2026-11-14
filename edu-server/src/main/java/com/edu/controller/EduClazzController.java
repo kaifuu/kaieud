@@ -47,6 +47,7 @@ public class EduClazzController {
     private final EduStudentMapper studentMapper;
     private final EduContractMapper contractMapper;
     private final com.edu.mapper.EduCourseMapper courseMapper;
+    private final com.edu.mapper.EduScheduleMapper scheduleMapper;
     private final com.edu.mapper.EduAuditionStudentMapper auditionStudentMapper;
     private final com.edu.mapper.EduAuditionMapper auditionMapper;
 
@@ -184,6 +185,45 @@ public class EduClazzController {
         return neu.getId();
     }
 
+    /**
+     * 教室占用：该教室今天及以后未取消课次（含班级/课程名），选教室时的冲突参考与保存校验共用。
+     */
+    @GetMapping("/room-usage")
+    public Result<List<Map<String, Object>>> roomUsage(@RequestParam Long classroomId) {
+        java.time.format.DateTimeFormatter fmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String today = java.time.LocalDate.now().toString() + " 00:00:00";
+        List<com.edu.entity.EduSchedule> list = scheduleMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduSchedule>()
+                        .eq(com.edu.entity.EduSchedule::getClassroomId, classroomId)
+                        .ne(com.edu.entity.EduSchedule::getStatus, 2)
+                        .ge(com.edu.entity.EduSchedule::getStartTime, today)
+                        .orderByAsc(com.edu.entity.EduSchedule::getStartTime)
+                        .last("LIMIT 200"));
+        java.util.Map<Long, String> clazzNames = new HashMap<>();
+        java.util.Map<Long, String> courseNames = new HashMap<>();
+        java.util.Set<Long> cids = new HashSet<>();
+        java.util.Set<Long> courseIds = new HashSet<>();
+        for (com.edu.entity.EduSchedule s : list) {
+            if (s.getClazzId() != null) cids.add(s.getClazzId());
+            if (s.getCourseId() != null) courseIds.add(s.getCourseId());
+        }
+        if (!cids.isEmpty()) for (EduClazz c : clazzMapper.selectBatchIds(cids)) clazzNames.put(c.getId(), c.getName());
+        if (!courseIds.isEmpty())
+            for (com.edu.entity.EduCourse c : courseMapper.selectBatchIds(courseIds)) courseNames.put(c.getId(), c.getName());
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (com.edu.entity.EduSchedule s : list) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("clazzId", s.getClazzId());
+            m.put("clazzName", clazzNames.getOrDefault(s.getClazzId(), "-"));
+            m.put("courseName", courseNames.getOrDefault(s.getCourseId(), "-"));
+            m.put("startTime", s.getStartTime() == null ? null : s.getStartTime().format(fmt));
+            m.put("endTime", s.getEndTime() == null ? null : s.getEndTime().format(fmt));
+            rows.add(m);
+        }
+        return Result.ok(rows);
+    }
+
     @GetMapping("/page")
     public Result<PageResult<EduClazz>> page(@RequestParam(defaultValue = "1") long page,
                                              @RequestParam(defaultValue = "10") long size,
@@ -197,14 +237,21 @@ public class EduClazzController {
                         .like(StringUtils.hasText(keyword), EduClazz::getName, keyword)
                         .eq(courseId != null, EduClazz::getCourseId, courseId)
                         .eq(status != null, EduClazz::getStatus, status)
-                        .last(SafeSort.order(sortBy, direction, "id", "id", "name", "capacity", "startDate", "endDate", "status", "createTime")));
+                        // 校区为派生字段（班级→教室→校区），走子查询排序；其余字段走白名单
+                        .last("campus".equalsIgnoreCase(sortBy)
+                                ? " ORDER BY (SELECT r.campus FROM edu_classroom r WHERE r.id = edu_clazz.classroom_id) "
+                                  + ("asc".equalsIgnoreCase(direction) ? "ASC" : "DESC")
+                                + ", edu_clazz.id ASC"
+                                : SafeSort.order(sortBy, direction, "id", "id", "name", "capacity", "startDate", "endDate", "status", "createTime")));
         return Result.ok(PageResult.of(p.getTotal(), p.getRecords()));
     }
 
     @GetMapping("/list")
-    public Result<?> list() {
-        return Result.ok(clazzMapper.selectList(
-                new LambdaQueryWrapper<EduClazz>().ne(EduClazz::getStatus, 3)));
+    public Result<?> list(@RequestParam(required = false) Integer includeClosed) {
+        // 默认排除已结课（选班级等场景）；includeClosed=1 返回全部（选课弹窗开班数统计口径）
+        LambdaQueryWrapper<EduClazz> qw = new LambdaQueryWrapper<>();
+        if (!(includeClosed != null && includeClosed == 1)) qw.ne(EduClazz::getStatus, 3);
+        return Result.ok(clazzMapper.selectList(qw));
     }
 
     @PostMapping
@@ -374,11 +421,15 @@ public class EduClazzController {
 
     /** 班级学生列表（详情页）：容量/占用/空余 + 学生合同课时（总/已上/未上） */
     @GetMapping("/{id}/students")
-    public Result<Map<String, Object>> students(@PathVariable Long id) {
+    public Result<Map<String, Object>> students(@PathVariable Long id,
+                                                @RequestParam(required = false) Integer all) {
         EduClazz clazz = clazzMapper.selectById(id);
         if (clazz == null) return Result.error("班级不存在");
+        // all=1：成绩录入用——在读+已结课（含停课结课学员）；默认仅在读
         List<EduEnroll> enrolls = enrollMapper.selectList(new LambdaQueryWrapper<EduEnroll>()
-                .eq(EduEnroll::getClazzId, id).eq(EduEnroll::getStatus, 1));
+                .eq(EduEnroll::getClazzId, id)
+                .in(all != null && all == 1, EduEnroll::getStatus, 1, 2)
+                .eq(!(all != null && all == 1), EduEnroll::getStatus, 1));
         Map<Long, EduStudent> stuMap = new HashMap<>();
         if (!enrolls.isEmpty()) {
             Set<Long> sids = new HashSet<>();

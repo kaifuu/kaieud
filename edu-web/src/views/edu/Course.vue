@@ -18,6 +18,9 @@
         <el-select v-model="query.teachMode" placeholder="授课模式" clearable style="width: 120px">
           <el-option v-for="d in dictStore.options('class_type')" :key="d.value" :label="d.label" :value="Number(d.value)" />
         </el-select>
+        <el-select v-model="query.chargeMode" placeholder="收费模式" clearable style="width: 110px">
+          <el-option label="按课时" value="hour" /><el-option label="按时间" value="time" />
+        </el-select>
         <el-select v-model="query.status" placeholder="状态" clearable style="width: 100px">
           <el-option label="上架" :value="1" /><el-option label="下架" :value="0" />
         </el-select>
@@ -86,18 +89,42 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">查看</el-button>
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link :type="row.status === 1 ? 'warning' : 'success'" @click="toggleStatus(row)">
-              {{ row.status === 1 ? '下架' : '上架' }}
-            </el-button>
-            <el-popconfirm title="确认删除该课程?" @confirm="remove(row.id)">
-              <template #reference>
-                <el-button link type="danger">删除</el-button>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="detail" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
+                    <span class="mi-txt"><b>查看详情</b><i>课程与定价信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑课程</b><i>修改课程信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="toggle" class="more-item">
+                    <span class="mi mi-orange">
+                      <el-icon :size="13"><CircleClose v-if="row.status === 1" /><CircleCheck v-else /></el-icon>
+                    </span>
+                    <span class="mi-txt">
+                      <b>{{ row.status === 1 ? '下架' : '上架' }}</b>
+                      <i>{{ row.status === 1 ? '停止对外售卖' : '恢复对外售卖' }}</i>
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>课程定价一并删除</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
               </template>
-            </el-popconfirm>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -256,7 +283,7 @@ import { exportXlsx } from '../../utils/export'
 import { useDictStore } from '../../store/dict'
 
 const dictStore = useDictStore()
-const query = reactive({ keyword: '', category: null, teachMode: null, status: null, campus: null })
+const query = reactive({ keyword: '', category: null, teachMode: null, chargeMode: null, status: null, campus: null })
 const { loading, rows, pager, seq, onSort, onSizeChange, search, load } =
   usePage((q) => api.coursePage(q), query)
 
@@ -460,6 +487,19 @@ async function toggleStatus(row) {
   await api.courseUpdate({ id: row.id, status: row.status === 1 ? 0 : 1 })
   ElMessage.success(row.status === 1 ? '已下架' : '已上架')
   load()
+}
+
+/** 操作列下拉菜单分发 */
+function onRowCommand(cmd, row) {
+  switch (cmd) {
+    case 'detail': openDetail(row); break
+    case 'edit': openEdit(row); break
+    case 'toggle': toggleStatus(row); break
+    case 'del':
+      ElMessageBox.confirm('确认删除该课程?', '删除提示', { type: 'warning' })
+        .then(() => remove(row.id)).catch(() => {})
+      break
+  }
 }
 
 function doExport() {

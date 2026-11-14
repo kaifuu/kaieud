@@ -35,13 +35,33 @@
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right" class-name="no-wrap-col">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="success" @click="openOccupancy(row)">占用/空余时段</el-button>
-            <el-popconfirm title="已排课的教室无法删除，确认删除？" @confirm="remove(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑教室</b><i>修改教室信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="occupancy" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><Clock /></el-icon></span>
+                    <span class="mi-txt"><b>占用/空余时段</b><i>查看排课占用情况</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>已排课教室不可删</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -161,9 +181,11 @@ const occRoom = ref(null)
 const occRange = ref([new Date().toISOString().slice(0, 10), new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10)])
 const occ = ref({})
 
-function openEdit(row) {
+async function openEdit(row) {
   form.value = row ? { ...row } : { capacity: 30, minCapacity: null, campus: query.campus || null }
   visible.value = true
+  // 每次打开抽屉刷新联系人候选：用户管理改/补手机号后立即带出最新号码
+  try { contactCandidates.value = (await api.classroomContactCandidates()) || [] } catch (e) { /* 保留旧候选 */ }
 }
 async function save() {
   if (!form.value.campus) return ElMessage.warning('所属校区为必填项')
@@ -184,6 +206,18 @@ async function remove(id) {
   await api.classroomDel(id)
   ElMessage.success('已删除')
   load()
+}
+
+/** 操作列下拉菜单分发 */
+function onRowCommand(cmd, row) {
+  switch (cmd) {
+    case 'edit': openEdit(row); break
+    case 'occupancy': openOccupancy(row); break
+    case 'del':
+      ElMessageBox.confirm('已排课的教室无法删除，确认删除？', '删除提示', { type: 'warning' })
+        .then(() => remove(row.id)).catch(() => {})
+      break
+  }
 }
 
 function openOccupancy(row) {

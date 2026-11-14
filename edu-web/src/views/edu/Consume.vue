@@ -64,15 +64,35 @@
         <el-table-column label="消课时间" width="165" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <template v-if="row.auditStatus === 0 && row.canceled === 0 && canAudit">
-              <el-button link type="success" @click="audit(row, true)">通过</el-button>
-              <el-button link type="danger" @click="audit(row, false)">驳回</el-button>
-            </template>
-            <el-popconfirm v-else-if="row.canceled === 0 && canManage" title="确认撤销消课？课时将归还" @confirm="cancel(row.id)">
-              <template #reference><el-button link type="warning">撤销</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <template v-if="row.auditStatus === 0 && row.canceled === 0 && canAudit">
+                    <el-dropdown-item command="pass" class="more-item">
+                      <span class="mi mi-green"><el-icon :size="13"><CircleCheck /></el-icon></span>
+                      <span class="mi-txt"><b>通过</b><i>计入成本报表</i></span>
+                    </el-dropdown-item>
+                    <el-dropdown-item command="reject" divided class="more-item">
+                      <span class="mi mi-red"><el-icon :size="13"><Close /></el-icon></span>
+                      <span class="mi-txt"><b>驳回</b><i>课时将归还</i></span>
+                    </el-dropdown-item>
+                  </template>
+                  <el-dropdown-item v-else-if="row.canceled === 0 && canManage" command="cancel" class="more-item">
+                    <span class="mi mi-orange"><el-icon :size="13"><RefreshLeft /></el-icon></span>
+                    <span class="mi-txt"><b>撤销消课</b><i>归还课时冲成本</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -226,6 +246,25 @@ async function cancel(id) {
   await api.consumeCancel(id)
   ElMessage.success('已撤销，课时已归还并冲减成本')
   load()
+}
+
+/** 列表「更多」下拉分发 */
+async function onRowCommand(cmd, row) {
+  switch (cmd) {
+    case 'pass':
+      audit(row, true)
+      break
+    case 'reject':
+      audit(row, false)
+      break
+    case 'cancel': {
+      try {
+        await ElMessageBox.confirm('确认撤销消课？课时将归还', '撤销消课', { type: 'warning' })
+      } catch { return }
+      cancel(row.id)
+      break
+    }
+  }
 }
 
 onMounted(async () => {

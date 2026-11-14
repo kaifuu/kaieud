@@ -33,4 +33,6 @@ public class EduPayment {
     private String remark;
     private Long orgId;
     private LocalDateTime createTime;
+    /** 编辑时间（DB ON UPDATE 自动刷新，只读展示用） */
+    private LocalDateTime updateTime;
 }

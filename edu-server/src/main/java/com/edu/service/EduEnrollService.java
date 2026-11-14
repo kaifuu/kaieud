@@ -126,9 +126,9 @@ public class EduEnrollService {
             totalHours = course.getTotalHours();
             price = course.getPrice();
             if (dto.getPriceId() != null) {
-                // 按所选定价行 × 份数计价（仅按课时模式定价行）
+                // 按所选定价行 × 份数计价（按课时/按时间均支持：hours 为课时数或周期数）
                 com.edu.entity.EduCoursePrice pr = coursePriceMapper.selectById(dto.getPriceId());
-                if (pr == null || !courseId.equals(pr.getCourseId()) || pr.getChargeMode() != 1)
+                if (pr == null || !courseId.equals(pr.getCourseId()))
                     throw new BizException("定价标准不存在或不属于该课程");
                 int qty = dto.getQty() == null || dto.getQty() < 1 ? 1 : dto.getQty();
                 totalHours = (int) Math.round(pr.getHours().doubleValue() * qty);
@@ -136,11 +136,11 @@ public class EduEnrollService {
                 totalAmount = pr.getTotalAmount().multiply(BigDecimal.valueOf(qty));
             } else if (totalHours == null || totalHours == 0 || price == null
                     || BigDecimal.ZERO.compareTo(price) == 0) {
-                // 课程无基础定价时（新版定价存 edu_course_price），按首条按课时定价行取数
+                // 课程无基础定价时（新版定价存 edu_course_price），按首条定价行取数（按课时优先，无则按时间）
                 com.edu.entity.EduCoursePrice first = coursePriceMapper.selectOne(
                         new LambdaQueryWrapper<com.edu.entity.EduCoursePrice>()
                                 .eq(com.edu.entity.EduCoursePrice::getCourseId, courseId)
-                                .eq(com.edu.entity.EduCoursePrice::getChargeMode, 1)
+                                .orderByAsc(com.edu.entity.EduCoursePrice::getChargeMode)
                                 .orderByAsc(com.edu.entity.EduCoursePrice::getSort).last("LIMIT 1"));
                 if (first != null && first.getHours() != null
                         && first.getHours().compareTo(BigDecimal.ZERO) > 0) {

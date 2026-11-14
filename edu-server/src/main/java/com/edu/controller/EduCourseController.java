@@ -39,6 +39,7 @@ public class EduCourseController {
                                               @RequestParam(required = false) Integer teachMode,
                                               @RequestParam(required = false) Integer status,
                                               @RequestParam(required = false) String campus,
+                                              @RequestParam(required = false) String chargeMode,
  @RequestParam(required = false) String sortBy,
  @RequestParam(required = false) String direction) {
         LambdaQueryWrapper<EduCourse> qw = new LambdaQueryWrapper<EduCourse>()
@@ -46,7 +47,10 @@ public class EduCourseController {
                 .eq(category != null, EduCourse::getCategory, category)
                 .eq(classType != null, EduCourse::getClassType, classType)
                 .eq(teachMode != null, EduCourse::getTeachMode, teachMode)
-                .eq(status != null, EduCourse::getStatus, status);
+                .eq(status != null, EduCourse::getStatus, status)
+                // 收费模式筛选：hour=按课时(chargeHour=1) / time=按时间(chargeTime=1)
+                .eq("hour".equals(chargeMode), EduCourse::getChargeHour, 1)
+                .eq("time".equals(chargeMode), EduCourse::getChargeTime, 1);
         // 校区筛选：命中中间表任一关联校区即返回（列表仍以课程维度一条呈现）
         if (StringUtils.hasText(campus))
             qw.apply("EXISTS (SELECT 1 FROM edu_course_campus cc WHERE cc.course_id = edu_course.id AND cc.campus = {0})", campus);

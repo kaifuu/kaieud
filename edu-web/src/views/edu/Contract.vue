@@ -56,14 +56,37 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="row.status !== 3" link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="row.status !== 3" link type="warning" @click="openRefund(row)">退费</el-button>
-            <el-popconfirm title="确认删除该合同?" @confirm="remove(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="detail" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
+                    <span class="mi-txt"><b>查看详情</b><i>合同与缴费信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.status !== 3" command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑</b><i>修改合同信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.status !== 3" command="refund" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Money /></el-icon></span>
+                    <span class="mi-txt"><b>退费</b><i>退课时退金额</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>物理删除不可恢复</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -646,6 +669,16 @@ async function remove(id) {
   await api.contractDel(id)
   ElMessage.success('已删除（操作已留痕到合同历史）')
   load()
+}
+
+/** 操作列下拉菜单分发（remove 内部已有二次确认） */
+function onRowCommand(cmd, row) {
+  switch (cmd) {
+    case 'detail': openDetail(row); break
+    case 'edit': openEdit(row); break
+    case 'refund': openRefund(row); break
+    case 'del': remove(row.id); break
+  }
 }
 
 /* 咨询顾问候选：本企业非学生/非系统用户的在职账号 */

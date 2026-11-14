@@ -7,6 +7,11 @@ spring:
     url: jdbc:mysql://localhost:3306/edu_course?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: root
+  servlet:
+    multipart:
+      # 作业附件上传：视频单个最大500M
+      max-file-size: 500MB
+      max-request-size: 520MB
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai

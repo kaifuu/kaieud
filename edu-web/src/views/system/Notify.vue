@@ -70,12 +70,29 @@
           </template>
         </el-table-column>
         <el-table-column prop="publishTime" label="发布时间" width="165"  show-overflow-tooltip/>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="viewNotice(row)">查看</el-button>
-            <el-popconfirm v-if="canManage" title="确认删除该通知?" @confirm="removeNotice(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onNoticeCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="view" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
+                    <span class="mi-txt"><b>查看</b><i>查看并标记已读</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canManage" command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>仅管理员可删</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -109,12 +126,29 @@
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="160"  show-overflow-tooltip/>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openConfig(row)">编辑</el-button>
-            <el-popconfirm title="确认删除该配置?" @confirm="removeConfig(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onConfigCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑</b><i>修改通知规则</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>不再发送该通知</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -216,7 +250,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
 import { useUserStore } from '../../store/user'
@@ -297,6 +331,13 @@ async function removeNotice(id) {
   nPage.load()
 }
 
+/** 通知列表操作列「更多」命令分发 */
+function onNoticeCommand(cmd, row) {
+  if (cmd === 'view') viewNotice(row)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该通知？', '删除通知', { type: 'warning' })
+    .then(() => removeNotice(row.id)).catch(() => {})
+}
+
 /* TAB2 通知配置 */
 const configs = ref([])
 const cLoading = ref(false)
@@ -331,6 +372,13 @@ async function removeConfig(id) {
   await api.configDel(id)
   ElMessage.success('已删除')
   loadConfigs()
+}
+
+/** 配置列表操作列「更多」命令分发 */
+function onConfigCommand(cmd, row) {
+  if (cmd === 'edit') openConfig(row)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该通知配置？', '删除配置', { type: 'warning' })
+    .then(() => removeConfig(row.id)).catch(() => {})
 }
 
 /* TAB3 消息历史（只读） */

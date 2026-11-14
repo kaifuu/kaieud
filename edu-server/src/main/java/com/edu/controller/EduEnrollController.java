@@ -12,6 +12,7 @@ import com.edu.security.RequiresPerm;
 import com.edu.service.EduEnrollService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 /** 报名管理：订阅/退订班课、指派老师、补课时 */
@@ -45,14 +46,21 @@ public class EduEnrollController {
                                    @RequestParam(required = false) String type,
                                    @RequestParam(required = false) Long studentId) {
         java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
-        // 1) 报名单：在读/已结课=报名；已转课=转课转出单；退费退出的=退费单
-        for (EduEnroll e : enrollMapper.selectList(
+        // 1) 报名单：在读/已结课/已退订=报名（退订的原单显示"已退订"状态，退费金额以资金流水那条为准，避免同一笔退费出现两条"退费"记录）；已转课=转课转出单
+        java.util.List<EduEnroll> enrolls = enrollMapper.selectList(
                 new LambdaQueryWrapper<EduEnroll>()
                         .eq(studentId != null, EduEnroll::getStudentId, studentId)
-                        .orderByDesc(EduEnroll::getId))) {
-            String t = e.getStatus() != null && e.getStatus() == 4 ? "转课"
-                    : e.getStatus() != null && e.getStatus() == 3
-                      && e.getRemark() != null && e.getRemark().startsWith("退费退出") ? "退费" : "报名";
+                        .orderByDesc(EduEnroll::getId));
+        // 课程定价（解析数量单位：按课时=课时，按时间=天/周/月，按记录单价匹配定价行）
+        java.util.Map<Long, java.util.List<com.edu.entity.EduCoursePrice>> priceMap = new java.util.HashMap<>();
+        java.util.Set<Long> cids = new java.util.HashSet<>();
+        for (EduEnroll e : enrolls) if (e.getCourseId() != null) cids.add(e.getCourseId());
+        if (!cids.isEmpty()) for (com.edu.entity.EduCoursePrice p : coursePriceMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduCoursePrice>()
+                        .in(com.edu.entity.EduCoursePrice::getCourseId, cids)))
+            priceMap.computeIfAbsent(p.getCourseId(), k -> new java.util.ArrayList<>()).add(p);
+        for (EduEnroll e : enrolls) {
+            String t = e.getStatus() != null && e.getStatus() == 4 ? "转课" : "报名";
             java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
             m.put("rid", "EN" + e.getId());
             m.put("kind", "enroll");
@@ -63,10 +71,12 @@ public class EduEnrollController {
             m.put("courseId", e.getCourseId());
             m.put("packageName", e.getPackageName());
             m.put("totalHours", e.getTotalHours());
+            m.put("hoursUnit", hoursUnitOf(e, priceMap.get(e.getCourseId())));
             m.put("price", e.getPrice());
             m.put("discountAmount", e.getDiscountAmount());
             m.put("totalAmount", e.getTotalAmount());
             m.put("paidAmount", e.getPaidAmount());
+            m.put("payStatus", e.getPayStatus() != null && e.getPayStatus() == 1 ? 1 : 0);
             m.put("payDetail", e.getPayDetail());
             m.put("campus", e.getCampus());
             m.put("clazzId", e.getClazzId());
@@ -80,6 +90,7 @@ public class EduEnrollController {
             m.put("source", e.getSource());
             m.put("status", e.getStatus());
             m.put("createTime", e.getCreateTime() == null ? null : e.getCreateTime().toString());
+            m.put("updateTime", e.getUpdateTime() == null ? null : e.getUpdateTime().toString());
             rows.add(m);
         }
         // 2) 账户流水：充值(type1)=余额充值；转课转出/退费转结(type2)按备注前缀分类
@@ -109,7 +120,17 @@ public class EduEnrollController {
             m.put("consultant", l.getConsultant());
             m.put("source", l.getSource());
             m.put("remark", rm);
+            // 退费流水：应退/实退从备注解析（退费结算固定格式），供 应收/应退、实收/实退 列展示
+            if ("退费".equals(t)) {
+                java.util.regex.Matcher mt = java.util.regex.Pattern
+                        .compile("应退 ¥([0-9.]+)，实退 ¥([0-9.]+)").matcher(rm);
+                if (mt.find()) {
+                    m.put("totalAmount", mt.group(1));
+                    m.put("paidAmount", mt.group(2));
+                }
+            }
             m.put("createTime", l.getCreateTime() == null ? null : l.getCreateTime().toString());
+            m.put("updateTime", l.getUpdateTime() == null ? null : l.getUpdateTime().toString());
             rows.add(m);
         }
         // 3) 补费（缴费记录）
@@ -130,6 +151,7 @@ public class EduEnrollController {
             m.put("handler", p.getOperator());
             m.put("remark", p.getRemark());
             m.put("createTime", p.getCreateTime() == null ? null : p.getCreateTime().toString());
+            m.put("updateTime", p.getUpdateTime() == null ? null : p.getUpdateTime().toString());
             rows.add(m);
         }
         // 4) 积分办理流水（办理中心-积分）
@@ -208,14 +230,112 @@ public class EduEnrollController {
         // 类型筛选 + 排序（经办日期/创建时间倒序）+ 分页
         if (type != null && !type.isEmpty())
             rows.removeIf(r -> !type.equals(r.get("type")));
-        rows.sort((a, b) -> String.valueOf(b.getOrDefault("handleDate", "")).compareTo(
-                String.valueOf(a.getOrDefault("handleDate", ""))));
+        // 列表排序：编辑时间（无则创建时间）倒序，再按创建时间倒序——最近动过的单排最前
+        rows.sort((a, b) -> {
+            int c = recordSortKey(b).compareTo(recordSortKey(a));
+            return c != 0 ? c : String.valueOf(b.getOrDefault("createTime", ""))
+                    .compareTo(String.valueOf(a.getOrDefault("createTime", "")));
+        });
         int from = (int) Math.max(0, (page - 1) * size);
         int to = Math.min(rows.size(), from + (int) size);
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         result.put("total", rows.size());
         result.put("records", from >= rows.size() ? new java.util.ArrayList<>() : rows.subList(from, to));
         return Result.ok(result);
+    }
+
+    /** 停课：在读 → 停课（status=6，记录停课日期；不动画次，复课可恢复） */
+    @PostMapping("/{id}/suspend")
+    @Log("停课")
+    public Result<Void> suspend(@PathVariable Long id, @RequestBody(required = false) RenewDTO dto) {
+        EduEnroll e = enrollMapper.selectById(id);
+        if (e == null) return Result.error("报名单不存在");
+        if (e.getStatus() == null || e.getStatus() != 1) return Result.error("仅在读的报名单可停课");
+        e.setStatus(6);
+        e.setSuspendDate(java.time.LocalDate.now());
+        if (dto != null && StringUtils.hasText(dto.getRemark()))
+            e.setRemark(StringUtils.hasText(e.getRemark()) ? e.getRemark() + "；停课：" + dto.getRemark() : "停课：" + dto.getRemark());
+        enrollMapper.updateById(e);
+        enrollService.writeLogPublic(e, "SUSPEND", dto == null ? null : dto.getRemark());
+        return Result.ok();
+    }
+
+    /** 复课：停课 → 在读（清空停课日期） */
+    @PostMapping("/{id}/resume")
+    @Log("复课")
+    public Result<Void> resume(@PathVariable Long id) {
+        EduEnroll e = enrollMapper.selectById(id);
+        if (e == null) return Result.error("报名单不存在");
+        if (e.getStatus() == null || e.getStatus() != 6) return Result.error("仅停课中的报名单可复课");
+        e.setStatus(1);
+        e.setSuspendDate(null);
+        enrollMapper.updateById(e);
+        enrollService.writeLogPublic(e, "RESUME", "复课");
+        return Result.ok();
+    }
+
+    /** 续费：课时与费用累加（totalHours/totalAmount += 本次，paidAmount += 实收，渠道留档 payDetail） */
+    @PostMapping("/{id}/renew")
+    @Log("续费")
+    public Result<Void> renew(@PathVariable Long id, @RequestBody RenewDTO dto) {
+        EduEnroll e = enrollMapper.selectById(id);
+        if (e == null) return Result.error("报名单不存在");
+        if (e.getStatus() == null || (e.getStatus() != 1 && e.getStatus() != 6))
+            return Result.error("仅在读/停课的报名单可续费");
+        if (dto.getHours() == null || dto.getHours() < 1) return Result.error("续费课时至少 1");
+        if (dto.getAmount() == null || dto.getAmount().signum() <= 0) return Result.error("请填写续费金额");
+        java.math.BigDecimal paid = dto.getPaidAmount() == null ? java.math.BigDecimal.ZERO : dto.getPaidAmount();
+        if (paid.compareTo(dto.getAmount()) > 0) return Result.error("实收金额不能超过续费金额");
+        e.setTotalHours(e.getTotalHours() + dto.getHours());
+        e.setTotalAmount(e.getTotalAmount().add(dto.getAmount()));
+        e.setPaidAmount((e.getPaidAmount() == null ? java.math.BigDecimal.ZERO : e.getPaidAmount()).add(paid));
+        if (StringUtils.hasText(dto.getChannel())) {   // 支付渠道留档（追加到 payDetail JSON）
+            try {
+                java.util.List<java.util.Map<String, Object>> rows = e.getPayDetail() == null
+                        ? new java.util.ArrayList<>()
+                        : new com.fasterxml.jackson.databind.ObjectMapper().readValue(e.getPayDetail(),
+                                new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>() {});
+                java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("channel", dto.getChannel());
+                row.put("account", "");
+                row.put("serial", "");
+                row.put("amount", paid);
+                row.put("renew", dto.getHours() + "课时×¥" + dto.getAmount().toPlainString());
+                rows.add(row);
+                e.setPayDetail(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows));
+            } catch (Exception ignore) { /* 留档失败不影响续费 */ }
+        }
+        enrollMapper.updateById(e);
+        enrollService.writeLogPublic(e, "RENEW", "续费 " + dto.getHours() + " 课时，¥"
+                + dto.getAmount().toPlainString() + "（实收 ¥" + paid.toPlainString() + "）"
+                + (StringUtils.hasText(dto.getRemark()) ? "：" + dto.getRemark() : ""));
+        return Result.ok();
+    }
+
+    /** 结课：在读/停课 → 已结课（status=2） */
+    @PostMapping("/{id}/finish")
+    @Log("结课")
+    public Result<Void> finish(@PathVariable Long id, @RequestBody(required = false) RenewDTO dto) {
+        EduEnroll e = enrollMapper.selectById(id);
+        if (e == null) return Result.error("报名单不存在");
+        if (e.getStatus() == null || (e.getStatus() != 1 && e.getStatus() != 6))
+            return Result.error("仅在读/停课的报名单可结课");
+        e.setStatus(2);
+        if (StringUtils.hasText(dto == null ? null : dto.getRemark()))
+            e.setRemark(StringUtils.hasText(e.getRemark()) ? e.getRemark() + "；结课：" + dto.getRemark() : "结课：" + dto.getRemark());
+        enrollMapper.updateById(e);
+        enrollService.writeLogPublic(e, "FINISH", dto == null ? null : dto.getRemark());
+        return Result.ok();
+    }
+
+    /** 续费入参（停课/结课备注复用 remark 字段） */
+    @lombok.Data
+    public static class RenewDTO {
+        private Integer hours;
+        private java.math.BigDecimal amount;
+        private java.math.BigDecimal paidAmount;
+        private String channel;
+        private String remark;
     }
 
     /** 提交指纹前缀（操作名 + 用户 + 租户），拼接业务字段后交给 RepeatGuard 去重 */
@@ -248,6 +368,15 @@ public class EduEnrollController {
                             com.edu.entity.EduPackage::getId, com.edu.entity.EduPackage::getName, (a, b) -> a));
             p.getRecords().forEach(e -> e.setPackageName(names.get(e.getPackageId())));
         }
+        // 数量单位（按课时/按时间收费的课程，购买/已用/剩余数量按真实单位展示）
+        java.util.Set<Long> cids = new java.util.HashSet<>();
+        for (EduEnroll e : p.getRecords()) if (e.getCourseId() != null) cids.add(e.getCourseId());
+        java.util.Map<Long, java.util.List<com.edu.entity.EduCoursePrice>> priceMap = new java.util.HashMap<>();
+        if (!cids.isEmpty()) for (com.edu.entity.EduCoursePrice pr : coursePriceMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduCoursePrice>()
+                        .in(com.edu.entity.EduCoursePrice::getCourseId, cids)))
+            priceMap.computeIfAbsent(pr.getCourseId(), k -> new java.util.ArrayList<>()).add(pr);
+        for (EduEnroll e : p.getRecords()) e.setHoursUnit(hoursUnitOf(e, priceMap.get(e.getCourseId())));
         return Result.ok(PageResult.of(p.getTotal(), p.getRecords()));
     }
 
@@ -645,6 +774,85 @@ public class EduEnrollController {
     public Result<Void> unsubscribe(@PathVariable Long id) {
         enrollService.unsubscribe(id);
         return Result.ok();
+    }
+
+    /** 到款确认/取消（办理中心列表）：status 1=确认到款 0=取消到款 */
+    @PostMapping("/{id}/pay-status")
+    @Log("到款确认")
+    public Result<Void> payStatus(@PathVariable Long id, @RequestBody PayStatusDTO dto) {
+        EduEnroll e = enrollMapper.selectById(id);
+        if (e == null) return Result.error("报名单不存在");
+        if (e.getStatus() != null && e.getStatus() == 5) return Result.error("已作废的订单不能操作到款状态");
+        e.setPayStatus(dto != null && Integer.valueOf(1).equals(dto.getStatus()) ? 1 : 0);
+        enrollMapper.updateById(e);
+        return Result.ok();
+    }
+
+    /** 作废订单（仅在读可作废）：状态置 5，作废原因记入备注（"作废：xxx"） */
+    @PostMapping("/{id}/void")
+    @Log("作废订单")
+    public Result<Void> voidOrder(@PathVariable Long id, @RequestBody VoidDTO dto) {
+        EduEnroll e = enrollMapper.selectById(id);
+        if (e == null) return Result.error("报名单不存在");
+        if (e.getStatus() == null || e.getStatus() != 1) return Result.error("仅在读的报名单可作废");
+        if (dto == null || dto.getReason() == null || dto.getReason().trim().isEmpty())
+            return Result.error("请填写作废原因");
+        e.setStatus(5);
+        String tag = "作废：" + dto.getReason().trim();
+        e.setRemark(e.getRemark() == null || e.getRemark().trim().isEmpty()
+                ? tag : e.getRemark().trim() + "；" + tag);
+        enrollMapper.updateById(e);
+        return Result.ok();
+    }
+
+    @lombok.Data
+    public static class PayStatusDTO {
+        private Integer status;
+    }
+
+    /** 记录排序键：编辑时间优先，无编辑时间回落创建时间（'T' 归一为空格保证字符串可比） */
+    private static String recordSortKey(java.util.Map<String, Object> m) {
+        Object u = m.get("updateTime");
+        String key = u == null ? "" : String.valueOf(u).replace('T', ' ');
+        if (key.isEmpty() || "null".equals(key)) {
+            Object c = m.get("createTime");
+            key = c == null ? "" : String.valueOf(c).replace('T', ' ');
+        }
+        return key;
+    }
+
+    /**
+     * 报名单数量单位：按记录单价匹配课程定价行——命中按时间行（chargeMode=2）取其周期（天/周/月/季/年），
+     * 命中按课时行或无匹配为「课时」；课程仅有按时间定价时兜底取首条周期。
+     */
+    private String hoursUnitOf(EduEnroll e, java.util.List<com.edu.entity.EduCoursePrice> ps) {
+        if (ps == null || ps.isEmpty()) return "课时";
+        boolean onlyTime = true;
+        for (com.edu.entity.EduCoursePrice p : ps)
+            if (p.getChargeMode() == null || p.getChargeMode() != 2) { onlyTime = false; break; }
+        String fallback = onlyTime ? firstPeriod(ps) : "课时";
+        if (e.getPrice() == null) return fallback;
+        for (com.edu.entity.EduCoursePrice p : ps) {
+            if (p.getHours() == null || java.math.BigDecimal.ZERO.compareTo(p.getHours()) == 0
+                    || p.getTotalAmount() == null) continue;
+            java.math.BigDecimal unitPrice = p.getTotalAmount().divide(p.getHours(), 2, java.math.BigDecimal.ROUND_HALF_UP);
+            if (unitPrice.compareTo(e.getPrice()) == 0)
+                return p.getChargeMode() != null && p.getChargeMode() == 2
+                        ? (p.getTimePeriod() == null || p.getTimePeriod().isEmpty() ? "天" : p.getTimePeriod())
+                        : "课时";
+        }
+        return fallback;
+    }
+
+    private String firstPeriod(java.util.List<com.edu.entity.EduCoursePrice> ps) {
+        for (com.edu.entity.EduCoursePrice p : ps)
+            if (p.getTimePeriod() != null && !p.getTimePeriod().isEmpty()) return p.getTimePeriod();
+        return "天";
+    }
+
+    @lombok.Data
+    public static class VoidDTO {
+        private String reason;
     }
 
     /** 为学生指派/更换上课老师 */

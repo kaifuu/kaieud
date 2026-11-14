@@ -44,16 +44,38 @@
         <el-table-column v-if="cols.createTime" prop="createTime" label="创建时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link :type="row.status === 1 ? 'warning' : 'success'"
-                       @click="toggle(row)">{{ row.status === 1 ? '禁用' : '启用' }}</el-button>
-            <el-popconfirm title="确认删除该租户? 仅停用其全部用户并移入回收站（数据保留，可恢复）" @confirm="remove(row.id)">
-              <template #reference>
-                <el-button link type="danger">删除</el-button>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑</b><i>修改企业信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="toggle" class="more-item">
+                    <span class="mi" :class="row.status === 1 ? 'mi-orange' : 'mi-green'">
+                      <el-icon :size="13"><component :is="row.status === 1 ? 'CircleClose' : 'CircleCheck'" /></el-icon>
+                    </span>
+                    <span class="mi-txt">
+                      <b>{{ row.status === 1 ? '禁用' : '启用' }}</b>
+                      <i>{{ row.status === 1 ? '全员立即禁登' : '恢复全员登录' }}</i>
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>移入回收站可恢复</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
               </template>
-            </el-popconfirm>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -109,10 +131,29 @@
             <el-table-column label="删除时间" width="150" show-overflow-tooltip>
               <template #default="{ row }">{{ fmt(row.updateTime) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="140">
+            <el-table-column label="操作" width="96" class-name="no-wrap-col">
               <template #default="{ row }">
-                <el-button link type="primary" @click="restore(row)">恢复</el-button>
-                <el-button link type="danger" @click="purge(row)">物理删除</el-button>
+                <el-dropdown trigger="click" popper-class="more-dropdown"
+                             @visible-change="(v) => { row.__moreOpen = v }"
+                             @command="(cmd) => onRecycleCommand(cmd, row)">
+                  <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                    <el-icon :size="12"><MoreFilled /></el-icon>
+                    <span>更多</span>
+                    <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+                  </span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="restore" class="more-item">
+                        <span class="mi mi-green"><el-icon :size="13"><RefreshLeft /></el-icon></span>
+                        <span class="mi-txt"><b>恢复</b><i>补齐账号与配置</i></span>
+                      </el-dropdown-item>
+                      <el-dropdown-item command="purge" divided class="more-item">
+                        <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                        <span class="mi-txt"><b>物理删除</b><i>需超级秘钥确认</i></span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </template>
             </el-table-column>
           </el-table>
@@ -200,6 +241,14 @@ async function toggle(row) {
   load()
 }
 
+/** 企业列表操作列「更多」命令分发 */
+function onRowCommand(cmd, row) {
+  if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'toggle') toggle(row)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该企业租户？删除后该企业全部数据不可恢复', '删除租户', { type: 'warning' })
+    .then(() => remove(row.id)).catch(() => {})
+}
+
 /* ===== 回收站：软删除租户恢复 / 物理删除（超级秘钥）/ 清除历史 ===== */
 const recycleVisible = ref(false)
 const recycleLoading = ref(false)
@@ -251,6 +300,12 @@ async function purge(row) {
   } catch (e) {
     if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
   }
+}
+
+/** 回收站操作列「更多」命令分发 */
+function onRecycleCommand(cmd, row) {
+  if (cmd === 'restore') restore(row)
+  else if (cmd === 'purge') purge(row)
 }
 
 function doExport() {

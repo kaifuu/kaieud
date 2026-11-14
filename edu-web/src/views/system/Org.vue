@@ -56,13 +56,33 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openEdit(null, row)">新增下级</el-button>
-              <el-button link type="primary" @click="openEdit(row, null)">编辑</el-button>
-              <el-popconfirm title="确认删除该组织?" @confirm="remove(row.id)">
-                <template #reference><el-button link type="danger">删除</el-button></template>
-              </el-popconfirm>
+              <el-dropdown trigger="click" popper-class="more-dropdown"
+                           @visible-change="(v) => { row.__moreOpen = v }"
+                           @command="(cmd) => onRowCommand(cmd, row)">
+                <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                  <el-icon :size="12"><MoreFilled /></el-icon>
+                  <span>更多</span>
+                  <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="add" class="more-item">
+                      <span class="mi mi-blue"><el-icon :size="13"><Plus /></el-icon></span>
+                      <span class="mi-txt"><b>新增下级</b><i>新建下级组织</i></span>
+                    </el-dropdown-item>
+                    <el-dropdown-item command="edit" class="more-item">
+                      <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                      <span class="mi-txt"><b>编辑</b><i>修改组织信息</i></span>
+                    </el-dropdown-item>
+                    <el-dropdown-item command="del" divided class="more-item">
+                      <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                      <span class="mi-txt"><b>删除</b><i>含下级不可删</i></span>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </template>
           </el-table-column>
         </el-table>
@@ -95,7 +115,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
 
@@ -163,6 +183,14 @@ const remove = async (id) => {
   await api.orgDel(id)
   ElMessage.success('已删除')
   load()
+}
+
+/** 操作列「更多」命令分发 */
+function onRowCommand(cmd, row) {
+  if (cmd === 'add') openEdit(null, row)
+  else if (cmd === 'edit') openEdit(row, null)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该组织（含下级将无法删除）？', '删除组织', { type: 'warning' })
+    .then(() => remove(row.id)).catch(() => {})
 }
 
 onMounted(load)

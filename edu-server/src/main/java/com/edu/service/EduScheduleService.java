@@ -33,6 +33,9 @@ public class EduScheduleService {
     private final EduConsumeService consumeService;
     private final com.edu.mapper.EduScheduleLogMapper opLogMapper;
     private final com.edu.mapper.SysDictMapper dictMapper;
+    private final com.edu.mapper.EduConsumeMapper consumeRecMapper;
+    private final com.edu.mapper.EduLeaveMapper leaveRecMapper;
+    private final com.edu.mapper.SysOrgMapper orgRecMapper;
 
     /** 旷课审批超时自动扣课的时限 */
     public static final int ABSENCE_DEADLINE_HOURS = 72;
@@ -176,6 +179,7 @@ public class EduScheduleService {
             throw new BizException("本次扣课 " + n + " 节少于本课次应扣 " + max + " 节，请填写扣课说明");
         int contracts = deductHours(s, n, "到课", remark);
         s.setStatus(1);
+        if (org.springframework.util.StringUtils.hasText(remark)) s.setRemark(remark);   // 上课内容留痕到课次备注
         s.setUpdateTime(LocalDateTime.now());
         scheduleMapper.updateById(s);
         return contracts;
@@ -472,9 +476,11 @@ public class EduScheduleService {
         EduSchedule s = mustGet(id);
         if (s.getStatus() == null || s.getStatus() != 0) throw new BizException("仅待上课的课次可编辑");
         Long tid = teacherId != null ? teacherId : s.getTeacherId();
-        LocalDateTime start = startTime != null ? startTime : s.getStartTime();
-        LocalDateTime end = endTime != null ? endTime : s.getEndTime();
-        checkFutureStart(start);
+        boolean timeChanged = startTime != null || endTime != null;
+        LocalDateTime start = timeChanged ? (startTime != null ? startTime : s.getStartTime()) : s.getStartTime();
+        LocalDateTime end = timeChanged ? (endTime != null ? endTime : s.getEndTime()) : s.getEndTime();
+        // 时间未变化时允许编辑已开课课次的教师/助教/主题（编辑上课场景）；只有改时间才校验"不能调往过去"
+        if (timeChanged) checkFutureStart(start);
         checkBanTime(tid, start, end);
         checkConflict(tid, start, end, id);
         Long roomId = classroomId != null ? classroomId : s.getClassroomId();
@@ -492,6 +498,498 @@ public class EduScheduleService {
         s.setUpdateTime(LocalDateTime.now());
         scheduleMapper.updateById(s);
         opLog(s, "编辑排课", null);
+    }
+
+    /* ==================== 上课记录TAB：出勤统计聚合 + 未排课补录 ==================== */
+
+    /**
+     * 班级上课记录：课次行（已登记课次 status 1/3/4/5）+ 每课次出勤聚合 + 学员明细。
+     * 到课=消课记录（未撤销、未驳回）逐学员计数与课时合计；请假=edu_leave；旷课=edu_absence；
+     * 应到=班级在读学员数（当前口径）；迟到暂无数据恒 0。
+     */
+    public java.util.Map<String, Object> classRecords(Long clazzId, String begin, String end) {
+        java.time.format.DateTimeFormatter fmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        LambdaQueryWrapper<EduSchedule> qw = new LambdaQueryWrapper<EduSchedule>()
+                .eq(EduSchedule::getClazzId, clazzId)
+                .in(EduSchedule::getStatus, 1, 3, 4, 5)
+                .orderByDesc(EduSchedule::getStartTime);
+        if (begin != null && !begin.isEmpty() && end != null && !end.isEmpty()) {
+            qw.ge(EduSchedule::getStartTime, begin + " 00:00:00")
+              .le(EduSchedule::getStartTime, end + " 23:59:59");
+        }
+        List<EduSchedule> list = scheduleMapper.selectList(qw);
+        java.util.Map<Long, int[]> cnt = new java.util.HashMap<>();          // id -> [到课,请假,旷课]
+        java.util.Map<Long, java.math.BigDecimal> hoursSum = new java.util.HashMap<>();
+        java.util.Set<Long> ids = new java.util.HashSet<>();
+        for (EduSchedule s : list) {
+            ids.add(s.getId());
+            cnt.put(s.getId(), new int[]{0, 0, 0});
+            hoursSum.put(s.getId(), java.math.BigDecimal.ZERO);
+        }
+        java.util.List<java.util.Map<String, Object>> detail = new java.util.ArrayList<>();
+        java.util.Set<Long> stuIds = new java.util.HashSet<>();
+        if (!ids.isEmpty()) {
+            // 到课：消课记录（未撤销、未驳回）
+            for (com.edu.entity.EduConsume c : consumeRecMapper.selectList(
+                    new LambdaQueryWrapper<com.edu.entity.EduConsume>()
+                            .in(com.edu.entity.EduConsume::getScheduleId, ids)
+                            .eq(com.edu.entity.EduConsume::getCanceled, 0)
+                            .and(w -> w.isNull(com.edu.entity.EduConsume::getAuditStatus)
+                                    .or().ne(com.edu.entity.EduConsume::getAuditStatus, 2)))) {
+                int[] n = cnt.get(c.getScheduleId());
+                if (n == null) continue;
+                n[0]++;
+                hoursSum.merge(c.getScheduleId(), c.getHours() == null ? java.math.BigDecimal.ZERO
+                        : c.getHours(), java.math.BigDecimal::add);
+                stuIds.add(c.getStudentId());
+                java.util.Map<String, Object> d = new java.util.HashMap<>();
+                d.put("scheduleId", c.getScheduleId());
+                d.put("studentId", c.getStudentId());
+                d.put("type", "到课");
+                d.put("hours", c.getHours());
+                d.put("remark", c.getRemark());
+                detail.add(d);
+            }
+            // 请假
+            for (com.edu.entity.EduLeave l : leaveRecMapper.selectList(
+                    new LambdaQueryWrapper<com.edu.entity.EduLeave>()
+                            .in(com.edu.entity.EduLeave::getScheduleId, ids))) {
+                int[] n = cnt.get(l.getScheduleId());
+                if (n == null) continue;
+                n[1]++;
+                stuIds.add(l.getStudentId());
+                java.util.Map<String, Object> d = new java.util.HashMap<>();
+                d.put("scheduleId", l.getScheduleId());
+                d.put("studentId", l.getStudentId());
+                d.put("type", "请假");
+                d.put("hours", null);
+                d.put("remark", l.getReason());
+                detail.add(d);
+            }
+            // 旷课
+            for (com.edu.entity.EduAbsence a : absenceMapper.selectList(
+                    new LambdaQueryWrapper<com.edu.entity.EduAbsence>()
+                            .in(com.edu.entity.EduAbsence::getScheduleId, ids))) {
+                int[] n = cnt.get(a.getScheduleId());
+                if (n == null) continue;
+                n[2]++;
+                stuIds.add(a.getStudentId());
+                java.util.Map<String, Object> d = new java.util.HashMap<>();
+                d.put("scheduleId", a.getScheduleId());
+                d.put("studentId", a.getStudentId());
+                d.put("type", "旷课");
+                d.put("hours", null);
+                d.put("remark", a.getReason());
+                detail.add(d);
+            }
+        }
+        // 应到：班级在读学员数
+        Long should = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                .eq(EduEnroll::getClazzId, clazzId).eq(EduEnroll::getStatus, 1));
+        // 学员姓名
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        if (!stuIds.isEmpty())
+            for (com.edu.entity.EduStudent st : studentMapper.selectBatchIds(stuIds))
+                names.put(st.getId(), st.getName());
+
+        List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (EduSchedule s : list) {
+            int[] n = cnt.get(s.getId());
+            java.util.Map<String, Object> r = new java.util.HashMap<>();
+            r.put("id", s.getId());
+            r.put("startTime", s.getStartTime() == null ? null : s.getStartTime().format(fmt));
+            r.put("endTime", s.getEndTime() == null ? null : s.getEndTime().format(fmt));
+            r.put("teacherId", s.getTeacherId());
+            r.put("assistantId", s.getAssistantId());
+            r.put("status", s.getStatus());
+            r.put("topic", s.getTopic());
+            r.put("remark", s.getRemark());
+            r.put("createTime", s.getCreateTime() == null ? null : s.getCreateTime().format(fmt));
+            r.put("attend", n[0]);
+            r.put("leave", n[1]);
+            r.put("absent", n[2]);
+            r.put("late", 0);
+            r.put("should", should == null ? 0 : should.intValue());
+            r.put("hours", hoursSum.get(s.getId()));
+            rows.add(r);
+        }
+        for (java.util.Map<String, Object> d : detail) {
+            d.put("studentName", names.getOrDefault((Long) d.get("studentId"), "-"));
+            EduSchedule sch = list.stream().filter(x -> x.getId().equals(d.get("scheduleId"))).findFirst().orElse(null);
+            d.put("time", sch == null || sch.getStartTime() == null ? null
+                    : sch.getStartTime().format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")));
+        }
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("rows", rows);
+        result.put("detail", detail);
+        result.put("should", should == null ? 0 : should.intValue());
+        return result;
+    }
+
+    /** 未排课记上课入参：上课信息 + 学员逐个出勤标记（1到课 2请假 3旷课） */
+    @lombok.Data
+    public static class RecordDTO {
+        private Long clazzId;
+        private Long teacherId;
+        private Long assistantId;
+        private Long classroomId;
+        private String topic;
+        /** 备注（记入课次备注，即上课记录的"上课内容"） */
+        private String memo;
+        private String date;
+        private String beginTime;
+        private String endTime;
+        private List<StuAtt> students;
+    }
+
+    /** 单学员出勤：att 1到课（按 hours 扣课） 2请假（不扣课，写请假记录） 3旷课（生成旷课申请）；kind makeup=补课学员（扣本人合同） temp=临时学员（只登记名单不扣课） */
+    @lombok.Data
+    public static class StuAtt {
+        private Long studentId;
+        private Integer att;
+        private Integer hours;
+        private String kind;
+        /** 到课类型附加标记：如"迟到"（写入消课台账备注 / 请假原因） */
+        private String ext;
+    }
+
+    /**
+     * 未排课记上课（按学员逐个登记）：补录历史课次，按学员标记到课/请假/旷课。
+     * 补录的是历史事实，跳过未来/冲突/禁排校验；到课学员逐个走合同消课并同步扣报名课时；
+     * 请假写 edu_leave（不扣课）；旷课生成 edu_absence 待审批（沿用 72 小时自动扣课规则）。
+     */
+    @Transactional
+    public int record(RecordDTO d) {
+        if (d.getClazzId() == null) throw new BizException("缺少班级");
+        if (d.getTeacherId() == null) throw new BizException("请选择上课教师");
+        if (d.getDate() == null || d.getDate().isEmpty()) throw new BizException("请选择上课日期");
+        if (d.getStudents() == null || d.getStudents().isEmpty())
+            throw new BizException("请先标记学员出勤（到课/请假/旷课）");
+        LocalDateTime start, end;
+        try {
+            start = LocalDateTime.parse(d.getDate() + "T" + d.getBeginTime());
+            end = LocalDateTime.parse(d.getDate() + "T" + d.getEndTime());
+        } catch (Exception e) { throw new BizException("请选择完整的上课时段"); }
+        if (!end.isAfter(start)) throw new BizException("结束时间必须晚于开始时间");
+        EduClazz clazz = clazzMapper.selectById(d.getClazzId());
+        if (clazz == null) throw new BizException("班级不存在");
+        EduSchedule s = new EduSchedule();
+        s.setTenantId(AuthContext.get().getTenantId());
+        // 归属校区：继承创建人校区
+        com.edu.security.LoginUser lu = AuthContext.get();
+        if (lu != null && lu.getOrgId() != null) s.setOrgId(lu.getOrgId()); else s.setOrgId(1L);
+        s.setClazzId(d.getClazzId());
+        s.setCourseId(clazz.getCourseId());
+        s.setTeacherId(d.getTeacherId());
+        s.setAssistantId(d.getAssistantId());
+        if (d.getClassroomId() != null) {
+            s.setClassroomId(d.getClassroomId());
+            s.setClassroom(classroomName(d.getClassroomId()));
+        }
+        s.setTopic(d.getTopic());
+        s.setRemark(d.getMemo());
+        s.setStartTime(start);
+        s.setEndTime(end);
+        s.setStatus(0);
+        s.setSchedType(0);
+        scheduleMapper.insert(s);
+        int max = maxAttendHours(s);
+        int contracts = 0;
+        java.util.List<String> tempNames = new java.util.ArrayList<>();
+        java.util.Map<Long, String> stuNames = new java.util.HashMap<>();
+        if (!d.getStudents().isEmpty()) {
+            java.util.Set<Long> sids = new java.util.HashSet<>();
+            for (StuAtt a : d.getStudents())
+                if (a.getStudentId() != null) sids.add(a.getStudentId());
+            if (!sids.isEmpty())
+                for (com.edu.entity.EduStudent st : studentMapper.selectBatchIds(sids))
+                    stuNames.put(st.getId(), st.getName());
+        }
+        for (StuAtt a : d.getStudents()) {
+            if (a.getStudentId() == null) continue;
+            int att = a.getAtt() == null ? 1 : a.getAtt();
+            int h = a.getHours() == null ? 0 : a.getHours();
+            if (att == 1 && "temp".equals(a.getKind())) {   // 临时学员：到课但只登记名单，不扣课
+                tempNames.add(stuNames.getOrDefault(a.getStudentId(), "#" + a.getStudentId()));
+                continue;
+            }
+            if (att == 1) {   // 到课：单学员合同消课（补课学员扣本人合同）+ 本班报名课时同步扣减
+                if (h < 1) throw new BizException("到课学员的扣课节数至少 1 节");
+                if (h > max) throw new BizException("扣课节数超出上限（本课次时长折算最多 " + max + " 节）");
+                contracts += consumeService.signByScheduleForStudent(s.getId(), a.getStudentId(),
+                        java.math.BigDecimal.valueOf(h), "到课",
+                        "迟到".equals(a.getExt()) && org.springframework.util.StringUtils.hasText(d.getMemo()) ? d.getMemo() + "（迟到）"
+                                : ("迟到".equals(a.getExt()) ? "迟到" : d.getMemo()));
+                EduEnroll e = enrollMapper.selectOne(new LambdaQueryWrapper<EduEnroll>()
+                        .eq(EduEnroll::getStudentId, a.getStudentId())
+                        .eq(EduEnroll::getClazzId, d.getClazzId())
+                        .eq(EduEnroll::getStatus, 1).last("LIMIT 1"));
+                if (e != null) enrollService.consumeHours(e.getId(), h);
+            } else if (att == 2) {   // 请假：写请假记录，不扣课
+                com.edu.entity.EduLeave l = new com.edu.entity.EduLeave();
+                l.setTenantId(s.getTenantId());
+                l.setStudentId(a.getStudentId());
+                l.setScheduleId(s.getId());
+                l.setReason("未排课补录·请假（不扣课）");
+                l.setStatus(1);
+                l.setCreateTime(LocalDateTime.now());
+                leaveRecMapper.insert(l);
+            } else if (att == 3) {   // 旷课：生成旷课申请（待审批，超时自动扣课）
+                com.edu.entity.EduAbsence ab = new com.edu.entity.EduAbsence();
+                ab.setTenantId(s.getTenantId());
+                ab.setOrgId(s.getOrgId());
+                ab.setScheduleId(s.getId());
+                ab.setStudentId(a.getStudentId());
+                ab.setTeacherId(s.getTeacherId());
+                ab.setCourseId(s.getCourseId());
+                ab.setClazzId(s.getClazzId());
+                ab.setClassTime(start);
+                ab.setReason("未排课补录·旷课");
+                ab.setStatus(0);
+                ab.setApplyTime(LocalDateTime.now());
+                ab.setDeadline(LocalDateTime.now().plusHours(ABSENCE_DEADLINE_HOURS));
+                absenceMapper.insert(ab);
+            }
+        }
+        if (!tempNames.isEmpty()) {   // 临时学员名单记入课次备注（出勤统计不含，不扣课）
+            String extra = "临时学员：" + String.join("、", tempNames) + "（不扣课）";
+            s.setRemark(org.springframework.util.StringUtils.hasText(s.getRemark())
+                    ? s.getRemark() + "；" + extra : extra);
+        }
+        s.setStatus(1);
+        s.setUpdateTime(LocalDateTime.now());
+        scheduleMapper.updateById(s);
+        opLog(s, "记上课", "未排课补录·按学员登记");
+        return contracts;
+    }
+
+    /**
+     * 补课学员候选：同课程已分班的请假学员（edu_leave 记录 + 学生请假课次 status=4 并集，按学员去重取最近一次）。
+     * 校区取学员归属校区，无则取其班级校区；请假时间取所缺课次的上课时间。
+     */
+    public java.util.List<java.util.Map<String, Object>> makeupCandidates(Long courseId, Long clazzId) {
+        java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+        if (courseId == null) return out;
+        java.time.format.DateTimeFormatter fmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        List<EduSchedule> courseSchedules = scheduleMapper.selectList(new LambdaQueryWrapper<EduSchedule>()
+                .eq(EduSchedule::getCourseId, courseId)
+                .isNotNull(EduSchedule::getClazzId)
+                .eq(clazzId != null, EduSchedule::getClazzId, clazzId));
+        if (courseSchedules.isEmpty()) return out;
+        java.util.Map<Long, EduSchedule> schMap = new java.util.HashMap<>();
+        for (EduSchedule s : courseSchedules) schMap.put(s.getId(), s);
+
+        // studentId -> 候选行（时间靠后的覆盖）
+        java.util.Map<Long, java.util.Map<String, Object>> byStu = new java.util.HashMap<>();
+        java.util.function.BiConsumer<Long, EduSchedule> merge = (sid, sch) -> {
+            if (sid == null || sch == null) return;
+            java.util.Map<String, Object> r = byStu.get(sid);
+            String time = sch.getStartTime() == null ? null : sch.getStartTime().format(fmt);
+            if (r == null || String.valueOf(r.get("leaveTime")).compareTo(String.valueOf(time)) < 0) {
+                java.util.Map<String, Object> row = new java.util.HashMap<>();
+                row.put("studentId", sid);
+                row.put("clazzId", sch.getClazzId());
+                row.put("teacherId", sch.getTeacherId());
+                row.put("leaveTime", time);
+                byStu.put(sid, row);
+            }
+        };
+        // 1) 学员请假记录（按课次）
+        for (com.edu.entity.EduLeave l : leaveRecMapper.selectList(new LambdaQueryWrapper<com.edu.entity.EduLeave>()
+                .in(com.edu.entity.EduLeave::getScheduleId, schMap.keySet())))
+            merge.accept(l.getStudentId(), schMap.get(l.getScheduleId()));
+        // 2) 学生请假课次（status=4 且带学员的一对一/点名课次）
+        for (EduSchedule s : courseSchedules)
+            if (s.getStatus() != null && s.getStatus() == 4 && s.getStudentId() != null)
+                merge.accept(s.getStudentId(), s);
+        if (byStu.isEmpty()) return out;
+
+        // 名称解析：学员 / 班级 / 校区
+        java.util.Map<Long, com.edu.entity.EduStudent> stus = new java.util.HashMap<>();
+        for (com.edu.entity.EduStudent st : studentMapper.selectBatchIds(byStu.keySet())) stus.put(st.getId(), st);
+        java.util.Map<Long, EduClazz> clazzes = new java.util.HashMap<>();
+        for (EduClazz c : clazzMapper.selectBatchIds(
+                new java.util.HashSet<>(java.util.Arrays.asList(
+                        byStu.values().stream().map(m -> (Long) m.get("clazzId")).filter(java.util.Objects::nonNull).toArray(Long[]::new)))))
+            clazzes.put(c.getId(), c);
+        java.util.Map<Long, String> orgNames = new java.util.HashMap<>();
+        for (com.edu.entity.SysOrg o : orgRecMapper.selectList(null)) orgNames.put(o.getId(), o.getName());
+
+        for (java.util.Map<String, Object> row : byStu.values()) {
+            com.edu.entity.EduStudent st = stus.get((Long) row.get("studentId"));
+            if (st == null) continue;   // 学员已删除
+            EduClazz cz = clazzes.get((Long) row.get("clazzId"));
+            row.put("stuName", st.getName());
+            row.put("clazzName", cz == null ? "-" : cz.getName());
+            Long orgId = st.getOrgId() != null ? st.getOrgId() : (cz == null ? null : cz.getOrgId());
+            row.put("campus", orgId == null ? "-" : orgNames.getOrDefault(orgId, "-"));
+            out.add(row);
+        }
+        out.sort((a, b) -> String.valueOf(b.get("leaveTime")).compareTo(String.valueOf(a.get("leaveTime"))));
+        return out;
+    }
+
+    /**
+     * 已排课次的按学员登记上课（排课管理-编辑上课）：到课逐学员合同消课+报名课时扣减、请假写记录、旷课走审批，
+     * 登记后课次置为已记上课（status=1）。仅未登记（status=0）课次可操作。
+     */
+    @Transactional
+    public int markAttendance(Long scheduleId, List<StuAtt> students, String memo) {
+        EduSchedule s = mustGet(scheduleId);
+        if (s.getStatus() == null || s.getStatus() != 0) throw new BizException("仅未登记的课次可编辑上课");
+        if (students == null || students.isEmpty()) throw new BizException("请先标记学员出勤");
+        int max = maxAttendHours(s);
+        int contracts = 0;
+        java.util.List<String> tempNames = new java.util.ArrayList<>();
+        java.util.Map<Long, String> stuNames = new java.util.HashMap<>();
+        java.util.Set<Long> sids = new java.util.HashSet<>();
+        for (StuAtt a : students) if (a.getStudentId() != null) sids.add(a.getStudentId());
+        if (!sids.isEmpty())
+            for (com.edu.entity.EduStudent st : studentMapper.selectBatchIds(sids))
+                stuNames.put(st.getId(), st.getName());
+        for (StuAtt a : students) {
+            if (a.getStudentId() == null) continue;
+            int att = a.getAtt() == null ? 1 : a.getAtt();
+            int h = a.getHours() == null ? 0 : a.getHours();
+            if (att == 1 && "temp".equals(a.getKind())) {   // 临时学员：仅留名单不扣课
+                tempNames.add(stuNames.getOrDefault(a.getStudentId(), "#" + a.getStudentId()));
+                continue;
+            }
+            if (att == 1) {   // 到课：单学员消课（班课按学员+班级、一对一按学员+课程）+ 报名课时扣减
+                if (h < 1) throw new BizException("到课学员的扣课节数至少 1 节");
+                if (h > max) throw new BizException("扣课节数超出上限（本课次时长折算最多 " + max + " 节）");
+                contracts += consumeService.signByScheduleForStudent(s.getId(), a.getStudentId(),
+                        java.math.BigDecimal.valueOf(h), "到课", "迟到".equals(a.getExt()) ? "迟到" : null);
+                EduEnroll e = enrollMapper.selectOne(new LambdaQueryWrapper<EduEnroll>()
+                        .eq(EduEnroll::getStudentId, a.getStudentId())
+                        .eq(s.getClazzId() != null, EduEnroll::getClazzId, s.getClazzId())
+                        .eq(s.getClazzId() == null, EduEnroll::getCourseId, s.getCourseId())
+                        .eq(EduEnroll::getStatus, 1).last("LIMIT 1"));
+                if (e != null) enrollService.consumeHours(e.getId(), h);
+            } else if (att == 2) {   // 请假：不扣课
+                com.edu.entity.EduLeave l = new com.edu.entity.EduLeave();
+                l.setTenantId(s.getTenantId());
+                l.setStudentId(a.getStudentId());
+                l.setScheduleId(s.getId());
+                l.setReason("排课管理登记·请假（不扣课）" + ("迟到".equals(a.getExt()) ? "；迟到" : ""));
+                l.setStatus(1);
+                l.setCreateTime(LocalDateTime.now());
+                leaveRecMapper.insert(l);
+            } else if (att == 3) {   // 旷课：走审批
+                com.edu.entity.EduAbsence ab = new com.edu.entity.EduAbsence();
+                ab.setTenantId(s.getTenantId());
+                ab.setOrgId(s.getOrgId());
+                ab.setScheduleId(s.getId());
+                ab.setStudentId(a.getStudentId());
+                ab.setTeacherId(s.getTeacherId());
+                ab.setCourseId(s.getCourseId());
+                ab.setClazzId(s.getClazzId());
+                ab.setClassTime(s.getStartTime());
+                ab.setReason("排课管理登记·旷课");
+                ab.setStatus(0);
+                ab.setApplyTime(LocalDateTime.now());
+                ab.setDeadline(LocalDateTime.now().plusHours(ABSENCE_DEADLINE_HOURS));
+                absenceMapper.insert(ab);
+            }
+        }
+        if (org.springframework.util.StringUtils.hasText(memo))
+            s.setRemark(memo.trim());   // 上课备注（上课信息区填写，记入课次备注即"上课内容"）
+        if (!tempNames.isEmpty()) {
+            String extra = "临时学员：" + String.join("、", tempNames) + "（不扣课）";
+            s.setRemark(org.springframework.util.StringUtils.hasText(s.getRemark())
+                    ? s.getRemark() + "；" + extra : extra);
+        }
+        s.setStatus(1);
+        s.setUpdateTime(LocalDateTime.now());
+        scheduleMapper.updateById(s);
+        opLog(s, "记上课", "排课管理按学员登记");
+        return contracts;
+    }
+
+    /** 课次出勤摘要：应到（班课在读人数/一对一 1）与实到（消课人数） */
+    public java.util.Map<String, Object> attendSummary(Long id) {
+        EduSchedule s = mustGet(id);
+        int should = 1;
+        if (s.getClazzId() != null) {
+            Long n = enrollMapper.selectCount(new LambdaQueryWrapper<EduEnroll>()
+                    .eq(EduEnroll::getClazzId, s.getClazzId()).eq(EduEnroll::getStatus, 1));
+            should = n == null ? 0 : n.intValue();
+        }
+        int attend = 0;
+        for (com.edu.entity.EduConsume c : consumeRecMapper.selectList(
+                new LambdaQueryWrapper<com.edu.entity.EduConsume>()
+                        .eq(com.edu.entity.EduConsume::getScheduleId, id)
+                        .eq(com.edu.entity.EduConsume::getCanceled, 0)
+                        .and(w -> w.isNull(com.edu.entity.EduConsume::getAuditStatus)
+                                .or().ne(com.edu.entity.EduConsume::getAuditStatus, 2))))
+            attend++;
+        java.util.Map<String, Object> m = new java.util.HashMap<>();
+        m.put("should", should);
+        m.put("attend", attend);
+        return m;
+    }
+
+    /**
+     * 编辑重复系列：以该课次定位同系列（同班级+同教师+重复排课生成+同周几+同时段，今天及以后、待上课），
+     * 统一改时段（新开始/结束时刻，日期保持各自日期），可同时换教师/教室；逐次校验，冲突跳过并汇总。
+     */
+    @Transactional
+    public java.util.Map<String, Object> repeatUpdate(Long id, LocalDateTime newStart, LocalDateTime newEnd,
+                                                      Long teacherId, Long classroomId) {
+        EduSchedule s = mustGet(id);
+        if (s.getStatus() == null || s.getStatus() != 0) throw new BizException("仅待上课的课次可编辑重复");
+        if (s.getSchedType() == null || s.getSchedType() != 1) throw new BizException("该课次不是重复排课生成的，请用「编辑单次」");
+        if (newStart == null || newEnd == null || !newEnd.isAfter(newStart))
+            throw new BizException("请选择完整的上课时段");
+        java.time.LocalTime oldT = s.getStartTime().toLocalTime();
+        java.time.LocalTime newT = newStart.toLocalTime();
+        long dur = java.time.Duration.between(newStart, newEnd).toMinutes();
+        String today = java.time.LocalDate.now().toString() + " 00:00:00";
+        java.util.List<EduSchedule> series = new java.util.ArrayList<>();
+        for (EduSchedule it : scheduleMapper.selectList(new LambdaQueryWrapper<EduSchedule>()
+                .eq(EduSchedule::getClazzId, s.getClazzId())
+                .eq(EduSchedule::getTeacherId, s.getTeacherId())
+                .eq(EduSchedule::getSchedType, 1)
+                .eq(EduSchedule::getStatus, 0)
+                .ge(EduSchedule::getStartTime, today))) {
+            if (it.getStartTime().getDayOfWeek() != s.getStartTime().getDayOfWeek()) continue;
+            if (!it.getStartTime().toLocalTime().equals(oldT)) continue;
+            series.add(it);
+        }
+        if (series.isEmpty()) throw new BizException("未找到同系列课次");
+        Long tid = teacherId != null ? teacherId : s.getTeacherId();
+        Long roomId = classroomId != null ? classroomId : s.getClassroomId();
+        String roomName = classroomId != null ? classroomName(classroomId) : s.getClassroom();
+        int updated = 0;
+        java.util.List<java.util.Map<String, String>> skipped = new java.util.ArrayList<>();
+        for (EduSchedule it : series) {
+            LocalDateTime ns = LocalDateTime.of(it.getStartTime().toLocalDate(), newT);
+            LocalDateTime ne = ns.plusMinutes(dur);
+            try {
+                checkFutureStart(ns);
+                checkBanTime(tid, ns, ne);
+                checkConflict(tid, ns, ne, it.getId());
+                checkRoomConflict(roomId, roomName, ns, ne, it.getId(), true);
+            } catch (BizException e) {
+                skipped.add(skipItem(it.getStartTime().toLocalDate(), e.getMessage()));
+                continue;
+            }
+            it.setTeacherId(tid);
+            if (classroomId != null) { it.setClassroomId(roomId); it.setClassroom(roomName); }
+            it.setStartTime(ns);
+            it.setEndTime(ne);
+            it.setUpdateTime(LocalDateTime.now());
+            scheduleMapper.updateById(it);
+            opLog(it, "编辑重复", "系列自课次#" + id);
+            updated++;
+        }
+        java.util.Map<String, Object> r = new java.util.HashMap<>();
+        r.put("total", series.size());
+        r.put("updated", updated);
+        r.put("skipped", skipped);
+        return r;
     }
 
     /** 排课操作日志：操作人记录当前登录账号的用户名（排课历史展示用） */

@@ -70,7 +70,9 @@
           <div v-else class="sd-row"><span class="sd-label">学生</span>{{ studentInfo(r.studentId) }}</div>
         </div>
         <div class="slot-acts">
-          <!-- 课次详情仅提供 调时/删除 两项操作 -->
+          <!-- 编辑上课：按学员登记 到课/请假/旷课（仅未登记课次） -->
+          <el-button v-if="r.status === 0" link type="success" size="small"
+                     @click="openMarkAtt(r)">编辑上课</el-button>
           <el-button v-if="r.status === 0 && canAdjustRow(r)" link type="primary" size="small"
                      @click="slotAction(r, openAdjust)">调时</el-button>
           <el-button v-if="r.status === 0 || r.status === 2" link type="danger" size="small"
@@ -151,22 +153,56 @@
             <el-tag v-if="row.compensation === 1" size="small" type="info" effect="plain">补</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="330" fixed="right" class-name="no-wrap-col">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <!-- 未开始/进行中：调时、取消 -->
-            <template v-if="row.id && row.status === 0 && row.phase !== 'done'">
-              <el-button link type="primary" @click="openAdjust(row)">调时</el-button>
-              <el-button link type="danger" @click="doCancel(row)">取消</el-button>
-            </template>
-            <!-- 已下课未登记：到课 / 教师请假 / 学生请假 / 旷课 -->
-            <template v-if="row.id && row.status === 0 && row.phase === 'done'">
-              <el-button link type="success" @click="openAttend(row)">到课</el-button>
-              <el-button link type="warning" @click="doLeave(row, 3)">教师请假</el-button>
-              <el-button link type="warning" @click="doLeave(row, 4)">学生请假</el-button>
-              <el-button link type="danger" @click="doAbsent(row)">旷课</el-button>
-            </template>
-            <el-button v-if="row.id && row.status === 2" link type="warning" @click="openCompensate(row)">补课</el-button>
-            <el-button v-if="row.phase === 'tobe'" link type="primary" @click="goSchedule(row)">去排课</el-button>
+            <!-- 行内操作收进「更多」下拉：调时/取消（未开始）、到课/请假/旷课（已下课未登记）、补课（已取消）、去排课（待排课）；
+                 容器 v-if = 各操作条件的并集，已登记完的课次保持空单元格 -->
+            <el-dropdown v-if="(row.id && (row.status === 0 || row.status === 2)) || row.phase === 'tobe'"
+                         trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="row.id && row.status === 0 && row.phase !== 'done'" command="adjust" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>调时</b><i>调整上课时间</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id && row.status === 0 && row.phase !== 'done'" command="cancel" class="more-item">
+                    <span class="mi mi-orange"><el-icon :size="13"><CircleClose /></el-icon></span>
+                    <span class="mi-txt"><b>取消</b><i>取消该课次</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id && row.status === 0 && row.phase === 'done'" command="attend" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><CircleCheck /></el-icon></span>
+                    <span class="mi-txt"><b>到课</b><i>登记并扣课时</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id && row.status === 0 && row.phase === 'done'" command="teacherLeave" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><User /></el-icon></span>
+                    <span class="mi-txt"><b>教师请假</b><i>教师缺课不扣课时</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id && row.status === 0 && row.phase === 'done'" command="studentLeave" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><UserFilled /></el-icon></span>
+                    <span class="mi-txt"><b>学生请假</b><i>学生缺课不扣课时</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id && row.status === 0 && row.phase === 'done'" command="absent" class="more-item">
+                    <span class="mi mi-orange"><el-icon :size="13"><Warning /></el-icon></span>
+                    <span class="mi-txt"><b>旷课</b><i>72小时未批自动扣课</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id && row.status === 2" command="compensate" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><Clock /></el-icon></span>
+                    <span class="mi-txt"><b>补课</b><i>另排时间补课</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.phase === 'tobe'" command="goSchedule" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><Calendar /></el-icon></span>
+                    <span class="mi-txt"><b>去排课</b><i>到周视图排课</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -235,10 +271,11 @@
     </div>
 
     <!-- 新增排课 -->
-    <el-drawer v-model="createVisible" title="新增排课" size="460px">
+    <!-- 新增排课：类型（班课/一对一）+ 排课方式（自由/重复，重复仅班课）+ 时段预设/自定义 + 助教/主题 -->
+    <el-drawer v-model="createVisible" title="新增排课" size="560px">
       <el-form :model="form" label-width="90px">
         <el-form-item label="类型">
-          <el-radio-group v-model="form.mode">
+          <el-radio-group v-model="form.mode" @change="onTypeChange">
             <el-radio value="clazz">班课</el-radio>
             <el-radio value="one2one">一对一</el-radio>
           </el-radio-group>
@@ -253,25 +290,91 @@
             <el-option v-for="s in students" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="排课方式">
+          <el-radio-group v-model="form.schedMode">
+            <el-radio-button value="free">自由排课</el-radio-button>
+            <el-radio-button v-if="form.mode === 'clazz'" value="repeat">重复排课</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <!-- 自由排课：单次日期；重复排课：开始/结束方式/重复方式/周几/节假日过滤 -->
+        <template v-if="form.schedMode === 'free'">
+          <el-form-item label="上课日期" required>
+            <el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD"
+                            :disabled-date="disablePastDate" style="width: 100%" />
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item label="开始日期" required>
+            <el-date-picker v-model="form.beginDate" type="date" value-format="YYYY-MM-DD"
+                            :disabled-date="disablePastDate" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="结束方式" required>
+            <div style="display: flex; align-items: center; gap: 8px; width: 100%">
+              <el-select v-model="form.endMode" style="width: 120px">
+                <el-option label="按日期结束" value="date" />
+                <el-option label="按次数结束" value="count" />
+              </el-select>
+              <el-date-picker v-if="form.endMode !== 'count'" v-model="form.endDate" type="date"
+                              value-format="YYYY-MM-DD" :disabled-date="disablePastDate" style="flex: 1" />
+              <el-input-number v-else v-model="form.endCount" :min="1" :max="200" :controls="false" style="width: 110px" />
+              <span v-if="form.endMode === 'count'" style="font-size: 13px; color: #667c99">次</span>
+            </div>
+            <div v-if="attPreview && attPreview.count" style="width: 100%; margin-top: 4px; font-size: 12px; color: #667c99">
+              预计排课 <b style="color: #f79009; padding: 0 2px">{{ attPreview.count }}</b> 次<template v-if="attPreview.holidaySkipped">（节假日跳过 {{ attPreview.holidaySkipped }} 次）</template><template v-if="form.endMode === 'count' && attPreview.lastDate">，最后一次 {{ attPreview.lastDate }}</template>
+            </div>
+          </el-form-item>
+          <el-form-item label="重复方式" required>
+            <el-radio-group v-model="form.repeatMode">
+              <el-radio :value="1">每周重复</el-radio>
+              <el-radio :value="2">隔周重复</el-radio>
+              <el-radio :value="4">隔天重复</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="form.repeatMode !== 4" label="周几上课" required>
+            <el-checkbox :model-value="(form.weekdays || []).length === 7" style="margin-right: 4px"
+                         @change="(v) => (form.weekdays = v ? [1,2,3,4,5,6,7] : [])">全选</el-checkbox>
+            <el-checkbox-group v-model="form.weekdays">
+              <el-checkbox v-for="(w, i) in WEEK_NAMES" :key="w" :value="i + 1">{{ w }}</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item label="节假日过滤">
+            <el-radio-group v-model="form.skipHoliday">
+              <el-radio :value="true">节假日不排课</el-radio>
+              <el-radio :value="false">节假日排课</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </template>
+        <!-- 共用：时段（预设/自定义）+ 教师 + 助教 + 教室 + 主题 -->
+        <el-form-item label="上课时段" required>
+          <el-select v-if="!attCustomRange" v-model="attPreset" style="width: 160px" @change="(p) => { const [a, b] = String(p).split('~'); form.range = [a, b] }">
+            <el-option v-for="p in TIME_PRESETS" :key="p" :label="p" :value="p" />
+          </el-select>
+          <el-time-picker v-else v-model="form.range" is-range range-separator="至"
+                          start-placeholder="开始" end-placeholder="结束"
+                          format="HH:mm" value-format="HH:mm" style="width: 200px" />
+          <el-button link type="primary" style="margin-left: 8px" @click="toggleAttCustom">
+            {{ attCustomRange ? '选择预设时段' : '自定义时段' }}
+          </el-button>
+        </el-form-item>
         <el-form-item label="教师" required>
           <el-select v-model="form.teacherId" filterable style="width: 100%">
             <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="开始时间" required>
-          <el-date-picker v-model="form.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss"
-                          :disabled-date="disablePastDate" />
+        <el-form-item label="助教">
+          <el-select v-model="form.assistantId" clearable filterable placeholder="选填" style="width: 100%">
+            <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="结束时间" required>
-          <el-date-picker v-model="form.endTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss"
-                          :disabled-date="disablePastDate" />
-        </el-form-item>
-        <el-form-item label="教室">
-          <el-select v-model="form.classroomId" filterable clearable style="width: 100%"
+        <el-form-item label="教室" required>
+          <el-select v-model="form.classroomId" filterable style="width: 100%"
                      placeholder="选择教室（显示可容纳人数）" @change="onRoomChange">
             <el-option v-for="r in classrooms" :key="r.id"
                        :label="`${r.name}（容纳${r.capacity}人）`" :value="r.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="上课主题">
+          <el-input v-model="form.topic" maxlength="20" placeholder="选填，最多20字" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -279,6 +382,301 @@
         <el-button type="primary" :loading="saving" @click="saveCreate">保存</el-button>
       </template>
     </el-drawer>
+
+    <!-- 框选空白：确认创建排课（班级排课 / 一对一排课 二选一） -->
+    <el-dialog v-model="pickVisible" title="创建排课" width="420px" append-to-body>
+      <div class="pk-time">
+        <i class="el-icon"><el-icon><Calendar /></el-icon></i>
+        已选时段：<b>{{ pickForm.date }} {{ pickForm.range[0] }}~{{ pickForm.range[1] }}</b>，是否创建排课？
+      </div>
+      <div class="pk-btns">
+        <div class="pk-btn" @click="pickCreate('clazz')">
+          <el-icon :size="22" color="#155EEF"><School /></el-icon>
+          <b>班级排课</b><span>选班级批量排课</span>
+        </div>
+        <div class="pk-btn" @click="pickCreate('one2one')">
+          <el-icon :size="22" color="#12b76a"><User /></el-icon>
+          <b>一对一排课</b><span>按学生/老师排课</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="pickVisible = false">取 消</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 课程表弹窗：排课信息 + 编辑单次/编辑重复/编辑上课/删除 -->
+    <el-dialog v-model="lessonVisible" title="课程表" width="660px" append-to-body>
+      <div v-if="lessonRow" class="ls-info">
+        <div class="ls-row"><label>上课时间：</label>{{ String(lessonRow.startTime).slice(0, 16) }} ~ {{ String(lessonRow.endTime || '').slice(11, 16) }}</div>
+        <div class="ls-row"><label>班&nbsp;&nbsp;&nbsp;&nbsp;级：</label>
+          <span class="ls-link">{{ lessonRow.clazzId ? clazzName(lessonRow.clazzId) : `一对一 · ${studentName(lessonRow.studentId)}` }}</span>
+        </div>
+        <div class="ls-row"><label>教&nbsp;&nbsp;&nbsp;&nbsp;师：</label>{{ teacherName(lessonRow.teacherId) }}</div>
+        <div class="ls-row"><label>助&nbsp;&nbsp;&nbsp;&nbsp;教：</label>{{ lessonRow.assistantId ? teacherName(lessonRow.assistantId) : '—' }}</div>
+        <div class="ls-row"><label>教&nbsp;&nbsp;&nbsp;&nbsp;室：</label>{{ lessonRow.classroom || '—' }}</div>
+        <div class="ls-row"><label>上课主题：</label>{{ lessonRow.topic || '—' }}</div>
+        <div class="ls-row"><label>实到 / 应到：</label>
+          <b v-if="lessonAttend" style="color: #12b76a">{{ lessonAttend.attend }}</b>
+          <span v-else>-</span> / <b style="color: #155EEF">{{ lessonAttend?.should ?? '-' }}</b>
+        </div>
+        <div class="ls-row"><label>课次状态：</label>{{ SCH_STATUS[lessonRow.status]?.label || lessonRow.status }}{{ lessonRow.schedType === 1 ? '（重复排课）' : '' }}</div>
+      </div>
+      <template #footer>
+        <div class="ls-footer">
+          <el-button @click="lessonVisible = false">取 消</el-button>
+          <el-button v-if="lessonRow?.status === 0" @click="lessonVisible = false; openAdjust(lessonRow)">编辑单次</el-button>
+          <el-button v-if="lessonRow?.status === 0 && lessonRow?.schedType === 1" @click="openRepeatEdit(lessonRow)">编辑重复</el-button>
+          <el-button v-if="lessonRow?.status === 0 || lessonRow?.status === 2" type="danger" plain
+                     @click="lessonVisible = false; slotDelete(lessonRow)">删 除</el-button>
+          <el-button v-if="lessonRow?.status === 0" type="primary"
+                     @click="lessonVisible = false; openMarkAtt(lessonRow)">编辑上课</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑重复系列：统一改时段（可换教师/教室），冲突课次跳过 -->
+    <el-dialog v-model="repVisible" title="编辑重复（同步本系列未来课次）" width="460px" append-to-body>
+      <el-form label-width="80px">
+        <el-form-item label="新时段" required>
+          <el-time-picker v-model="repForm.range" is-range range-separator="至"
+                          start-placeholder="开始" end-placeholder="结束"
+                          format="HH:mm" value-format="HH:mm" style="width: 210px" />
+        </el-form-item>
+        <el-form-item label="教师">
+          <el-select v-model="repForm.teacherId" filterable clearable style="width: 100%">
+            <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="教室" required>
+          <el-select v-model="repForm.classroomId" filterable style="width: 100%">
+            <el-option v-for="r in classrooms" :key="r.id"
+                       :label="`${r.name}（容纳${r.capacity}人）`" :value="r.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div class="rec-hint" style="color: #8fa8c4; font-size: 12px">
+        将同步修改同班级+同教师+同周几+同时段的全部未来待上课课次；逐个校验教师/教室冲突，冲突的跳过并汇总提示
+      </div>
+      <template #footer>
+        <el-button @click="repVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="repSaving" @click="saveRepeatEdit">同步修改</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑上课（课程表弹窗/时段浮窗进入）：整页抽屉——头部信息章 + 上课信息 + 学员逐个登记（参考 schoolpal editTeachingLog） -->
+    <el-drawer v-model="attDrawerVisible" title="编辑上课" size="960px" append-to-body>
+      <div class="rah-header">
+        <div class="rah-chip"><span class="rah-ic rah-ic-blue"><el-icon :size="13"><OfficeBuilding /></el-icon></span>{{ attRow ? (attRow.clazzId ? clazzName(attRow.clazzId) : '一对一') : '-' }}</div>
+        <div class="rah-chip"><span class="rah-ic rah-ic-purple"><el-icon :size="13"><Location /></el-icon></span>{{ attCampus || '-' }}</div>
+        <div class="rah-chip"><span class="rah-ic rah-ic-green"><el-icon :size="13"><Notebook /></el-icon></span>{{ attCourseName || '-' }}</div>
+      </div>
+
+      <div class="rah-sec">
+        <div class="rah-title">上课信息</div>
+        <el-form label-width="80px" label-position="left">
+          <div class="rah-row">
+            <el-form-item label="上课日期" required>
+              <el-date-picker v-model="attForm.date" type="date" value-format="YYYY-MM-DD"
+                              :disabled="attPast" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="上课时段" required>
+              <el-select v-if="!attEditCustom" v-model="attEditPreset" :disabled="attPast" style="width: 150px" @change="onAttEditPreset">
+                <el-option v-for="p in TIME_PRESETS" :key="p" :label="p" :value="p" />
+              </el-select>
+              <el-time-picker v-else v-model="attForm.range" is-range range-separator="至" :disabled="attPast"
+                              start-placeholder="开始" end-placeholder="结束"
+                              format="HH:mm" value-format="HH:mm" style="width: 190px" />
+              <el-button link type="primary" style="margin-left: 8px" :disabled="attPast" @click="toggleAttEditCustom">
+                {{ attEditCustom ? '选择预设时段' : '自定义时段' }}
+              </el-button>
+            </el-form-item>
+            <el-form-item label="上课教师" required>
+              <el-select v-model="attForm.teacherId" filterable clearable style="width: 100%">
+                <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <div class="rah-row">
+            <el-form-item label="上课教室">
+              <el-select v-model="attForm.classroomId" filterable clearable style="width: 100%">
+                <el-option v-for="r in classrooms" :key="r.id"
+                           :label="`${r.name}（容纳${r.capacity}人）`" :value="r.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="助教">
+              <el-select v-model="attForm.assistantId" clearable filterable placeholder="选填" style="width: 100%">
+                <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="上课主题">
+              <el-input v-model="attForm.topic" maxlength="50" placeholder="选填" />
+            </el-form-item>
+          </div>
+          <el-form-item label="备注">
+            <el-input v-model="attForm.memo" type="textarea" :rows="2" maxlength="150" show-word-limit
+                      placeholder="选填，最多150字，保存后记入课次备注（上课内容）" />
+          </el-form-item>
+          <div v-if="attPast" class="rec-hint">该课次已到/过上课时间：日期、时段、教室不可修改，仍可调整教师/助教/主题并登记出勤</div>
+        </el-form>
+      </div>
+
+      <div class="rah-sec">
+        <div class="rah-title">学员记上课</div>
+        <div class="rah-stat">
+          共 <b>{{ attStudents.length }}</b> 名学员，到课 <b style="color:#12b76a">{{ attCnt(1) }}</b> 人，
+          请假 <b style="color:#f79009">{{ attCnt(2) }}</b> 人，旷课 <b style="color:#f04438">{{ attCnt(3) }}</b> 人，
+          未记录 <b>{{ attCnt(0) }}</b> 人，已锁定 <b style="color:#155EEF">{{ attLocked }}</b> 人（行内「保存」锁定本行、「取消」还原，底部「保 存」一次性提交全部）
+        </div>
+        <div class="rah-toolbar">
+          <el-button type="primary" size="small" @click="attBatchAttend">批量到课</el-button>
+          <el-button size="small" @click="openAttPicker('temp')">添加临时学员</el-button>
+          <el-button v-if="attRow?.clazzId" size="small" @click="openAttPicker('makeup')">添加补课学员</el-button>
+          <span class="rec-hint" style="margin-left: 10px">临时学员到课不扣课时；补课学员按本人合同扣课</span>
+          <el-input v-model="attSearch" size="small" placeholder="请输入学员姓名" clearable style="width: 200px; margin-left: auto">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+        </div>
+        <el-table :data="attStudentsFiltered" v-loading="attLoading" stripe size="small" max-height="360"
+                  @selection-change="(v) => (attChecked = v)">
+          <el-table-column type="selection" width="42" />
+          <el-table-column label="学员头像" width="70" align="center">
+            <template #default="{ row }">
+              <span class="att-avatar" :style="{ background: attAvatarColor(row.name) }">{{ String(row.name || '?').slice(0, 1) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="学员姓名" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div class="att-stu">
+                <span class="att-name">{{ row.name }}</span>
+                <el-tag v-if="row.kind === 'makeup'" size="small" type="warning" effect="plain">补课</el-tag>
+                <el-tag v-else-if="row.kind === 'temp'" size="small" type="info" effect="plain">临时</el-tag>
+                <el-tag v-if="row.__saved" size="small" type="success" effect="plain">已锁定</el-tag>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="学员状态" width="82" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.kind" size="small" type="info" effect="plain">-</el-tag>
+              <el-tag v-else size="small" type="success" effect="plain">{{ row.status === 1 ? '在读' : row.statusText || '-' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="剩余课时/天数" width="104" align="center">
+            <template #default="{ row }">
+              <b v-if="row.kind !== 'temp'" :style="{ color: Number(row.remain) > 0 ? '#12b76a' : '#f04438' }">{{ row.remain ?? '-' }}</b>{{ row.kind !== 'temp' ? (row.unit || '课时') : '' }}
+              <span v-if="row.kind === 'temp'" class="rec-hint">不扣课</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="有效课时" width="82" align="center">
+            <template #default="{ row }">
+              <span v-if="row.kind !== 'temp'" :style="{ color: Number(row.remain) > 0 ? '#12b76a' : '#98a2b3' }">{{ row.remain ?? '-' }}</span>
+              <span v-else class="rec-hint">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="请假次数" width="82" align="center">
+            <template #default="{ row }">{{ row.kind ? '-' : row.leaveCount }}</template>
+          </el-table-column>
+          <el-table-column label="本次扣课时" width="122">
+            <template #default="{ row }">
+              <el-input-number v-if="row.kind !== 'temp'" v-model="row.hours" :min="1" :max="10" size="small"
+                               :disabled="row.__saved || row.att !== 1" style="width: 100px" />
+              <span v-else class="rec-hint">不扣课</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="到课状态" width="208">
+            <template #default="{ row }">
+              <el-radio-group v-if="row.kind !== 'temp'" v-model="row.att" size="small" :disabled="row.__saved">
+                <el-radio-button :value="1">到课</el-radio-button>
+                <el-radio-button :value="2">请假</el-radio-button>
+                <el-radio-button :value="3">旷课</el-radio-button>
+              </el-radio-group>
+              <el-tag v-else size="small" type="success" effect="plain">到课（临时·旁听）</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="到课类型" width="76" align="center">
+            <template #default="{ row }">
+              <el-checkbox v-if="row.kind !== 'temp'" v-model="row.late" :disabled="row.__saved">迟到</el-checkbox>
+              <span v-else class="rec-hint">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="118" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="row.kind !== 'temp' && !row.__saved" link type="primary" size="small" @click="lockAttRow(row)">保存</el-button>
+              <el-button v-if="row.kind !== 'temp' && row.__saved" link type="warning" size="small" @click="resetAttRow(row)">取消</el-button>
+              <el-button link type="danger" size="small" @click="removeAttRow(row)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!attStudentsFiltered.length && !attLoading" description="该课次无学员（班课学员在班级管理添加，或点上方按钮添加临时/补课学员）" :image-size="60" />
+      </div>
+
+      <template #footer>
+        <el-button @click="attDrawerVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="attSaving" @click="saveMarkAtt">保 存</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- 添加临时/补课学员（编辑上课）：临时=全库搜索；补课=同课程已分班的请假学员 -->
+    <el-dialog v-model="attPickVisible" :title="attPickKind === 'temp' ? '添加临时学员' : '添加补课学员'" width="760px" append-to-body>
+      <template v-if="attPickKind === 'temp'">
+        <div class="rec-hint" style="margin-bottom: 8px">临时学员：到课不扣课时，名单记入课次备注（出勤统计不含）</div>
+        <el-input v-model="attPickKw" size="small" placeholder="输入学员姓名 / 手机号搜索" clearable style="margin-bottom: 8px">
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-table :data="attPickFiltered" stripe size="small" max-height="300" @selection-change="(v) => (attPickSel = v)">
+          <el-table-column type="selection" width="42" />
+          <el-table-column label="学员姓名" min-width="120">
+            <template #default="{ row }">{{ row.name }}</template>
+          </el-table-column>
+          <el-table-column label="手机号" width="140">
+            <template #default="{ row }">{{ row.phone || '-' }}</template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template v-else>
+        <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 10px"
+                  :title="`当前课程：${attCourseName || '-'}；仅支持添加同课程已分班的请假学员`" />
+        <div class="rah-mk-filters">
+          <span class="rah-mk-lb">报读校区：</span>
+          <el-select v-model="attMkCampus" size="small" style="width: 160px" @change="attMkClazz = null">
+            <el-option label="全部校区" value="" />
+            <el-option v-for="c in attMkCampusOptions" :key="c" :label="c" :value="c" />
+          </el-select>
+          <span class="rah-mk-lb" style="margin-left: 12px">班级名称：</span>
+          <el-select v-model="attMkClazz" size="small" clearable placeholder="请选择班级" style="width: 170px">
+            <el-option v-for="c in attMkClazzOptions" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+          <el-input v-model="attMkKw" size="small" placeholder="请输入学员姓名" clearable style="width: 180px; margin-left: 12px">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+        </div>
+        <div class="rah-stat" style="margin: 8px 0">共 <b>{{ attMkFiltered.length }}</b> 名学员</div>
+        <el-table :data="attMkFiltered" stripe size="small" max-height="280" @selection-change="(v) => (attPickSel = v)">
+          <el-table-column type="selection" width="42" />
+          <el-table-column label="学员姓名" min-width="110">
+            <template #default="{ row }">{{ row.stuName }}</template>
+          </el-table-column>
+          <el-table-column label="报读校区" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.campus }}</template>
+          </el-table-column>
+          <el-table-column label="班级名称" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.clazzName }}</template>
+          </el-table-column>
+          <el-table-column label="请假时间" width="130">
+            <template #default="{ row }">{{ row.leaveTime }}</template>
+          </el-table-column>
+          <el-table-column label="教师" width="90" show-overflow-tooltip>
+            <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
+          </el-table-column>
+          <el-table-column label="扣除课时" width="96" align="center">
+            <template #default>按本人合同</template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="attPickVisible = false">取 消</el-button>
+        <el-button type="primary" @click="confirmAttPick">加 入</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 教师共同空闲查询（原"教师空闲查询"菜单收编）：多师交集 + 禁排时段感知，点空闲段直接带入排课 -->
     <el-drawer v-model="freeVisible" title="教师共同空闲查询" size="640px">
@@ -455,6 +853,18 @@ function goSchedule(row) {
   ElMessage.info('已在周视图中，点击/拖选时间段即可排课')
 }
 
+/** 列表行「更多」下拉分发：命令 → 原按钮函数（显示条件在各下拉项 v-if 上） */
+function onRowCommand(cmd, row) {
+  if (cmd === 'adjust') openAdjust(row)
+  else if (cmd === 'cancel') doCancel(row)
+  else if (cmd === 'attend') openAttend(row)
+  else if (cmd === 'teacherLeave') doLeave(row, 3)
+  else if (cmd === 'studentLeave') doLeave(row, 4)
+  else if (cmd === 'absent') doAbsent(row)
+  else if (cmd === 'compensate') openCompensate(row)
+  else if (cmd === 'goSchedule') goSchedule(row)
+}
+
 /* ===== 教师共同空闲查询（原独立菜单收编为排课辅助工具） ===== */
 const freeVisible = ref(false)
 const freeLoading = ref(false)
@@ -484,12 +894,14 @@ function applyFree(row) {
   freeVisible.value = false
   if (viewTab.value !== 'day' && viewTab.value !== 'week' && viewTab.value !== 'month') viewTab.value = 'week'
   nextTick(() => calRef.value?.getApi?.()?.gotoDate(row.date))
+  openCreate()
   form.value = {
-    mode: 'clazz',
-    startTime: `${row.date} ${row.start}:00`,
-    endTime: `${row.date} ${row.end}:00`,
+    ...form.value,
+    date: row.date,
+    range: [row.start, row.end],
     teacherId: (row.teacherIds || []).length === 1 ? row.teacherIds[0] : undefined
   }
+  syncAttRangeInput()
   createVisible.value = true
   ElMessage.success('已带入空闲时段，选择班级/学生与教室后保存')
 }
@@ -766,11 +1178,55 @@ function onEventClick(info) {
   const p = info.event.extendedProps
   // 折叠汇总块：打开该时段的课次清单抽屉
   if (p.bundle) return openSlotDrawer(p.bundle, `${fmtHM(p.range[0])}~${fmtHM(p.range[1])} 时段课次（${p.bundle.length} 节）`)
-  // 单个课次块：同样走课次抽屉（展示时间/班级/教师/教室 + 与列表一致的操作），
-  // 色块内不再挂悬停删除按钮，避免窄块/小屏下遮挡文字
+  // 单个课次块：打开课程表弹窗（排课信息 + 编辑单次/编辑重复/编辑上课/删除）
   const raw = rawSchedules.value.find((r) => String(r.id) === info.event.id)
   if (!raw) return
-  openSlotDrawer([raw], '课次详情')
+  openLessonModal(raw)
+}
+
+/* ===== 课程表弹窗：排课信息 + 编辑单次/编辑重复/编辑上课/删除 ===== */
+const lessonVisible = ref(false)
+const lessonRow = ref(null)
+const lessonAttend = ref(null)
+async function openLessonModal(row) {
+  lessonRow.value = row
+  lessonAttend.value = null
+  lessonVisible.value = true
+  try { lessonAttend.value = await api.scheduleAttendSummary(row.id) } catch (e) { /* 忽略 */ }
+}
+
+/* ===== 编辑重复系列：统一改时段（可换教师/教室） ===== */
+const repVisible = ref(false)
+const repSaving = ref(false)
+const repRow = ref(null)
+const repForm = ref({})
+function openRepeatEdit(row) {
+  repRow.value = row
+  repForm.value = { range: [String(row.startTime).slice(11, 16), String(row.endTime || '').slice(11, 16)],
+    teacherId: row.teacherId, classroomId: row.classroomId }
+  lessonVisible.value = false
+  repVisible.value = true
+}
+async function saveRepeatEdit() {
+  const f = repForm.value
+  if (!f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择上课时段')
+  if (String(f.range[1]) <= String(f.range[0])) return ElMessage.warning('结束时间必须晚于开始时间')
+  if (!f.classroomId) return ElMessage.warning('请选择教室')
+  repSaving.value = true
+  try {
+    const r = await api.scheduleRepeatUpdate(repRow.value.id, {
+      startTime: `${String(repRow.value.startTime).slice(0, 10)} ${f.range[0]}:00`,
+      endTime: `${String(repRow.value.startTime).slice(0, 10)} ${f.range[1]}:00`,
+      teacherId: f.teacherId, classroomId: f.classroomId })
+    repVisible.value = false
+    refreshAll()
+    const skipped = r.skipped || []
+    ElMessage.success(`已同步更新 ${r.updated}/${r.total} 个课次${skipped.length ? `，跳过 ${skipped.length} 个` : ''}`)
+    if (skipped.length) {
+      ElMessageBox.alert(skipped.slice(0, 40).map((x) => `${x.date}：${x.reason}`).join('<br>'),
+        `跳过明细（共 ${skipped.length} 条）`, { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' })
+    }
+  } finally { repSaving.value = false }
 }
 
 /* ===== 课次清单抽屉：汇总块 / 月视图「+N 节」 / 双击日期 共用 ===== */
@@ -843,6 +1299,9 @@ function onCalDblClick(e) {
   if (date) openDayList(date)
 }
 
+/* ===== 框选空白：确认创建排课，二选一 班级排课 / 一对一（老师）排课 ===== */
+const pickVisible = ref(false)
+const pickForm = ref({ date: '', range: [] })
 function onSelect(info) {
   const start = fmtLocal(info.startStr)
   // 框选已过去的时间段：不弹新增排课，仅提示
@@ -850,9 +1309,17 @@ function onSelect(info) {
     calRef.value?.getApi?.()?.unselect()
     return ElMessage.warning('所选时间段已过，不能在过去的时间排课')
   }
+  const end = fmtLocal(info.endStr)
+  pickForm.value = { date: start.slice(0, 10), range: [start.slice(11, 16), end.slice(11, 16)] }
+  pickVisible.value = true
+}
+/** 选定排课类型后打开新增排课抽屉（带入框选日期时段） */
+function pickCreate(mode) {
+  pickVisible.value = false
   openCreate()
-  form.value.startTime = start
-  form.value.endTime = fmtLocal(info.endStr)
+  form.value = { ...form.value, mode, date: pickForm.value.date, range: [...pickForm.value.range] }
+  syncAttRangeInput()
+  calRef.value?.getApi?.()?.unselect()
 }
 
 /* ===== 已过时段标识：过去整天由样式 .fc-day-past 置灰，今天 6:00~当前时间加遮罩 ===== */
@@ -922,7 +1389,64 @@ const onClazzChange = (id) => {
   const c = clazzes.value.find((x) => x.id === id)
   if (c) form.value.teacherId = c.classTeacherId
 }
-function openCreate() { form.value = { mode: 'clazz' }; createVisible.value = true }
+/* ===== 新增排课：自由/重复（同班级管理排课TAB），时段预设/自定义，助教/主题 ===== */
+const TIME_PRESETS = ['08:00~10:00', '10:00~12:00', '14:00~16:00', '16:00~18:00', '18:00~20:00', '19:00~21:00']
+const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const attCustomRange = ref(false)
+const attPreset = ref('18:00~20:00')
+function toggleAttCustom() {
+  attCustomRange.value = !attCustomRange.value
+  if (!attCustomRange.value) {
+    const [a, b] = attPreset.value.split('~')
+    form.value.range = [a, b]
+  }
+}
+/** 时段反查：命中预设走下拉，否则切自定义 */
+function syncAttRangeInput() {
+  const r = form.value.range || []
+  const hit = TIME_PRESETS.find((p) => { const [a, b] = p.split('~'); return a === r[0] && b === r[1] })
+  attCustomRange.value = !hit
+  attPreset.value = hit || '18:00~20:00'
+}
+function onTypeChange() { if (form.value.mode === 'one2one') form.value.schedMode = 'free' }
+function openCreate() {
+  const today = new Date().toISOString().slice(0, 10)
+  form.value = { mode: 'clazz', schedMode: 'free', clazzId: null, studentId: null,
+    date: today, range: ['18:00', '20:00'], teacherId: null, assistantId: null, classroomId: null, topic: '',
+    beginDate: today, endMode: 'date', endDate: '', endCount: 10, repeatMode: 1,
+    weekdays: [1, 2, 3, 4, 5], skipHoliday: true }
+  attCustomRange.value = false
+  attPreset.value = '18:00~20:00'
+  attPreview.value = null
+  createVisible.value = true
+}
+/* 重复规则预览（防抖调后端） */
+const attPreview = ref(null)
+let attPreviewTimer = null
+watch([() => form.value?.schedMode, () => form.value?.beginDate, () => form.value?.endMode,
+  () => form.value?.endDate, () => form.value?.endCount, () => form.value?.repeatMode,
+  () => form.value?.skipHoliday, () => (form.value?.weekdays || []).join(',')],
+  () => {
+    attPreview.value = null
+    const f = form.value
+    if (!f || f.schedMode !== 'repeat' || !createVisible.value) return
+    clearTimeout(attPreviewTimer)
+    attPreviewTimer = setTimeout(async () => {
+      if (!f.beginDate) return
+      if (f.endMode !== 'count' && !f.endDate) return
+      if (f.repeatMode !== 4 && !(f.weekdays || []).length) return
+      try {
+        attPreview.value = await api.scheduleRepeatPreview({
+          clazzId: f.clazzId, teacherId: f.teacherId, classroomId: f.classroomId,
+          repeatMode: f.repeatMode, weekdays: f.repeatMode === 4 ? [] : f.weekdays,
+          beginDate: f.beginDate, endMode: f.endMode,
+          endDate: f.endMode === 'count' ? null : f.endDate,
+          endCount: f.endMode === 'count' ? f.endCount : null,
+          skipHoliday: !!f.skipHoliday,
+          beginTime: f.range?.[0], endTime: f.range?.[1] })
+      } catch (e) { /* 预览失败不打扰 */ }
+    }, 300)
+  })
 function onRoomChange(id) {
   const r = classrooms.value.find((x) => x.id === id)
   if (r) form.value.classroom = r.name
@@ -930,27 +1454,282 @@ function onRoomChange(id) {
 async function saveCreate() {
   const f = form.value
   if (f.mode === 'clazz') {
+    if (!f.clazzId) return ElMessage.warning('请选择班级')
     const c = clazzes.value.find((x) => x.id === f.clazzId)
     f.courseId = c?.courseId
     f.studentId = null
   } else {
+    if (!f.studentId) return ElMessage.warning('请选择学生')
     f.clazzId = null
     const enrolls = await api.enrollPage({ page: 1, size: 1, studentId: f.studentId, status: 1 })
     f.courseId = enrolls.records?.[0]?.courseId
   }
   if (!f.courseId) return ElMessage.warning('未找到对应课程，请先为学生报名')
-  if (!f.startTime || !f.endTime) return ElMessage.warning('请选择上课时间')
-  const err = checkStartFuture(f.startTime)
-  if (err) return ElMessage.warning(err)
-  if (!(await confirmUrgentStart(f.startTime))) return
+  if (!f.teacherId) return ElMessage.warning('请选择教师')
+  if (!f.classroomId) return ElMessage.warning('请选择教室')
+  if (!f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择上课时段')
+  if (String(f.range[1]) <= String(f.range[0])) return ElMessage.warning('结束时间必须晚于开始时间')
+  // 自由排课：单次
+  if (f.schedMode !== 'repeat') {
+    if (!f.date) return ElMessage.warning('请选择上课日期')
+    f.startTime = `${f.date} ${f.range[0]}:00`
+    f.endTime = `${f.date} ${f.range[1]}:00`
+    const err = checkStartFuture(f.startTime)
+    if (err) return ElMessage.warning(err)
+    if (!(await confirmUrgentStart(f.startTime))) return
+    saving.value = true
+    try {
+      f.classroom = classrooms.value.find((x) => x.id === Number(f.classroomId))?.name || f.classroom
+      await api.scheduleCreate({ clazzId: f.clazzId, studentId: f.studentId, courseId: f.courseId,
+        teacherId: f.teacherId, assistantId: f.assistantId || null, classroomId: f.classroomId,
+        topic: f.topic || null, schedType: 0, startTime: f.startTime, endTime: f.endTime })
+      ElMessage.success('排课成功')
+      createVisible.value = false
+      refreshAll()
+    } finally { saving.value = false }
+    return
+  }
+  // 重复排课（仅班课）：按规则批量生成，逐次校验冲突，失败汇总跳过
+  if (!f.beginDate) return ElMessage.warning('请选择开始日期')
+  if (f.endMode !== 'count' && !f.endDate) return ElMessage.warning('请选择结束日期')
+  if (f.endMode !== 'count' && String(f.endDate) < String(f.beginDate)) return ElMessage.warning('结束日期不能早于开始日期')
+  if (f.endMode === 'count' && !f.endCount) return ElMessage.warning('请填写排课次数')
+  if (f.repeatMode !== 4 && !f.weekdays?.length) return ElMessage.warning('请选择周几上课')
   saving.value = true
   try {
-    f.classroom = classrooms.value.find((x) => x.id === Number(f.classroomId))?.name || f.classroom
-    await api.scheduleCreate(f)
-    ElMessage.success('排课成功')
+    const r = await api.scheduleRepeat({ clazzId: f.clazzId, teacherId: f.teacherId,
+      assistantId: f.assistantId || null, classroomId: f.classroomId, topic: f.topic || null,
+      repeatMode: f.repeatMode, weekdays: f.repeatMode === 4 ? [] : f.weekdays,
+      beginDate: f.beginDate, endMode: f.endMode,
+      endDate: f.endMode === 'count' ? null : f.endDate,
+      endCount: f.endMode === 'count' ? f.endCount : null,
+      skipHoliday: !!f.skipHoliday, beginTime: f.range[0], endTime: f.range[1] })
     createVisible.value = false
     refreshAll()
+    const skipped = r.skipped || []
+    ElMessage.success(`重复排课完成：成功 ${r.created} 次${skipped.length ? `，跳过 ${skipped.length} 次` : ''}`)
+    if (skipped.length) {
+      ElMessageBox.alert(skipped.slice(0, 50).map((x) => `${x.date}：${x.reason}`).join('<br>'),
+        `跳过明细（共 ${skipped.length} 条）`, { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' })
+    }
   } finally { saving.value = false }
+}
+
+/* ===== 编辑上课（整页抽屉，参考 schoolpal editTeachingLog）：上课信息 + 按学员登记 到课(扣课)/请假/旷课 ===== */
+const attDrawerVisible = ref(false)
+const attSaving = ref(false)
+const attLoading = ref(false)
+const attRow = ref(null)
+const attStudents = ref([])
+const attForm = ref({})
+const attEditCustom = ref(false)   // 时段：预设/自定义
+const attEditPreset = ref('')
+const attSearch = ref('')
+const attChecked = ref([])
+/** 已过上课时间的课次：日期/时段/教室锁定（教师/助教/主题/出勤仍可改） */
+const attPast = computed(() => attRow.value ? new Date(String(attRow.value.startTime).replace(' ', 'T')) <= new Date() : false)
+/** 头部信息章：校区（教室→校区）/课程名 */
+const attCampus = computed(() => {
+  const r = attRow.value
+  if (!r) return ''
+  const room = classrooms.value.find((c) => Number(c.id) === Number(r.classroomId))
+  return room?.campus || clazzes.value.find((c) => c.id === r.clazzId)?.campus || ''
+})
+const attCourseName = computed(() => {
+  const r = attRow.value
+  if (!r) return ''
+  if (r.courseId) return courses.value.find((c) => c.id === r.courseId)?.name || ''
+  return r.clazzId ? courseNameOf(r.clazzId) : ''
+})
+const attCnt = (att) => attStudents.value.filter((s) => s.att === att && !s.__saved).length
+    + (att !== 0 ? attStudents.value.filter((s) => s.att === att && s.__saved).length : 0)
+const attLocked = computed(() => attStudents.value.filter((s) => s.__saved).length)
+const attStudentsFiltered = computed(() => attStudents.value.filter((s) =>
+  !attSearch.value || String(s.name || '').includes(attSearch.value)))
+/** 行内「保存」：锁定本行（快照留底供「取消」还原）；「取消」：还原到锁定/初始状态 */
+function lockAttRow(row) {
+  if (row.att < 1) return ElMessage.warning('请先选择到课/请假/旷课再保存')
+  row.__saved = true
+  row.__snap = { att: row.att, hours: row.hours, late: !!row.late }
+}
+function resetAttRow(row) {
+  const s = row.__snap || row.__init
+  row.att = s.att; row.hours = s.hours; row.late = !!s.late
+  row.__saved = false
+  row.__snap = null
+}
+/** 移除学员行：正式学员移除后本次不登记（回到未记录），临时/补课学员直接剔除 */
+function removeAttRow(row) {
+  attStudents.value = attStudents.value.filter((s) => s.studentId !== row.studentId)
+}
+/** 批量到课：勾选行优先，未勾选则作用于当前筛选结果；临时学员固定到课 */
+function attBatchAttend() {
+  const list = attChecked.value.length ? attChecked.value : attStudentsFiltered.value
+  if (!list.length) return ElMessage.warning('当前没有可标记的学员')
+  for (const s of list) if (s.kind !== 'temp') s.att = 1
+}
+function onAttEditPreset(p) { const [a, b] = String(p).split('~'); attForm.value.range = [a, b] }
+function toggleAttEditCustom() {
+  attEditCustom.value = !attEditCustom.value
+  if (!attEditCustom.value) onAttEditPreset(attEditPreset.value)
+}
+/** 学员头像底色：姓名哈希取色 */
+function attAvatarColor(name) {
+  const cs = ['#155EEF', '#12b76a', '#f79009', '#7c5cff', '#0e9f9f', '#f04438']
+  let h = 0
+  for (const c of String(name || '')) h = (h * 31 + c.charCodeAt(0)) % 997
+  return cs[h % cs.length]
+}
+/** 打开编辑上课：头部信息章 + 上课信息回显 + 班课在读学员/一对一单行；剩余课时=本课程在读剩余，请假次数=本班考勤明细统计 */
+async function openMarkAtt(r) {
+  attRow.value = r
+  const date = String(r.startTime || '').slice(0, 10)
+  const range = [fmtHM(r.startTime), fmtHM(r.endTime)]
+  attForm.value = { date, range, teacherId: r.teacherId || null, assistantId: r.assistantId ?? null,
+    classroomId: r.classroomId ?? null, topic: r.topic || '', memo: '' }
+  attEditPreset.value = TIME_PRESETS.find((p) => p === `${range[0]}~${range[1]}`) || ''
+  attEditCustom.value = !attEditPreset.value
+  attSearch.value = ''
+  attDrawerVisible.value = true
+  attLoading.value = true
+  attStudents.value = []
+  try {
+    let rows = []
+    if (r.clazzId) rows = (await api.scheduleClazzStudents(r.clazzId)) || []
+    else if (r.studentId) rows = [{ studentId: r.studentId, name: studentName(r.studentId) }]
+    const courseId = r.courseId || (r.clazzId ? clazzes.value.find((c) => c.id === r.clazzId)?.courseId : null)
+    const leaveCnt = {}
+    if (r.clazzId) {
+      try {
+        const rec = await api.scheduleClassRecords({ clazzId: r.clazzId })
+        for (const d of rec.detail || [])
+          if (d.type === '请假') leaveCnt[d.studentId] = (leaveCnt[d.studentId] || 0) + 1
+      } catch (e) { /* 忽略 */ }
+    }
+    attStudents.value = await Promise.all(rows.map(async (s) => {
+      let remain = null, unit = '课时'
+      try {
+        const en = await api.enrollPage({ page: 1, size: 20, studentId: s.studentId, status: 1 })
+        const list = en.records || []
+        const hit = list.find((e) => !courseId || Number(e.courseId) === Number(courseId)) || list[0]
+        if (hit) {
+          remain = Math.max(Number(hit.totalHours || 0) - Number(hit.usedHours || 0), 0)
+          unit = hit.hoursUnit || '课时'
+        }
+      } catch (e) { /* 忽略 */ }
+      const row = { studentId: s.studentId, name: s.name, status: 1, remain, unit,
+        leaveCount: leaveCnt[s.studentId] || 0, att: 0, hours: 1, late: false, kind: null,
+        __saved: false, __snap: null, __init: { att: 0, hours: 1, late: false } }
+      return row
+    }))
+  } finally { attLoading.value = false }
+}
+/* 添加临时/补课学员（编辑上课）：临时=全库搜索到课不扣课；补课=同课程已分班请假学员，扣本人合同 */
+const attPickVisible = ref(false)
+const attPickKind = ref('temp')
+const attPickKw = ref('')
+const attPickSel = ref([])
+let attAllStudents = []
+const attMakeupRows = ref([])
+const attMkCampus = ref('')
+const attMkClazz = ref(null)
+const attMkKw = ref('')
+const attPickFiltered = computed(() => {
+  const added = new Set(attStudents.value.map((s) => s.studentId))
+  const k = attPickKw.value.trim().toLowerCase()
+  return (attAllStudents || []).filter((s) => !added.has(s.studentId ?? s.id)
+    && (!k || String(s.name || '').toLowerCase().includes(k) || String(s.phone || '').includes(k))).slice(0, 50)
+})
+const attMkCampusOptions = computed(() =>
+  [...new Set(attMakeupRows.value.map((r) => r.campus).filter(Boolean))])
+const attMkClazzOptions = computed(() => {
+  const cid = attRow.value?.courseId || clazzes.value.find((c) => c.id === attRow.value?.clazzId)?.courseId
+  return (clazzes.value || []).filter((c) => Number(c.courseId) === Number(cid))
+})
+const attMkFiltered = computed(() => {
+  const added = new Set(attStudents.value.map((s) => s.studentId))
+  const k = attMkKw.value.trim().toLowerCase()
+  return attMakeupRows.value.filter((r) => !added.has(r.studentId)
+    && (!attMkCampus.value || r.campus === attMkCampus.value)
+    && (!attMkClazz.value || String(r.clazzId) === String(attMkClazz.value))
+    && (!k || String(r.stuName || '').toLowerCase().includes(k)))
+})
+async function openAttPicker(kind) {
+  attPickKind.value = kind
+  attPickKw.value = ''
+  attPickSel.value = []
+  if (kind === 'makeup') {
+    attMkCampus.value = ''
+    attMkClazz.value = null
+    attMkKw.value = ''
+    attMakeupRows.value = []
+    attPickVisible.value = true
+    try {
+      const cid = attRow.value?.courseId || clazzes.value.find((c) => c.id === attRow.value?.clazzId)?.courseId
+      attMakeupRows.value = (await api.scheduleMakeupCandidates({ courseId: cid })) || []
+    } catch { /* 空列表由 empty 兜底 */ }
+  } else {
+    attAllStudents = (await api.studentList()) || []
+    attPickVisible.value = true
+  }
+}
+function confirmAttPick() {
+  if (!attPickSel.value.length) return ElMessage.warning('请勾选要加入的学员')
+  for (const s of attPickSel.value) {
+    attStudents.value.push({
+      studentId: s.studentId ?? s.id, name: s.name || s.stuName,
+      status: 1, remain: null, unit: '课时', leaveCount: 0,
+      att: 1, hours: 1, late: false, kind: attPickKind.value,
+      __saved: false, __snap: null, __init: { att: 1, hours: 1, late: false }
+    })
+  }
+  ElMessage.success(`已加入 ${attPickSel.value.length} 名${attPickKind.value === 'temp' ? '临时' : '补课'}学员`)
+  attPickVisible.value = false
+}
+async function saveMarkAtt() {
+  const r = attRow.value
+  const f = attForm.value
+  if (!f.date || !f.range?.[0]) return ElMessage.warning('请选择上课日期和时段')
+  if (!f.teacherId) return ElMessage.warning('请选择上课教师')
+  const marked = attStudents.value.filter((s) => s.att > 0 || s.kind === 'temp')
+  const submit = marked.map((s) => ({ studentId: s.studentId,
+    att: s.kind === 'temp' ? 1 : s.att, hours: s.kind === 'temp' ? null : (s.att === 1 ? s.hours : null),
+    kind: s.kind || undefined, ext: s.late ? '迟到' : null }))
+  const normal = submit.filter((s) => s.kind !== 'temp')
+  if (!normal.length) return ElMessage.warning('请先标记学员出勤（到课/请假/旷课）')
+  if (normal.some((s) => s.att === 1 && (!s.hours || s.hours < 1)))
+    return ElMessage.warning('到课学员的扣课节数至少 1 节')
+  attSaving.value = true
+  try {
+    // 1) 上课信息有变化 → 先编辑排课（未过上课时间才允许改时间/教室；后端会再校验冲突）
+    if (!attPast.value) {
+      const st = `${f.date} ${f.range[0]}:00`
+      const et = `${f.date} ${f.range[1]}:00`
+      if (st !== r.startTime || et !== r.endTime || Number(f.teacherId) !== Number(r.teacherId)
+        || (f.assistantId ?? null) !== (r.assistantId ?? null)
+        || Number(f.classroomId || 0) !== Number(r.classroomId || 0)
+        || (f.topic || '') !== (r.topic || '')) {
+        await api.scheduleUpdate(r.id, { startTime: st, endTime: et,
+          teacherId: f.teacherId, assistantId: f.assistantId ?? null,
+          classroomId: f.classroomId ?? null, topic: f.topic || null })
+        r.startTime = st; r.endTime = et
+      }
+    } else if (Number(f.teacherId) !== Number(r.teacherId)
+      || (f.assistantId ?? null) !== (r.assistantId ?? null)
+      || (f.topic || '') !== (r.topic || '')) {
+      // 已开课课次：只同步教师/助教/主题（不带时间，后端跳过"不能调往过去"校验）
+      await api.scheduleUpdate(r.id, { teacherId: f.teacherId,
+        assistantId: f.assistantId ?? null, topic: f.topic || null })
+    }
+    // 2) 登记出勤（备注一并记入课次备注）
+    const n = await api.scheduleMarkAttendance(r.id, {
+      students: submit,
+      memo: f.memo?.trim() || undefined
+    })
+    ElMessage.success(`登记完成：${normal.length} 名学员，消课合同 ${n} 份`)
+    attDrawerVisible.value = false
+    refreshAll()
+  } finally { attSaving.value = false }
 }
 
 /* ===== 已下课登记：到课/教师请假/学生请假/旷课 ===== */
@@ -1161,4 +1940,44 @@ onMounted(async () => {
 .sd-label { color: #98a2b3; margin-right: 6px; white-space: nowrap; }
 .sd-stu { margin: 0 4px 2px 0; }
 .sd-muted { color: #98a2b3; }
+.rec-hint { font-size: 12px; color: #8fa8c4; }
+/* 编辑上课整页抽屉（参考 schoolpal editTeachingLog）：头部信息章 + 分区卡 + 汇总 + 学员行 */
+.rah-header { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.rah-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #344054; }
+.rah-ic { width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.rah-ic-blue { background: linear-gradient(135deg, #155EEF, #4FA8FF); }
+.rah-ic-purple { background: linear-gradient(135deg, #7c5cff, #a78bfa); }
+.rah-ic-green { background: linear-gradient(135deg, #12b76a, #7ccf9c); }
+.rah-sec { border: 1px solid #e4edf7; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.rah-title { font-size: 13px; font-weight: 600; color: #344054;
+  display: flex; align-items: center; margin-bottom: 10px; }
+.rah-title::before { content: ''; width: 3px; height: 12px; background: #155EEF; border-radius: 2px; margin-right: 6px; }
+.rah-row { display: flex; gap: 18px; flex-wrap: wrap; }
+.rah-row .el-form-item { flex: 1; min-width: 220px; margin-bottom: 10px; }
+.rah-stat { font-size: 12.5px; color: #667c99; background: #f5f9ff; border: 1px solid #dbe7fb;
+  border-radius: 8px; padding: 5px 12px; margin-bottom: 8px; }
+.rah-stat b { color: #155EEF; padding: 0 2px; }
+.rah-toolbar { display: flex; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 4px; }
+.rah-mk-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.rah-mk-lb { font-size: 13px; color: #667c99; }
+.att-stu { display: flex; align-items: center; gap: 6px; }
+.att-avatar { width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.att-name { font-weight: 500; color: #344054; }
+/* 框选空白·创建排课二选一 */
+.pk-time { font-size: 13px; color: #475467; margin-bottom: 14px; }
+.pk-time b { color: #155EEF; }
+.pk-btns { display: flex; gap: 12px; }
+.pk-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 18px 10px; border: 1px solid #dfe7f3; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(180deg, #f9fcff, #fff); transition: all 0.15s ease; }
+.pk-btn:hover { border-color: #b9d0f7; box-shadow: 0 4px 14px rgba(21, 94, 239, 0.12); }
+.pk-btn b { font-size: 14px; color: #344054; }
+.pk-btn span { font-size: 12px; color: #8fa8c4; }
+/* 课程表弹窗：信息区 */
+.ls-info { padding: 2px 6px; }
+.ls-row { font-size: 13.5px; color: #475467; line-height: 2.1; }
+.ls-row label { display: inline-block; width: 84px; color: #8fa8c4; }
+.ls-link { color: #155EEF; cursor: pointer; font-weight: 600; }
+.ls-footer { display: flex; justify-content: flex-end; gap: 2px; }
 </style>

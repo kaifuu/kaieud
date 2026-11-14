@@ -145,6 +145,22 @@ public class EduConsumeService {
         return count;
     }
 
+    /** 指定学员按课次消课（未排课记上课：按学员逐个登记到课扣课），无生效合同时报错提示 */
+    @Transactional
+    public int signByScheduleForStudent(Long scheduleId, Long studentId,
+                                        BigDecimal hours, String source, String remark) {
+        com.edu.entity.EduSchedule sch = scheduleMapper.selectById(scheduleId);
+        if (sch == null) throw new BizException("排课记录不存在");
+        java.util.List<Long> contractIds = activeContractIds(studentId, sch.getCourseId());
+        if (contractIds.isEmpty()) throw new BizException("该学员没有可消课的生效合同，请先签订合同或将其改为请假/旷课");
+        int count = 0;
+        for (Long cid : contractIds) {
+            consume(cid, scheduleId, hours, 0, null, source, remark);
+            count++;
+        }
+        return count;
+    }
+
     /** 学员某课程下的生效合同（未退费未到期未删除，优先最近创建） */
     private java.util.List<Long> activeContractIds(Long studentId, Long courseId) {
         return contractMapper.selectList(new LambdaQueryWrapper<EduContract>()

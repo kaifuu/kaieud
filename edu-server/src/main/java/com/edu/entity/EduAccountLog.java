@@ -40,4 +40,6 @@ public class EduAccountLog {
     private String remark;
     private String operator;
     private LocalDateTime createTime;
+    /** 编辑时间（DB ON UPDATE 自动刷新，只读展示用） */
+    private LocalDateTime updateTime;
 }

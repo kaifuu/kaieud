@@ -3,7 +3,7 @@ import request from './request'
 const get = (url, params) => request.get(url, { params })
 const post = (url, data) => request.post(url, data)
 const put = (url, data) => request.put(url, data)
-const del = (url) => request.delete(url)
+const del = (url, params) => request.delete(url, { params })
 
 export default {
   // 认证
@@ -158,8 +158,9 @@ export default {
   clazzAddAuditionsBatch: (id, d) => post(`/edu/clazz/${id}/audition-students-batch`, d),
   clazzDelAudition: (sid) => del(`/edu/clazz/audition-student/${sid}`),
   clazzTransfer: (fromId, d) => post(`/edu/clazz/${fromId}/transfer`, d),
-  clazzStudents: (id) => get(`/edu/clazz/${id}/students`),
-  clazzList: () => get('/edu/clazz/list'),
+  clazzStudents: (id, p) => get(`/edu/clazz/${id}/students`, p),
+  clazzRoomUsage: (classroomId) => get('/edu/clazz/room-usage', { classroomId }),
+  clazzList: (p) => get('/edu/clazz/list', p),
   clazzSave: (d) => post('/edu/clazz', d),
   clazzUpdate: (d) => put('/edu/clazz', d),
   clazzDel: (id) => del(`/edu/clazz/${id}`),
@@ -170,6 +171,12 @@ export default {
   enrollTransfer: (d) => post('/edu/enroll/transfer', d),
   enrollRefund: (d) => post('/edu/enroll/refund', d),
   handleRecords: (p) => get('/edu/enroll/handle-records', p),
+  enrollPayStatus: (id, status) => post(`/edu/enroll/${id}/pay-status`, { status }),
+  enrollSuspend: (id, d) => post(`/edu/enroll/${id}/suspend`, d),
+  enrollResume: (id) => post(`/edu/enroll/${id}/resume`),
+  enrollRenew: (id, d) => post(`/edu/enroll/${id}/renew`, d),
+  enrollFinish: (id, d) => post(`/edu/enroll/${id}/finish`, d),
+  enrollVoid: (id, reason) => post(`/edu/enroll/${id}/void`, { reason }),
   accountLogUpdate: (d) => put('/edu/account/log', d),
   scoreSummary: (p) => get('/edu/score/summary', p),
   scoreHandle: (d) => post('/edu/score/handle', d),
@@ -212,6 +219,23 @@ export default {
   scheduleRepeat: (d) => post('/edu/schedule/repeat', d),
   scheduleRepeatPreview: (d) => post('/edu/schedule/repeat-preview', d),
   scheduleUpdate: (id, d) => post(`/edu/schedule/${id}/update`, d),
+  scheduleClassRecords: (p) => get('/edu/schedule/class-records', p),
+  scheduleRecord: (d) => post('/edu/schedule/record', d),
+  scheduleMakeupCandidates: (p) => get('/edu/schedule/makeup-candidates', p),
+  scheduleMarkAttendance: (id, d) => post(`/edu/schedule/${id}/mark-attendance`, d),
+  scheduleAttendSummary: (id) => get(`/edu/schedule/${id}/attend-summary`),
+  scheduleRepeatUpdate: (id, d) => post(`/edu/schedule/${id}/repeat-update`, d),
+  examScoreList: (clazzId) => get('/edu/exam-score/list', { clazzId }),
+  examScoreSaveBatch: (d) => post('/edu/exam-score/save-batch', d),
+  examScoreUpdate: (id, d) => post(`/edu/exam-score/${id}/update`, d),
+  examScoreDelete: (id) => post(`/edu/exam-score/${id}/delete`),
+  lessonCommentByClazz: (clazzId) => get('/edu/lesson-comment/by-clazz', { clazzId }),
+  lessonCommentSave: (d) => post('/edu/lesson-comment/save-batch', d),
+  homeworkByClazz: (clazzId) => get('/edu/homework/by-clazz', { clazzId }),
+  homeworkCreate: (d) => post('/edu/homework/create', d),
+  homeworkUpdate: (id, d) => post(`/edu/homework/${id}/update`, d),
+  homeworkDelete: (id) => post(`/edu/homework/${id}/delete`),
+  homeworkSubmitSave: (d) => post('/edu/homework/submit-save', d),
   scheduleAdjust: (id, d) => post(`/edu/schedule/${id}/adjust`, d),
   scheduleCancel: (id, d) => post(`/edu/schedule/${id}/cancel`, d),
   scheduleComplete: (id) => post(`/edu/schedule/${id}/complete`),
@@ -288,4 +312,7 @@ export default {
   deployRecords: (p) => get('/deploy/records', p),
   deployRecord: (id) => get(`/deploy/records/${id}`),
   deployDelRecord: (id) => del(`/deploy/records/${id}`),
+  deployDelRecords: (ids) => del('/deploy/records', { ids: ids.join(',') }),
+  deployClearRecords: (type) => del('/deploy/records/clear', { type }),
+  deployChangelog: () => get('/deploy/changelog'),
 }

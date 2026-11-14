@@ -16,6 +16,7 @@
         <el-tab-pane label="容器" name="container" />
         <el-tab-pane label="构建日志" name="build" />
         <el-tab-pane label="远程日志" name="remote" />
+        <el-tab-pane label="升级简述" name="changelog" lazy />
       </el-tabs>
     </div>
 
@@ -56,13 +57,33 @@
             <span v-else style="color: #98a2b3">未测试</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="testTarget(row)">测试</el-button>
-            <el-button link type="primary" @click="openTarget(row)">编辑</el-button>
-            <el-popconfirm title="确认删除该服务器配置?" @confirm="delTarget(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onTargetCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="test" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><Connection /></el-icon></span>
+                    <span class="mi-txt"><b>测试</b><i>SSH连通性测试</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑</b><i>修改服务器配置</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>删除服务器配置</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -93,14 +114,19 @@
       <el-empty v-if="!targets.length" description="请先在「服务器」TAB 配置目标服务器" :image-size="70" />
     </div>
 
-    <!-- TAB3 构建日志：本地打包（mvn/npm/tar）记录 -->
+    <!-- TAB3 构建日志：本地打包（mvn/npm/tar）记录，支持勾选批量删除与一键清空 -->
     <div v-show="tab === 'build'" class="panel table-panel tabs-fill">
       <div class="toolbar">
         <span style="color: #8fa8c4; font-size: 13px">本地打包日志：mvn package + npm build + 封装 docker compose 发布包全过程</span>
+        <el-button size="small" type="danger" plain :disabled="!buildSel.length"
+                   @click="batchDel('build')">批量删除（{{ buildSel.length }}）</el-button>
+        <el-button size="small" type="danger" @click="clearRecs('build')">一键清空</el-button>
         <div style="flex: 1"></div>
         <el-button @click="recPage.load()">刷新</el-button>
       </div>
-      <el-table :data="recPage.rows.value" v-loading="recPage.loading.value" stripe height="100%">
+      <el-table :data="recPage.rows.value" v-loading="recPage.loading.value" stripe height="100%"
+                @selection-change="(v) => (buildSel = v)">
+        <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="recPage.seq" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" width="140" show-overflow-tooltip />
         <el-table-column label="状态" width="90" show-overflow-tooltip>
@@ -114,13 +140,33 @@
         <el-table-column label="时间" width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="viewLog(row, '构建日志')">日志</el-button>
-            <el-button v-if="row.status === 'SUCCESS'" link type="warning" @click="openDeploy(row)">部署</el-button>
-            <el-popconfirm title="确认删除该记录?" @confirm="delRecord(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onBuildCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="log" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><Document /></el-icon></span>
+                    <span class="mi-txt"><b>日志</b><i>查看打包过程</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'SUCCESS'" command="deploy" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><Upload /></el-icon></span>
+                    <span class="mi-txt"><b>部署</b><i>上传并拉起容器</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>删除构建记录</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -135,10 +181,15 @@
     <div v-show="tab === 'remote'" class="panel table-panel tabs-fill">
       <div class="toolbar">
         <span style="color: #8fa8c4; font-size: 13px">远程部署日志：上传发布包 → 解包 → docker compose 拉起容器（镜像拉取/启动）全过程输出</span>
+        <el-button size="small" type="danger" plain :disabled="!remoteSel.length"
+                   @click="batchDel('remote')">批量删除（{{ remoteSel.length }}）</el-button>
+        <el-button size="small" type="danger" @click="clearRecs('remote')">一键清空</el-button>
         <div style="flex: 1"></div>
         <el-button @click="remotePage.load()">刷新</el-button>
       </div>
-      <el-table :data="remotePage.rows.value" v-loading="remotePage.loading.value" stripe height="100%">
+      <el-table :data="remotePage.rows.value" v-loading="remotePage.loading.value" stripe height="100%"
+                @selection-change="(v) => (remoteSel = v)">
+        <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="remotePage.seq" show-overflow-tooltip />
         <el-table-column label="类型" width="80" show-overflow-tooltip>
           <template #default="{ row }">
@@ -162,12 +213,29 @@
         <el-table-column label="时间" min-width="165" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="viewLog(row, '远程日志')">日志</el-button>
-            <el-popconfirm title="确认删除该记录?" @confirm="delRecord(row.id)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRemoteCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="log" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><Document /></el-icon></span>
+                    <span class="mi-txt"><b>日志</b><i>查看部署输出</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>删除该条记录</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -175,6 +243,27 @@
         <el-pagination background layout="total, prev, pager, next" :total="remotePage.pager.total"
                        v-model:current-page="remotePage.pager.page" :page-size="remotePage.pager.size"
                        @current-change="remotePage.load" />
+      </div>
+    </div>
+
+    <!-- TAB5 升级简述：CHANGELOG.md + 补丁文件头注释自动汇总（版本倒序） -->
+    <div v-show="tab === 'changelog'" class="panel table-panel tabs-fill">
+      <div class="toolbar">
+        <span style="color: #8fa8c4; font-size: 13px">每次升级的功能与BUG修复自动汇总（jar 内 CHANGELOG.md + sql/patch_*.sql 头注释）</span>
+        <div style="flex: 1"></div>
+        <el-button @click="loadChangelog()">刷新</el-button>
+      </div>
+      <div v-loading="clLoading" class="cl-list">
+        <div v-for="v in changelog" :key="v.version" class="cl-item">
+          <div class="cl-head">
+            <span class="cl-ver">{{ v.version }}</span>
+            <span class="cl-cnt">{{ v.items.length }} 条</span>
+          </div>
+          <ul class="cl-items">
+            <li v-for="(it, i) in v.items" :key="i">{{ it }}</li>
+          </ul>
+        </div>
+        <el-empty v-if="!changelog.length && !clLoading" description="暂无升级记录（CHANGELOG.md / 补丁文件头注释会被自动读取）" :image-size="70" />
       </div>
     </div>
 
@@ -387,6 +476,14 @@ async function testTarget(row) {
     loadTargets()
   } catch (e) { /* 拦截器统一提示 */ }
 }
+
+/** 服务器列表操作列「更多」命令分发 */
+function onTargetCommand(cmd, row) {
+  if (cmd === 'test') testTarget(row)
+  else if (cmd === 'edit') openTarget(row)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该服务器配置？', '删除服务器', { type: 'warning' })
+    .then(() => delTarget(row.id)).catch(() => {})
+}
 const dbIniting = ref(false)
 async function initDb() {
   await ElMessageBox.confirm(
@@ -565,6 +662,54 @@ async function delRecord(id) {
   ElMessage.success('已删除')
   recPage.load(); remotePage.load()
 }
+
+/* ===== 构建日志/远程日志：勾选批量删除 + 一键清空 ===== */
+const buildSel = ref([])
+const remoteSel = ref([])
+async function batchDel(kind) {
+  const sel = kind === 'build' ? buildSel.value : remoteSel.value
+  if (!sel.length) return
+  await ElMessageBox.confirm(`确认删除选中的 ${sel.length} 条${kind === 'build' ? '构建记录' : '远程日志'}？（含日志全文，不可恢复）`,
+    '批量删除', { type: 'warning', confirmButtonText: '删 除' })
+  const n = await api.deployDelRecords(sel.map((r) => r.id))
+  ElMessage.success(`已删除 ${n} 条`)
+  if (kind === 'build') buildSel.value = []; else remoteSel.value = []
+  recPage.load(); remotePage.load()
+}
+async function clearRecs(kind) {
+  await ElMessageBox.confirm(
+    `确认清空全部${kind === 'build' ? '构建日志' : '远程日志'}？（仅清日志记录，不影响服务器与容器）`,
+    '一键清空', { type: 'warning', confirmButtonText: '全部清空' })
+  const n = await api.deployClearRecords(kind)
+  ElMessage.success(`已清空 ${n} 条`)
+  if (kind === 'build') buildSel.value = []; else remoteSel.value = []
+  recPage.load(); remotePage.load()
+}
+
+/* ===== 升级简述：CHANGELOG + 补丁头注释自动汇总 ===== */
+const changelog = ref([])
+const clLoading = ref(false)
+async function loadChangelog() {
+  clLoading.value = true
+  try { changelog.value = (await api.deployChangelog()) || [] }
+  catch (e) { changelog.value = [] }
+  finally { clLoading.value = false }
+}
+
+/** 构建日志操作列「更多」命令分发 */
+function onBuildCommand(cmd, row) {
+  if (cmd === 'log') viewLog(row, '构建日志')
+  else if (cmd === 'deploy') openDeploy(row)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该条构建记录？', '删除记录', { type: 'warning' })
+    .then(() => delRecord(row.id)).catch(() => {})
+}
+
+/** 远程日志操作列「更多」命令分发 */
+function onRemoteCommand(cmd, row) {
+  if (cmd === 'log') viewLog(row, '远程日志')
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该条远程日志？', '删除记录', { type: 'warning' })
+    .then(() => delRecord(row.id)).catch(() => {})
+}
 function ensurePoll() {
   clearInterval(timer)
   timer = setInterval(() => {
@@ -575,7 +720,7 @@ function ensurePoll() {
 }
 
 function fmt(t) { return t ? String(t).replace('T', ' ').slice(0, 19) : '-' }
-onMounted(() => { loadTargets(); recPage.load(); remotePage.load(); ensurePoll() })
+onMounted(() => { loadTargets(); recPage.load(); remotePage.load(); loadChangelog(); ensurePoll() })
 onBeforeUnmount(() => clearInterval(timer))
 </script>
 
@@ -616,4 +761,13 @@ onBeforeUnmount(() => clearInterval(timer))
   min-height: 110px; max-height: 220px; overflow: auto;
 }
 .sc-ops { display: flex; gap: 6px; margin-top: 10px; }
+/* 升级简述TAB：版本卡片时间线 */
+.cl-list { overflow-y: auto; padding: 6px 14px; }
+.cl-item { border: 1px solid #e4edf7; border-radius: 10px; background: linear-gradient(180deg, #f9fcff, #fff);
+  padding: 10px 14px; margin-bottom: 10px; }
+.cl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cl-ver { font-size: 14px; font-weight: 700; color: #155EEF; }
+.cl-cnt { font-size: 12px; color: #98a2b3; }
+.cl-items { margin: 0; padding-left: 18px; }
+.cl-items li { font-size: 12.5px; color: #475467; line-height: 1.8; }
 </style>

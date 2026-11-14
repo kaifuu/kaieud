@@ -44,14 +44,33 @@
         <el-table-column v-if="cols.payTime" label="缴费时间" width="165" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.payTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">查看</el-button>
-            <el-button link type="primary" @click="openEdit(row)">修改</el-button>
-            <el-popconfirm title="确认删除该缴费单？合同已缴金额将自动重算，操作将留痕"
-                           @confirm="remove(row)">
-              <template #reference><el-button link type="danger">删除</el-button></template>
-            </el-popconfirm>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="detail" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
+                    <span class="mi-txt"><b>查看详情</b><i>缴费单完整信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>修改</b><i>修改缴费信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>已缴金额自动重算</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -178,7 +197,7 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
 import ColumnSetting from '../../components/ColumnSetting.vue'
@@ -342,6 +361,16 @@ async function remove(row) {
   await api.paymentDel(row.id)
   ElMessage.success('删除成功')
   load()
+}
+
+/** 列表行「更多」下拉分发：删除沿用原 popconfirm 的二次确认文案 */
+async function onRowCommand(cmd, row) {
+  if (cmd === 'detail') openDetail(row)
+  else if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'del') {
+    await ElMessageBox.confirm('确认删除该缴费单？合同已缴金额将自动重算，操作将留痕', '删除缴费单', { type: 'warning' })
+    remove(row)
+  }
 }
 
 function onVoucher(e) {

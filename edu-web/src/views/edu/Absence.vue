@@ -47,12 +47,29 @@
         <el-table-column label="审批人/时间" width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ row.approver ? row.approver + ' · ' + (row.approveTime || '') : '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <template v-if="row.status === 0">
-              <el-button link type="success" @click="approve(row, true)">批准</el-button>
-              <el-button link type="danger" @click="approve(row, false)">驳回</el-button>
-            </template>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="row.status === 0" command="approve" class="more-item">
+                    <span class="mi mi-green"><el-icon :size="13"><CircleCheck /></el-icon></span>
+                    <span class="mi-txt"><b>批准</b><i>免扣本课次</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 0" command="reject" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Close /></el-icon></span>
+                    <span class="mi-txt"><b>驳回</b><i>立即扣课</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -103,6 +120,14 @@ async function approve(row, pass) {
     ElMessage.success('已驳回并完成扣课')
   }
   load()
+}
+
+/** 列表「更多」下拉分发 */
+function onRowCommand(cmd, row) {
+  switch (cmd) {
+    case 'approve': approve(row, true); break
+    case 'reject': approve(row, false); break
+  }
 }
 
 onMounted(async () => {

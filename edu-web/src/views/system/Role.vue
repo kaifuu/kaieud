@@ -25,15 +25,33 @@
         <el-table-column v-if="cols.createTime" prop="createTime" label="创建时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="210" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="warning" @click="assign(row)">分配菜单</el-button>
-            <el-popconfirm v-if="row.id !== 1" title="确认删除该角色?" @confirm="remove(row.id)">
-              <template #reference>
-                <el-button link type="danger">删除</el-button>
+            <el-dropdown trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit" class="more-item">
+                    <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                    <span class="mi-txt"><b>编辑</b><i>修改角色信息</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="assign" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><Key /></el-icon></span>
+                    <span class="mi-txt"><b>分配菜单</b><i>配置菜单权限</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.id !== 1" command="del" divided class="more-item">
+                    <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                    <span class="mi-txt"><b>删除</b><i>内置角色不可删</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
               </template>
-            </el-popconfirm>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -69,7 +87,7 @@
 
 <script setup>
 import { reactive, ref, nextTick, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../api'
 import { usePage } from '../../composables/usePage'
@@ -137,6 +155,14 @@ async function remove(id) {
   await api.roleDel(id)
   ElMessage.success('已删除')
   load()
+}
+
+/** 操作列「更多」命令分发 */
+function onRowCommand(cmd, row) {
+  if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'assign') assign(row)
+  else if (cmd === 'del') ElMessageBox.confirm('确认删除该角色？', '删除角色', { type: 'warning' })
+    .then(() => remove(row.id)).catch(() => {})
 }
 
 function doExport() {

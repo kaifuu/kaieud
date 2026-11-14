@@ -36,12 +36,30 @@
         <el-table-column v-if="cols.createTime" label="申请时间" width="170" sortable="custom" show-overflow-tooltip>
           <template #default="{ row }">{{ fmt(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
           <template #default="{ row }">
-            <template v-if="row.status === 0">
-              <el-button link type="success" @click="approve(row, true)">同意</el-button>
-              <el-button link type="danger" @click="approve(row, false)">拒绝</el-button>
-            </template>
+            <!-- 原 v-if（仅待审批有操作）整体上移到下拉容器，其余状态保持空单元格 -->
+            <el-dropdown v-if="row.status === 0" trigger="click" popper-class="more-dropdown"
+                         @visible-change="(v) => { row.__moreOpen = v }"
+                         @command="(cmd) => onRowCommand(cmd, row)">
+              <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+                <span>更多</span>
+                <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="approve" class="more-item">
+                    <span class="mi mi-blue"><el-icon :size="13"><CircleCheck /></el-icon></span>
+                    <span class="mi-txt"><b>同意</b><i>通过并取消课次</i></span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="reject" class="more-item">
+                    <span class="mi mi-orange"><el-icon :size="13"><CircleClose /></el-icon></span>
+                    <span class="mi-txt"><b>拒绝</b><i>驳回该请假申请</i></span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -110,6 +128,12 @@ async function approve(row, pass) {
   await api.leaveApprove(row.id, pass)
   ElMessage.success(pass ? '已同意，对应课次已取消（可在报名管理补课时）' : '已拒绝')
   load()
+}
+
+/** 列表行「更多」下拉分发（仅待审批行有下拉） */
+function onRowCommand(cmd, row) {
+  if (cmd === 'approve') approve(row, true)
+  else if (cmd === 'reject') approve(row, false)
 }
 async function save() {
   if (!form.value.studentId || !form.value.scheduleId || !form.value.reason)

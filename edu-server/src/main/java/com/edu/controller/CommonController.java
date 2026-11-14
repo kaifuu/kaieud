@@ -21,13 +21,19 @@ public class CommonController {
     @PostMapping("/upload")
     public Result<Map<String, String>> upload(@RequestParam("file") MultipartFile file) throws Exception {
         if (file.isEmpty()) return Result.error("文件为空");
-        if (file.getSize() > 10 * 1024 * 1024) return Result.error("单文件不能超过10M");
         String orig = file.getOriginalFilename();
         String ext = orig == null || !orig.contains(".")
                 ? "" : orig.substring(orig.lastIndexOf('.')).toLowerCase();
+        // 分类限制：作业附件 视频≤500M / 录音≤50M / 其它（PDF、图片、xlsx）≤10M
+        long max;
+        if (".mp4".equals(ext)) max = 500L * 1024 * 1024;
+        else if (".mp3".equals(ext)) max = 50L * 1024 * 1024;
+        else max = 10L * 1024 * 1024;
+        if (file.getSize() > max) return Result.error("单文件不能超过 " + (max / 1024 / 1024) + "M");
         if (!".pdf".equals(ext) && !".jpg".equals(ext) && !".jpeg".equals(ext)
-                && !".png".equals(ext) && !".gif".equals(ext) && !".xlsx".equals(ext))
-            return Result.error("仅支持 PDF、图片、xlsx 文件");
+                && !".png".equals(ext) && !".gif".equals(ext) && !".xlsx".equals(ext)
+                && !".mp4".equals(ext) && !".mp3".equals(ext))
+            return Result.error("仅支持 PDF、图片、xlsx、mp4、mp3 文件");
         // 相对路径统一锚定到进程工作目录，避免被解析到 Tomcat 临时目录
         File dir = new File(uploadDir);
         if (!dir.isAbsolute()) dir = new File(System.getProperty("user.dir"), uploadDir);

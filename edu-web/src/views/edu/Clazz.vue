@@ -29,6 +29,9 @@
       <el-table :tooltip-options="{ showAfter: 300, hideAfter: 3000, enterable: true, effect: 'light', popperClass: 'soft-tip' }"  :data="rows" v-loading="loading" stripe height="100%" @sort-change="onSort" @selection-change="sel = $event" @row-click="onRowClick">
         <el-table-column type="selection" width="42" />
         <el-table-column type="index" label="序号" width="60" :index="seq" />
+        <el-table-column v-if="cols.campus" prop="campus" label="校区" width="100" sortable="custom" show-overflow-tooltip>
+          <template #default="{ row }">{{ campusOf(row) }}</template>
+        </el-table-column>
         <el-table-column v-if="cols.name" prop="name" label="班级名称" min-width="160" sortable="custom"  show-overflow-tooltip/>
         <el-table-column v-if="cols.courseId" label="课程" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ courseName(row.courseId) }}</template>
@@ -327,10 +330,29 @@
                 <el-table-column prop="updateTime" label="编辑时间" width="150" sortable="custom" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.updateTime || '-' }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="118" fixed="right">
+                <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
                   <template #default="{ row }">
-                    <el-button link type="primary" size="small" :disabled="row.status !== 0" @click="openEditSched(row)">编辑</el-button>
-                    <el-button link type="warning" size="small" :disabled="row.status !== 0" @click="cancelSchedRow(row)">取消排课</el-button>
+                    <el-dropdown trigger="click" popper-class="more-dropdown"
+                                 @visible-change="(v) => { row.__moreOpen = v }"
+                                 @command="(cmd) => onSchedCommand(cmd, row)">
+                      <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                        <el-icon :size="12"><MoreFilled /></el-icon>
+                        <span>更多</span>
+                        <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+                      </span>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="edit" :disabled="row.status !== 0" class="more-item">
+                            <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                            <span class="mi-txt"><b>编辑</b><i>修改本课次</i></span>
+                          </el-dropdown-item>
+                          <el-dropdown-item command="cancel" :disabled="row.status !== 0" class="more-item">
+                            <span class="mi mi-orange"><el-icon :size="13"><CircleClose /></el-icon></span>
+                            <span class="mi-txt"><b>取消排课</b><i>填写原因取消</i></span>
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                   </template>
                 </el-table-column>
               </el-table>
@@ -343,30 +365,277 @@
             </template>
           </el-tab-pane>
 
-          <!-- 上课记录TAB：已完成课次 -->
+          <!-- 上课记录TAB：记上课（排课/未排课）+ 考勤统计（到课/请假/旷课/出勤率/课时/学费） -->
           <el-tab-pane label="上课记录" name="history" lazy>
-            <el-table :data="doneSchedules" stripe size="small" max-height="420">
-              <el-table-column type="index" label="序号" width="55" />
-              <el-table-column label="上课时间" min-width="170" show-overflow-tooltip>
-                <template #default="{ row }">{{ fmtTime(row.startTime) }} ~ {{ String(row.endTime || '').slice(11, 16) }}</template>
+            <div class="rec-toolbar">
+              <el-button type="primary" size="small" @click="openRecAttend">排课记上课</el-button>
+              <el-button type="primary" size="small" @click="openRecAdhoc">未排课记上课</el-button>
+              <el-button size="small" @click="openRecDetail()">考勤记录</el-button>
+              <el-button size="small" @click="exportRecords">导出记录</el-button>
+              <div style="flex: 1"></div>
+              <el-radio-group v-model="recQuick" size="small" @change="onRecQuick">
+                <el-radio-button value="week">本周</el-radio-button>
+                <el-radio-button value="month">本月</el-radio-button>
+              </el-radio-group>
+              <el-date-picker v-model="recRange" type="daterange" value-format="YYYY-MM-DD" size="small"
+                              range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期"
+                              style="margin-left: 8px; width: 250px" @change="onRecRange" />
+            </div>
+            <div class="rec-summary">
+              <div>当前结果：学员课时总计 <b>{{ recHoursTotal }}</b> 课时 | 出勤率总计 <b>{{ recRateTotal }}</b></div>
+              <el-checkbox v-model="showCost" size="small">学费计算</el-checkbox>
+            </div>
+            <el-table :data="recFiltered" v-loading="recLoading" stripe size="small" max-height="420">
+              <el-table-column prop="startTime" label="上课日期" width="165" sortable fixed="left" show-overflow-tooltip>
+                <template #default="{ row }">{{ fmtTime(row.startTime) }}~{{ String(row.endTime || '').slice(11, 16) }}</template>
               </el-table-column>
-              <el-table-column label="教师" width="100" show-overflow-tooltip>
+              <el-table-column label="教师" width="90" fixed="left" show-overflow-tooltip>
                 <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
               </el-table-column>
-              <el-table-column prop="classroom" label="教室" width="120" show-overflow-tooltip>
-                <template #default="{ row }">{{ row.classroom || '-' }}</template>
+              <el-table-column label="助教" width="90" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.assistantId ? teacherName(row.assistantId) : '-' }}</template>
               </el-table-column>
-              <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip>
-                <template #default="{ row }">{{ row.remark || '-' }}</template>
+              <el-table-column label="实到/应到" width="95" align="center">
+                <template #default="{ row }"><b style="color: #155EEF">{{ row.attend }}</b>/{{ row.should }}</template>
+              </el-table-column>
+              <el-table-column label="出勤率" width="85" align="center">
+                <template #default="{ row }">
+                  <span class="rec-rate" :class="rateClass(row)">{{ rateOf(row) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="attend" label="到课" width="70" align="center" sortable />
+              <el-table-column prop="leave" label="请假" width="70" align="center" sortable />
+              <el-table-column prop="absent" label="旷课" width="70" align="center" sortable />
+              <el-table-column label="迟到" width="66" align="center">
+                <template #default>-</template>
+              </el-table-column>
+              <el-table-column prop="hours" label="学员课时" width="90" align="center" sortable>
+                <template #default="{ row }">{{ row.hours || 0 }}</template>
+              </el-table-column>
+              <el-table-column v-if="showCost" label="学费消耗" width="100" align="center">
+                <template #default="{ row }">
+                  <span style="color: #f79009; font-weight: 600">¥{{ costOf(row) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="remark" label="上课内容" min-width="130" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.remark || row.topic || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="createTime" label="创建日期" width="150" sortable show-overflow-tooltip>
+                <template #default="{ row }">{{ row.createTime || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="66" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" size="small" @click="openRecDetail(row)">明细</el-button>
+                </template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!doneSchedules.length" description="暂无上课记录（完成的课次自动归档到这里）" :image-size="70" />
+            <el-empty v-if="!recFiltered.length && !recLoading" description="暂无上课记录：记上课后课次与出勤统计出现在这里" :image-size="70" />
+          </el-tab-pane>
+
+          <!-- 成绩TAB：录入成绩（整班一次考试）+ 考试名称/学员筛选 + 成绩列表 -->
+          <el-tab-pane label="成绩" name="score" lazy>
+            <div class="rec-toolbar">
+              <el-button type="primary" size="small" @click="openScoreEntry">录入成绩</el-button>
+              <div style="flex: 1"></div>
+              <el-select v-model="scoreExam" size="small" clearable filterable placeholder="考试名称" style="width: 180px">
+                <el-option v-for="e in scoreExamOptions" :key="e" :label="e" :value="e" />
+              </el-select>
+              <el-input v-model="scoreKw" size="small" placeholder="请输入学员姓名" clearable style="width: 200px; margin-left: 8px">
+                <template #prefix><el-icon><Search /></el-icon></template>
+              </el-input>
+            </div>
+            <div class="rec-summary">
+              <div>当前结果：共计 <b>{{ scoreFiltered.length }}</b> 条</div>
+            </div>
+            <el-table :data="scoreFiltered" v-loading="scoreLoading" stripe size="small" max-height="420">
+              <el-table-column prop="stuName" label="学员姓名" width="110" fixed="left" show-overflow-tooltip />
+              <el-table-column label="联系方式" width="135" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.phone || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="item" label="项目" min-width="110" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.item || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="score" label="成绩" width="85" align="center" sortable>
+                <template #default="{ row }"><b style="color: #155EEF">{{ row.score }}</b></template>
+              </el-table-column>
+              <el-table-column prop="source" label="来源" width="76" align="center">
+                <template #default="{ row }">{{ row.source || '录入' }}</template>
+              </el-table-column>
+              <el-table-column prop="examDate" label="考试日期" width="108" sortable>
+                <template #default="{ row }">{{ row.examDate || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="examName" label="考试" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.remark || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
+                <template #default="{ row }">
+                  <el-dropdown trigger="click" popper-class="more-dropdown"
+                               @visible-change="(v) => { row.__moreOpen = v }"
+                               @command="(cmd) => onScoreCommand(cmd, row)">
+                    <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                      <el-icon :size="12"><MoreFilled /></el-icon>
+                      <span>更多</span>
+                      <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+                    </span>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="edit" class="more-item">
+                          <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                          <span class="mi-txt"><b>编辑</b><i>改成绩/日期/备注</i></span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="del" divided class="more-item">
+                          <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                          <span class="mi-txt"><b>删除</b><i>移除本条成绩</i></span>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!scoreFiltered.length && !scoreLoading" description="暂无成绩记录，点「录入成绩」按考试批量登记" :image-size="70" />
           </el-tab-pane>
 
           <!-- 其余功能TAB：规划中 -->
-          <el-tab-pane label="成绩" name="score"><el-empty description="成绩管理功能规划中" :image-size="80" /></el-tab-pane>
-          <el-tab-pane label="课堂点评" name="comment"><el-empty description="课堂点评功能规划中" :image-size="80" /></el-tab-pane>
-          <el-tab-pane label="作业" name="homework"><el-empty description="作业管理功能规划中" :image-size="80" /></el-tab-pane>
+          <!-- 课堂点评TAB：按课次聚合（到课人数/小红花/点评状态/阅读率），点评=给到课学员发小红花+内容 -->
+          <el-tab-pane label="课堂点评" name="comment" lazy>
+            <el-table :data="cmtRows" v-loading="cmtLoading" stripe size="small" max-height="440">
+              <el-table-column prop="startTime" label="上课日期" width="165" sortable fixed="left" show-overflow-tooltip>
+                <template #default="{ row }">{{ fmtDateWeek(row.startTime) }}</template>
+              </el-table-column>
+              <el-table-column label="上课时间" width="110" align="center">
+                <template #default="{ row }">{{ String(row.startTime || '').slice(11, 16) }} ~ {{ String(row.endTime || '').slice(11, 16) }}</template>
+              </el-table-column>
+              <el-table-column label="上课教师" width="100" show-overflow-tooltip>
+                <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
+              </el-table-column>
+              <el-table-column label="助教" width="100" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.assistantId ? teacherName(row.assistantId) : '-' }}</template>
+              </el-table-column>
+              <el-table-column label="阅读率" width="90" align="center">
+                <template #default="{ row }">
+                  <span :style="{ color: row.readRate !== '-' ? '#12b76a' : '#98a2b3' }">{{ row.readRate }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="attend" label="到课人数" width="90" align="center" sortable>
+                <template #default="{ row }"><b style="color: #155EEF">{{ row.attend }}</b></template>
+              </el-table-column>
+              <el-table-column prop="flowers" label="小红花数" width="90" align="center" sortable>
+                <template #default="{ row }">
+                  <span v-if="row.flowers" style="color: #f04438; font-weight: 600">❀ {{ row.flowers }}</span>
+                  <span v-else style="color: #98a2b3">0</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="点评状态" width="92" align="center">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.commented ? 'success' : 'info'" effect="plain">
+                    {{ row.commented ? '已点评' : '未点评' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
+                <template #default="{ row }">
+                  <el-dropdown trigger="click" popper-class="more-dropdown"
+                               @visible-change="(v) => { row.__moreOpen = v }"
+                               @command="(cmd) => onCmtCommand(cmd, row)">
+                    <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                      <el-icon :size="12"><MoreFilled /></el-icon>
+                      <span>更多</span>
+                      <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+                    </span>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="edit" class="more-item">
+                          <span class="mi mi-blue"><el-icon :size="13"><EditPen /></el-icon></span>
+                          <span class="mi-txt"><b>点评</b><i>发小红花与文字点评</i></span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="view" divided class="more-item" :disabled="!row.commented">
+                          <span class="mi mi-green"><el-icon :size="13"><View /></el-icon></span>
+                          <span class="mi-txt"><b>查看</b><i>已点评内容</i></span>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!cmtRows.length && !cmtLoading" description="暂无可点评课次：记上课后的课次出现在这里" :image-size="70" />
+          </el-tab-pane>
+          <!-- 作业TAB：布置作业 + 作业列表（点评进度/未提交/未读统计）+ 提交与点评登记 -->
+          <el-tab-pane label="作业" name="homework" lazy>
+            <div class="rec-toolbar">
+              <div class="rec-summary" style="margin: 0; flex: none">
+                <div>共 <b>{{ hwRows.length }}</b> 个作业</div>
+              </div>
+              <div style="flex: 1"></div>
+              <el-button type="primary" size="small" @click="openHwEdit()">布置作业</el-button>
+            </div>
+            <el-table :data="hwRows" v-loading="hwLoading" stripe size="small" max-height="440">
+              <el-table-column prop="title" label="作业标题" min-width="170" fixed="left" show-overflow-tooltip />
+              <el-table-column label="布置教师" width="100" show-overflow-tooltip>
+                <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="86" align="center">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="hwStatusOf(row).type" effect="plain">{{ hwStatusOf(row).text }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="点评进度（已点评/已提交）" width="170" align="center">
+                <template #default="{ row }">
+                  <b style="color: #12b76a">{{ row.reviewed }}</b> / <b style="color: #155EEF">{{ row.submitted }}</b>
+                </template>
+              </el-table-column>
+              <el-table-column prop="unsubmitted" label="未提交" width="80" align="center" sortable>
+                <template #default="{ row }">
+                  <span :style="{ color: row.unsubmitted ? '#f04438' : '#98a2b3', fontWeight: row.unsubmitted ? 600 : 400 }">{{ row.unsubmitted }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="unread" label="未读" width="76" align="center" sortable>
+                <template #default="{ row }">{{ row.unread }}</template>
+              </el-table-column>
+              <el-table-column prop="createTime" label="布置时间" width="140" sortable show-overflow-tooltip>
+                <template #default="{ row }">{{ row.createTime || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="96" fixed="right" class-name="no-wrap-col">
+                <template #default="{ row }">
+                  <el-dropdown trigger="click" popper-class="more-dropdown"
+                               @visible-change="(v) => { row.__moreOpen = v }"
+                               @command="(cmd) => onHwCommand(cmd, row)">
+                    <span class="more-trigger" :class="{ open: row.__moreOpen }">
+                      <el-icon :size="12"><MoreFilled /></el-icon>
+                      <span>更多</span>
+                      <el-icon :size="10" class="more-arrow"><ArrowDown /></el-icon>
+                    </span>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="submit" class="more-item">
+                          <span class="mi mi-blue"><el-icon :size="13"><Document /></el-icon></span>
+                          <span class="mi-txt"><b>提交与点评</b><i>登记提交/写点评</i></span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="edit" class="more-item">
+                          <span class="mi mi-purple"><el-icon :size="13"><EditPen /></el-icon></span>
+                          <span class="mi-txt"><b>编辑</b><i>标题/内容/截止</i></span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="toggle" class="more-item">
+                          <span class="mi mi-orange"><el-icon :size="13"><component :is="row.status === 0 ? 'CircleClose' : 'CircleCheck'" /></el-icon></span>
+                          <span class="mi-txt">
+                            <b>{{ row.status === 2 ? '发布作业' : row.status === 1 ? '重新开放' : '关闭作业' }}</b>
+                            <i>{{ row.status === 2 ? '草稿发布给学员' : row.status === 1 ? '恢复接收提交' : '停止接收提交' }}</i>
+                          </span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="del" divided class="more-item">
+                          <span class="mi mi-red"><el-icon :size="13"><Delete /></el-icon></span>
+                          <span class="mi-txt"><b>删除</b><i>连同提交记录</i></span>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!hwRows.length && !hwLoading" description="暂无作业，点「布置作业」发布第一个作业" :image-size="70" />
+          </el-tab-pane>
           <el-tab-pane label="点名表" name="rollcall"><el-empty description="点名表功能规划中" :image-size="80" /></el-tab-pane>
           <el-tab-pane label="信息表" name="info"><el-empty description="信息表功能规划中" :image-size="80" /></el-tab-pane>
         </el-tabs>
@@ -443,7 +712,7 @@
       </template>
     </el-dialog>
     
-    <el-drawer v-model="visible" :title="form.id ? '编辑班级' : '新增班级'" size="460px">
+    <el-drawer v-model="visible" :title="form.id ? '编辑班级' : '新增班级'" size="560px">
       <el-form :model="form" label-width="90px">
         <el-form-item label="班级名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="课程" required>
@@ -481,11 +750,27 @@
           </div>
         </el-form-item>
         <el-form-item label="教室">
-          <el-select v-model="form.classroomId" clearable filterable style="width: 100%"
-                     placeholder="选择固定教室（选填）">
-            <el-option v-for="r in classroomList" :key="r.id"
-                       :label="`${r.name}（${r.campus || '未设校区'}·${r.minCapacity ?? '—'}~${r.capacity ?? 0}人）`" :value="r.id" />
-          </el-select>
+          <div style="width: 100%">
+            <el-select v-model="form.classroomId" clearable filterable style="width: 100%"
+                       placeholder="选择固定教室（选填）">
+              <el-option v-for="r in classroomList" :key="r.id"
+                         :label="`${r.name}（${r.campus || '未设校区'}·${r.minCapacity ?? '—'}~${r.capacity ?? 0}人）`" :value="r.id" />
+            </el-select>
+            <!-- 教室占用参考：该教室今天起未取消课次（表格呈现，完整展示班级/课程） -->
+            <div v-if="form.classroomId" class="room-usage" v-loading="roomUsageLoading">
+              <div class="ru-title">教室占用（今天起，共 {{ roomUsage.length }} 条）</div>
+              <el-table v-if="roomUsage.length" :data="roomUsage" size="small" max-height="240">
+                <el-table-column label="时间段" width="158">
+                  <template #default="{ row }">
+                    <span class="ru-time">{{ String(row.startTime).slice(5, 16) }}~{{ String(row.endTime).slice(11, 16) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="clazzName" label="占用班级" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="courseName" label="课程" min-width="120" show-overflow-tooltip />
+              </el-table>
+              <div v-else-if="!roomUsageLoading" class="ru-empty">该教室暂无排课占用</div>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="班容人数">
           <div class="cap-box">
@@ -516,19 +801,26 @@
     </el-drawer>
 
     <!-- 选择课程弹窗（单选，参考报名/续报选课弹窗） -->
-    <el-dialog v-model="courseDlgVisible" title="选择课程" width="760px" append-to-body>
+    <el-dialog v-model="courseDlgVisible" title="选择课程" width="920px" append-to-body>
       <div class="dlg-toolbar">
+        <el-select v-model="dlgCampus" placeholder="开课校区" clearable size="default" style="width: 140px">
+          <el-option v-for="c in campusOptions" :key="c" :label="c" :value="c" />
+        </el-select>
         <el-input v-model="courseKw" placeholder="请输入课程名称关键字搜索" clearable
                   style="width: 220px" :prefix-icon="Search" />
         <el-select v-model="dlgCategory" placeholder="课程类别" clearable size="default" style="width: 120px">
           <el-option v-for="d in dictStore.options('course_category')" :key="d.value" :label="d.label" :value="Number(d.value)" />
         </el-select>
-        <span class="fee-sub">仅展示「班课」课程，一对一不在此选班 · 点击行选择</span>
+        <span class="fee-sub">仅展示「班课」课程 · 点击行选择</span>
       </div>
-      <el-table :data="courseFiltered" height="340" size="small" stripe
-                highlight-current-row @current-change="(r) => (dlgPicked = r)">
-        <el-table-column prop="name" label="课程名称" min-width="150" show-overflow-tooltip />
-        <el-table-column label="课程类别" width="86">
+      <el-table :data="dlgPaged" height="340" size="small" stripe
+                highlight-current-row @current-change="(r) => (dlgPicked = r)"
+                :default-sort="{ prop: '__campus', order: 'ascending' }" @sort-change="onCourseSort">
+        <el-table-column prop="__campus" label="校区" width="130" sortable="custom" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.__campus || '未设置校区' }}</template>
+        </el-table-column>
+        <el-table-column prop="name" label="课程名称" min-width="150" sortable="custom" show-overflow-tooltip />
+        <el-table-column prop="category" label="课程类别" width="86" sortable="custom">
           <template #default="{ row }">{{ row.category ? dictStore.label('course_category', row.category) : '-' }}</template>
         </el-table-column>
         <el-table-column label="收费模式" width="92">
@@ -550,8 +842,41 @@
             <span v-else>{{ row.teachMode ? dictStore.label('class_type', row.teachMode) : '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="开班数" width="68" align="center">
-          <template #default="{ row }">{{ clazzCountOf(row.id) }}</template>
+        <el-table-column prop="count" label="开班数" width="88" align="center" sortable="custom">
+          <template #default="{ row }">
+            <span class="cnt-cell">
+              <b class="cnt-num">{{ clazzCountOf(row.id, row.__campus) }}</b>
+              <!-- 问号浮窗：该课程（该校区）各班级的开班详情（校区/日期/状态/报名人数），跟在数字后 -->
+              <el-popover v-if="clazzCountOf(row.id, row.__campus)" placement="left" :width="560" trigger="click">
+                <template #reference>
+                  <el-icon class="cnt-q" :size="13" color="#155EEF"><QuestionFilled /></el-icon>
+              </template>
+              <div class="fee-sub" style="margin-bottom: 6px; white-space: nowrap">
+                「{{ row.name }}」{{ row.__campus ? `（${row.__campus}）` : '' }}已开班级（{{ clazzCountOf(row.id, row.__campus) }} 个，含已结课）
+              </div>
+              <el-table :data="clazzRowsOf(row.id, row.__campus)" size="small" max-height="260">
+                <el-table-column prop="name" label="班级" min-width="150" show-overflow-tooltip />
+                <el-table-column label="校区" width="96" show-overflow-tooltip>
+                  <template #default="{ row: c }">{{ clazzCampus(c) || '—' }}</template>
+                </el-table-column>
+                <el-table-column label="开班日期" width="100" align="center">
+                  <template #default="{ row: c }">{{ c.startDate || '—' }}</template>
+                </el-table-column>
+                <el-table-column label="成班状态" width="84" align="center">
+                  <template #default="{ row: c }">
+                    <el-tag v-if="c.status === 3" size="small" type="info" effect="plain">已结课</el-tag>
+                    <el-tag v-else size="small" :type="isClazzFormed(c) ? 'success' : 'info'" effect="plain">
+                      {{ isClazzFormed(c) ? '已成班' : '未成班' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="报名人数" width="84" align="center">
+                  <template #default="{ row: c }">{{ stuCount[c.id] ?? 0 }}/{{ c.capacity ?? '—' }}</template>
+                </el-table-column>
+              </el-table>
+            </el-popover>
+            </span>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="74" align="center">
           <template #default="{ row }">
@@ -562,6 +887,9 @@
       </el-table>
       <div class="picked-clazz-bar">
         <span class="fee-sub">已选择：<b style="color: #155EEF">{{ dlgPicked ? dlgPicked.name : '未选择' }}</b></span>
+        <el-pagination small background layout="total, prev, pager, next" :total="courseFiltered.length"
+                       v-model:current-page="dlgPage.page" :page-size="dlgPage.size"
+                       :pager-count="5" style="margin-left: auto" />
       </div>
       <template #footer>
         <el-button @click="courseDlgVisible = false">取 消</el-button>
@@ -720,6 +1048,497 @@
         <el-button @click="schedAdjustVisible = false">取 消</el-button>
         <el-button type="primary" :loading="schedAdjustSaving" @click="saveAdjust">保 存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 排课记上课（上课记录TAB）：选已下课未登记课次 → 扣课节数 + 上课内容 -->
+    <el-dialog v-model="recAttendVisible" title="排课记上课" width="480px" append-to-body>
+      <el-form label-width="90px">
+        <el-form-item label="课次" required>
+          <el-select v-model="recAttendForm.id" filterable style="width: 100%" placeholder="选择已下课未登记的课次" @change="loadAttendInfo">
+            <el-option v-for="s in recAttendCandidates" :key="s.id" :value="s.id"
+                       :label="`${fmtTime(s.startTime)} ${teacherName(s.teacherId)}${s.classroom ? ' @' + s.classroom : ''}`" />
+          </el-select>
+          <div v-if="!recAttendCandidates.length" class="rec-hint">没有待登记的课次（已下课且未记上课），可去排课TAB排课或用「未排课记上课」补录</div>
+        </el-form-item>
+        <el-form-item label="可扣课时">
+          <span class="rec-hint">{{ recAttendInfo ? `本课次可扣 1 ~ ${recAttendInfo.maxHours} 节（时长 ${recAttendInfo.minutes} 分钟 ÷ 每节 ${recAttendInfo.durationMinutes} 分钟）` : '选择课次后显示折算上限' }}</span>
+        </el-form-item>
+        <el-form-item label="扣课节数" required>
+          <el-input-number v-model="recAttendForm.hours" :min="1" :max="recAttendInfo?.maxHours || 1" />
+          <span v-if="recAttendInfo && recAttendForm.hours < recAttendInfo.maxHours" class="rec-hint" style="margin-left: 8px">少于应扣节数需填上课内容说明</span>
+        </el-form-item>
+        <el-form-item label="上课内容">
+          <el-input v-model="recAttendForm.content" type="textarea" :rows="2" placeholder="选填，记入上课记录" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="recAttendVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="recAttendSaving" @click="saveRecAttend">登 记</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 未排课记上课（上课记录TAB）：整页抽屉——上课信息 + 学员逐个登记 到课/请假/旷课 -->
+    <el-drawer v-model="recAdhocVisible" title="未排课记上课" size="900px" append-to-body>
+      <div class="rah-header">
+        <div class="rah-chip"><span class="rah-ic rah-ic-blue"><el-icon :size="13"><OfficeBuilding /></el-icon></span>{{ curClazz?.name || '-' }}</div>
+        <div class="rah-chip"><span class="rah-ic rah-ic-purple"><el-icon :size="13"><Location /></el-icon></span>{{ detailCampus || '-' }}</div>
+        <div class="rah-chip"><span class="rah-ic rah-ic-green"><el-icon :size="13"><Notebook /></el-icon></span>{{ detailCourse?.name || '-' }}</div>
+      </div>
+
+      <div class="rah-sec">
+        <div class="rah-title">上课信息</div>
+        <el-form label-width="80px" label-position="left">
+          <div class="rah-row">
+            <el-form-item label="上课日期" required>
+              <el-date-picker v-model="recAdhocForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" placeholder="补录的历史上课日期" />
+            </el-form-item>
+            <el-form-item label="上课教师" required>
+              <el-select v-model="recAdhocForm.teacherId" filterable clearable style="width: 100%">
+                <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="教师课时">
+              <el-input-number v-model="recAdhocForm.teacherHours" :min="0" :max="9999" style="width: 140px" />
+              <span class="rec-hint" style="margin-left: 8px">教师的课时量，随备注留痕</span>
+            </el-form-item>
+          </div>
+          <div class="rah-row">
+            <el-form-item label="上课时段" required>
+              <el-select v-if="!recAdhocCustom" v-model="recAdhocPreset" style="width: 150px" @change="onAdhocPreset">
+                <el-option v-for="p in TIME_PRESETS" :key="p" :label="p" :value="p" />
+              </el-select>
+              <el-time-picker v-else v-model="recAdhocForm.range" is-range range-separator="至"
+                              start-placeholder="开始" end-placeholder="结束"
+                              format="HH:mm" value-format="HH:mm" style="width: 190px" />
+              <el-button link type="primary" style="margin-left: 8px" @click="toggleAdhocCustom">
+                {{ recAdhocCustom ? '选择预设时段' : '自定义时段' }}
+              </el-button>
+            </el-form-item>
+            <el-form-item label="助教">
+              <el-select v-model="recAdhocForm.assistantId" clearable filterable placeholder="选填" style="width: 100%">
+                <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <el-form-item label="备注">
+            <el-input v-model="recAdhocForm.memo" type="textarea" :rows="2" maxlength="150" show-word-limit
+                      placeholder="选填，最多150字，记入上课记录" />
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <div class="rah-sec">
+        <div class="rah-title">学员记上课</div>
+        <div class="rah-stat">
+          共 <b>{{ recAdhocStudents.length }}</b> 名学员，到课 <b>{{ rahCnt(1) }}</b> 人，请假 <b>{{ rahCnt(2) }}</b> 人，旷课 <b>{{ rahCnt(3) }}</b> 人，未记录 <b>{{ rahCnt(0) }}</b> 人
+        </div>
+        <div class="rah-toolbar">
+          <el-button type="primary" size="small" @click="rahBatchAttend">批量到课</el-button>
+          <el-button size="small" @click="openRahPicker('temp')">添加临时学员</el-button>
+          <el-button size="small" @click="openRahPicker('makeup')">添加补课学员</el-button>
+          <span class="rec-hint" style="margin-left: 10px">批量到课作用于勾选行（未勾选则作用于筛选结果）</span>
+          <el-input v-model="recAdhocSearch" size="small" placeholder="请输入学员姓名" clearable style="width: 200px; margin-left: auto">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+        </div>
+        <el-table ref="rahTableRef" :data="rahStudentsFiltered" stripe size="small" max-height="320" @selection-change="(v) => (rahChecked = v)">
+          <el-table-column type="selection" width="42" />
+          <el-table-column label="学员头像" width="70" align="center">
+            <template #default="{ row }">
+              <span class="rah-avatar" :style="{ background: avatarColor(row.name) }">{{ String(row.name || '?').slice(0, 1) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="学员姓名" min-width="130">
+            <template #default="{ row }">
+              <span class="rah-name">{{ row.name }}</span>
+              <el-tag v-if="row.kind === 'makeup'" size="small" type="warning" effect="plain" style="margin-left: 6px">补课</el-tag>
+              <el-tag v-else-if="row.kind === 'temp'" size="small" type="info" effect="plain" style="margin-left: 6px">临时</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="剩余课时" width="90" align="center">
+            <template #default="{ row }">
+              <b :style="{ color: row.remainHours > 0 ? '#12b76a' : '#f04438' }">{{ row.remainHours ?? '-' }}</b>
+            </template>
+          </el-table-column>
+          <el-table-column label="请假次数" width="86" align="center">
+            <template #default="{ row }">{{ row.kind ? '-' : row.leaveCount }}</template>
+          </el-table-column>
+          <el-table-column label="本次扣课时" width="130">
+            <template #default="{ row }">
+              <el-input-number v-if="row.kind !== 'temp'" v-model="row.hours" :min="1" :max="10" size="small"
+                               :disabled="row.att !== 1" style="width: 108px" />
+              <span v-else class="rec-hint">不扣课</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="到课状态" width="216">
+            <template #default="{ row }">
+              <el-radio-group v-if="row.kind !== 'temp'" v-model="row.att" size="small">
+                <el-radio-button :value="1">到课</el-radio-button>
+                <el-radio-button :value="2">请假</el-radio-button>
+                <el-radio-button :value="3">旷课</el-radio-button>
+              </el-radio-group>
+              <el-tag v-else size="small" type="success" effect="plain">到课（临时·旁听）</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="66" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="danger" size="small" @click="rahRemoveStu(row)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!rahStudentsFiltered.length" description="暂无学员（本班在读学员在此逐个标记出勤）" :image-size="60" />
+      </div>
+
+      <template #footer>
+        <el-button @click="recAdhocVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="recAdhocSaving" @click="saveRecAdhoc">保 存</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- 添加临时/补课学员（未排课记上课）：临时=全库搜索；补课=同课程已分班的请假学员 -->
+    <el-dialog v-model="rahPickVisible" :title="rahPickKind === 'temp' ? '添加临时学员' : '添加补课学员'" width="760px" append-to-body>
+      <template v-if="rahPickKind === 'temp'">
+        <div class="rec-hint" style="margin-bottom: 8px">临时学员：到课不扣课时，名单记入课次备注（出勤统计不含）</div>
+        <el-input v-model="rahPickKw" size="small" placeholder="输入学员姓名 / 手机号搜索" clearable style="margin-bottom: 8px">
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-table :data="rahPickFiltered" stripe size="small" max-height="300" @selection-change="(v) => (rahPickSel = v)">
+          <el-table-column type="selection" width="42" />
+          <el-table-column label="学员姓名" min-width="120">
+            <template #default="{ row }">{{ row.name }}</template>
+          </el-table-column>
+          <el-table-column label="手机号" width="140">
+            <template #default="{ row }">{{ row.phone || '-' }}</template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template v-else>
+        <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 10px"
+                  :title="`当前课程：${detailCourse?.name || '-'}；仅支持添加同课程已分班的请假学员`" />
+        <div class="rah-mk-filters">
+          <span class="rah-mk-lb">报读校区：</span>
+          <el-select v-model="rahMkCampus" size="small" style="width: 160px" @change="rahMkClazz = null">
+            <el-option label="全部校区" value="" />
+            <el-option v-for="c in rahMkCampusOptions" :key="c" :label="c" :value="c" />
+          </el-select>
+          <span class="rah-mk-lb" style="margin-left: 12px">班级名称：</span>
+          <el-select v-model="rahMkClazz" size="small" clearable placeholder="请选择班级" style="width: 170px">
+            <el-option v-for="c in rahMkClazzOptions" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+          <el-input v-model="rahMkKw" size="small" placeholder="请输入学员姓名" clearable style="width: 180px; margin-left: 12px">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+        </div>
+        <div class="rah-stat" style="margin: 8px 0">共 <b>{{ rahMakeupFiltered.length }}</b> 名学员</div>
+        <el-table :data="rahMakeupFiltered" stripe size="small" max-height="280" @selection-change="(v) => (rahPickSel = v)">
+          <el-table-column type="selection" width="42" />
+          <el-table-column label="学员姓名" min-width="110">
+            <template #default="{ row }">{{ row.stuName }}</template>
+          </el-table-column>
+          <el-table-column label="报读校区" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.campus }}</template>
+          </el-table-column>
+          <el-table-column label="班级名称" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.clazzName }}</template>
+          </el-table-column>
+          <el-table-column label="请假时间" width="130">
+            <template #default="{ row }">{{ row.leaveTime }}</template>
+          </el-table-column>
+          <el-table-column label="教师" width="90" show-overflow-tooltip>
+            <template #default="{ row }">{{ teacherName(row.teacherId) }}</template>
+          </el-table-column>
+          <el-table-column label="扣除课时" width="86" align="center">
+            <template #default="{ row }">0</template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="rahPickVisible = false">取 消</el-button>
+        <el-button type="primary" @click="confirmRahPick">加 入</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 录入成绩（成绩TAB）：基本信息（来源/项目/考试/日期）+ 整班学员成绩，可含停课结课学员 -->
+    <el-dialog v-model="scoreEntryVisible" title="录入成绩" width="720px" append-to-body>
+      <div class="rah-sec">
+        <div class="rah-title">基本信息</div>
+        <el-form label-width="70px" label-position="left">
+          <div class="rah-row">
+            <el-form-item label="来源">
+              <el-radio-group v-model="scoreEntryForm.source">
+                <el-radio value="机构内">机构内</el-radio>
+                <el-radio value="机构外">机构外</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="考试日期" required>
+              <el-date-picker v-model="scoreEntryForm.examDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+            </el-form-item>
+          </div>
+          <div class="rah-row">
+            <el-form-item label="项目">
+              <el-select v-model="scoreEntryForm.item" filterable allow-create clearable
+                         placeholder="选择或输入项目" style="flex: 1; min-width: 0">
+                <el-option v-for="i in scoreItemOptions" :key="i" :label="i" :value="i" />
+              </el-select>
+              <el-button size="small" style="margin-left: 8px" @click="newScoreDict('item')">新建项目</el-button>
+            </el-form-item>
+            <el-form-item label="考试" required>
+              <el-select v-model="scoreEntryForm.examName" filterable allow-create
+                         placeholder="选择或输入考试名称" style="flex: 1; min-width: 0">
+                <el-option v-for="e in scoreExamOptions" :key="e" :label="e" :value="e" />
+              </el-select>
+              <el-button size="small" style="margin-left: 8px" @click="newScoreDict('exam')">新建考试</el-button>
+            </el-form-item>
+          </div>
+        </el-form>
+      </div>
+      <div class="rah-sec">
+        <div class="rah-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px">
+          <span>录入成绩</span>
+          <el-checkbox v-model="scoreIncludeAll" size="small" @change="onScoreIncludeAll">包含停课、结课学员</el-checkbox>
+        </div>
+        <div class="rec-hint" style="margin-bottom: 8px">若学员缺考、未考，成绩为空即可；成绩为空的学员不会保存</div>
+        <el-table :data="scoreEntryForm.students" stripe size="small" max-height="300">
+          <el-table-column label="学员姓名" prop="name" width="120" show-overflow-tooltip />
+          <el-table-column label="联系方式" width="135" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.phone || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="成绩" width="140">
+            <template #default="{ row }">
+              <el-input-number v-model="row.score" :min="0" :max="9999" :precision="1" size="small" style="width: 122px" />
+            </template>
+          </el-table-column>
+          <el-table-column label="备注" min-width="180">
+            <template #default="{ row }">
+              <el-input v-model="row.remark" size="small" maxlength="150" placeholder="最多可输入150字" />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="scoreEntryVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="scoreEntrySaving" @click="saveScoreEntry">确 定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑成绩（成绩TAB）：单条改项目/成绩/日期/备注 -->
+    <el-dialog v-model="scoreEditVisible" title="编辑成绩" width="440px" append-to-body>
+      <el-form label-width="80px">
+        <el-form-item label="学员">
+          <el-input :model-value="scoreEditForm.stuName" disabled />
+        </el-form-item>
+        <el-form-item label="考试">
+          <el-input :model-value="scoreEditForm.examName" disabled />
+        </el-form-item>
+        <el-form-item label="项目">
+          <el-input v-model="scoreEditForm.item" maxlength="20" />
+        </el-form-item>
+        <el-form-item label="成绩" required>
+          <el-input-number v-model="scoreEditForm.score" :min="0" :max="9999" :precision="1" />
+        </el-form-item>
+        <el-form-item label="考试日期">
+          <el-date-picker v-model="scoreEditForm.examDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="scoreEditForm.remark" type="textarea" :rows="2" maxlength="100" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scoreEditVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="scoreEditSaving" @click="saveScoreEdit">保 存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 课堂点评（课堂点评TAB）：到课学员逐个发小红花+内容；查看模式只读 -->
+    <el-dialog v-model="cmtVisible" :title="cmtReadonly ? '点评内容' : '课堂点评'" width="680px" append-to-body>
+      <div class="rec-hint" style="margin-bottom: 8px">
+        {{ fmtTime(cmtForm.startTime) }} ~ {{ String(cmtForm.endTime || '').slice(11, 16) }} ·
+        {{ teacherName(cmtForm.teacherId) }} · 到课 {{ cmtForm.rows.length }} 人
+        <template v-if="!cmtReadonly">（仅列出到课学员；内容与小红花均为空的行不保存）</template>
+      </div>
+      <el-table :data="cmtForm.rows" stripe size="small" max-height="340">
+        <el-table-column label="学员姓名" prop="stuName" width="110" show-overflow-tooltip />
+        <el-table-column label="小红花" width="120">
+          <template #default="{ row }">
+            <template v-if="!cmtReadonly">
+              <el-input-number v-model="row.flowers" :min="0" :max="99" size="small" style="width: 104px" />
+            </template>
+            <span v-else-if="row.flowers" style="color: #f04438; font-weight: 600">❀ {{ row.flowers }}</span>
+            <span v-else style="color: #98a2b3">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="点评内容" min-width="240">
+          <template #default="{ row }">
+            <el-input v-if="!cmtReadonly" v-model="row.content" type="textarea" :rows="1" maxlength="300"
+                      placeholder="选填，最多300字" />
+            <span v-else>{{ row.content || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="cmtReadonly" label="已读" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.readFlag ? 'success' : 'info'" effect="plain">{{ row.readFlag ? '已读' : '未读' }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="cmtVisible = false">{{ cmtReadonly ? '关 闭' : '取 消' }}</el-button>
+        <el-button v-if="!cmtReadonly" type="primary" :loading="cmtSaving" @click="saveCmt">保 存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 布置/编辑作业（作业TAB）：右侧全屏抽屉——基本信息 + 作业详情（富文本/附件/设置）+ 固定底栏 -->
+    <el-drawer v-model="hwEditVisible" :title="hwEditForm.id ? '编辑作业' : '布置作业'" size="100%" append-to-body>
+     <div class="hw-edit-page">
+      <div class="rah-sec">
+        <div class="rah-title">基本信息</div>
+        <el-form label-width="80px" label-position="left">
+          <el-form-item label="作业标题" required>
+            <el-input v-model="hwEditForm.title" maxlength="20" show-word-limit
+                      placeholder="请输入作业标题，最多20个字" style="width: 420px" />
+          </el-form-item>
+          <el-form-item label="发送学员" required>
+            <el-button type="primary" size="small" @click="openHwStuPicker">选 择</el-button>
+            <span class="rec-hint" style="margin-left: 10px">
+              {{ hwEditForm.targets?.length ? `已选 ${hwEditForm.targets.length} 人：${hwTargetsText}` : '未选择时发送全班在读学员' }}
+            </span>
+          </el-form-item>
+          <el-form-item label="布置教师">
+            <el-select v-model="hwEditForm.teacherId" filterable clearable style="width: 220px">
+              <el-option v-for="t in teachers" :key="t.id" :label="t.name" :value="t.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="截止日期">
+            <el-date-picker v-model="hwEditForm.deadline" type="date" value-format="YYYY-MM-DD" style="width: 220px" />
+          </el-form-item>
+        </el-form>
+      </div>
+      <div class="rah-sec">
+        <div class="rah-title">作业详情</div>
+        <el-form label-width="80px" label-position="left">
+          <el-form-item label="详情">
+            <RichEditor v-model="hwEditForm.content" :height="460" :z-idx="3000"
+                        placeholder="作业要求/题目说明，支持图文/视频排版" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="图片">
+            <el-upload v-model:file-list="hwEditForm.images" list-type="picture-card" accept=".jpg,.jpeg,.png"
+                       :limit="12" :http-request="(o) => doHwUpload(o, 'images')"
+                       :before-upload="(f) => beforeHwUpload(f, 9, ['jpg', 'jpeg', 'png'])">
+              <el-icon><Plus /></el-icon>
+            </el-upload>
+            <div class="rec-hint" style="width: 100%">图片大小不超过9M，最多上传12张</div>
+          </el-form-item>
+          <el-form-item label="视频">
+            <el-upload v-model:file-list="hwEditForm.videos" accept=".mp4" :limit="3"
+                       :http-request="(o) => doHwUpload(o, 'videos')"
+                       :before-upload="(f) => beforeHwUpload(f, 500, ['mp4'])">
+              <el-button size="small"><el-icon style="margin-right: 4px"><Upload /></el-icon>上传视频</el-button>
+            </el-upload>
+            <div class="rec-hint" style="width: 100%">视频大小不超过500M，最多上传3个</div>
+          </el-form-item>
+          <el-form-item label="录音文件">
+            <el-upload v-model:file-list="hwEditForm.audios" accept=".mp3" :limit="3"
+                       :http-request="(o) => doHwUpload(o, 'audios')"
+                       :before-upload="(f) => beforeHwUpload(f, 50, ['mp3'])">
+              <el-button size="small"><el-icon style="margin-right: 4px"><Upload /></el-icon>上传文件</el-button>
+            </el-upload>
+            <div class="rec-hint" style="width: 100%">支持 .mp3，大小不超过50M，最多3个</div>
+          </el-form-item>
+          <el-form-item label="设置">
+            <div style="width: 100%">
+              <el-checkbox v-model="hwEditForm.visibleAll">学员提交作业后，将对本班所有人可见</el-checkbox>
+              <div><el-checkbox v-model="hwEditForm.parentSubmit">学员家长可通过家长端提交作业</el-checkbox></div>
+            </div>
+          </el-form-item>
+        </el-form>
+      </div>
+     </div>
+      <template #footer>
+        <el-button @click="hwEditVisible = false">取 消</el-button>
+        <el-button :loading="hwEditSaving" @click="saveHw(true)">存草稿</el-button>
+        <el-button type="primary" :loading="hwEditSaving" @click="saveHw(false)">发布作业</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- 发送学员选择（布置作业）：本班在读学员多选，不选=全班 -->
+    <el-dialog v-model="hwStuVisible" title="选择发送学员" width="460px" append-to-body>
+      <div class="rah-toolbar" style="margin-bottom: 8px">
+        <el-checkbox :model-value="hwStuAllPicked" @change="toggleHwStuAll">全选（全班在读）</el-checkbox>
+        <span class="rec-hint" style="margin-left: auto">已选 {{ hwPickTargets.length }} / {{ stuInfo.rows?.length || 0 }} 人</span>
+      </div>
+      <el-checkbox-group v-model="hwPickTargets" class="hw-stu-list">
+        <el-checkbox v-for="s in stuInfo.rows || []" :key="s.studentId" :value="s.studentId">
+          {{ s.name }}<span class="rec-hint" style="margin-left: 4px">{{ s.phone || '' }}</span>
+        </el-checkbox>
+      </el-checkbox-group>
+      <el-empty v-if="!(stuInfo.rows || []).length" description="本班暂无在读学员" :image-size="60" />
+      <template #footer>
+        <el-button @click="hwStuVisible = false">取 消</el-button>
+        <el-button type="primary" @click="confirmHwStu">确 定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 提交与点评（作业TAB）：本班学员逐个登记 提交状态/提交内容/教师点评 -->
+    <el-dialog v-model="hwSubmitVisible" title="提交与点评" width="760px" append-to-body>
+      <div class="rec-hint" style="margin-bottom: 8px">
+        「{{ hwSubmitForm.title }}」· 应交 {{ hwSubmitForm.rows.length }} 人；
+        勾选「已提交」可登记提交内容与教师点评，点评后家长端可见（已读标记由家长端点亮）
+      </div>
+      <el-table :data="hwSubmitForm.rows" stripe size="small" max-height="360">
+        <el-table-column label="学员姓名" prop="stuName" width="110" show-overflow-tooltip />
+        <el-table-column label="提交" width="80" align="center">
+          <template #default="{ row }">
+            <el-switch v-model="row.submitted" />
+          </template>
+        </el-table-column>
+        <el-table-column label="提交内容" min-width="200">
+          <template #default="{ row }">
+            <el-input v-model="row.content" size="small" maxlength="1000" :disabled="!row.submitted" placeholder="选填" />
+          </template>
+        </el-table-column>
+        <el-table-column label="教师点评" min-width="200">
+          <template #default="{ row }">
+            <el-input v-model="row.reviewContent" size="small" maxlength="300" :disabled="!row.submitted" placeholder="选填" />
+          </template>
+        </el-table-column>
+        <el-table-column label="已读" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.submitted" size="small" :type="row.readFlag ? 'success' : 'info'" effect="plain">
+              {{ row.readFlag ? '已读' : '未读' }}
+            </el-tag>
+            <span v-else style="color: #98a2b3">-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="hwSubmitVisible = false">取 消</el-button>
+        <el-button type="primary" :loading="hwSubmitSaving" @click="saveHwSubmit">保 存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 考勤记录（上课记录TAB）：当前筛选范围内到课/请假/旷课学员明细；行「明细」=单课次 -->
+    <el-dialog v-model="recDetailVisible" :title="recDetailSchedule ? `考勤明细（${fmtTime(recDetailSchedule.startTime)}）` : '考勤记录'" width="620px" append-to-body>
+      <div class="rec-hint" style="margin-bottom: 8px">{{ recDetailSchedule ? '本课次学员出勤明细' : '当前筛选范围内的学员出勤明细（到课/请假/旷课）' }}</div>
+      <el-table :data="recDetailFiltered" stripe size="small" max-height="380">
+        <el-table-column label="学员" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.studentName }}</template>
+        </el-table-column>
+        <el-table-column label="上课时间" width="120">
+          <template #default="{ row }">{{ row.time }}</template>
+        </el-table-column>
+        <el-table-column label="类型" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain"
+                    :type="row.type === '到课' ? 'success' : row.type === '请假' ? 'warning' : 'danger'">{{ row.type }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="课时" width="80" align="center">
+          <template #default="{ row }">{{ row.type === '到课' ? (row.hours || 0) : '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="remark" label="说明" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.remark || '-' }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!recDetailFiltered.length" description="暂无考勤明细" :image-size="70" />
     </el-dialog>
 
     <!-- 办理试听弹窗（试听学员TAB）：学员信息区 + 活动信息区 -->
@@ -894,6 +1713,7 @@
 
 <script setup>
 import {reactive, ref, computed, nextTick, onMounted, onBeforeUnmount, watch} from 'vue'
+import RichEditor from '../../components/RichEditor.vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {Search, MoreFilled, ArrowDown, View, User, EditPen, Delete, Switch, InfoFilled} from '@element-plus/icons-vue'
@@ -928,15 +1748,17 @@ const teacherName = (id) => {
 }
 
 const allColumns = [
-  { prop: 'name', label: '班级名称' }, { prop: 'courseId', label: '课程' },
+  { prop: 'campus', label: '校区' }, { prop: 'name', label: '班级名称' }, { prop: 'courseId', label: '课程' },
   { prop: 'classTeacherId', label: '班主任' }, { prop: 'capacity', label: '班容(占用/空余/满班)' },
   { prop: 'minCapacity', label: '最少开班' },
   { prop: 'startDate', label: '开班日期' }, { prop: 'endDate', label: '结班日期' },
   { prop: 'status', label: '状态' }
 ]
-const cols = reactive({ name: true, courseId: true, classTeacherId: true,
+const cols = reactive({ campus: true, name: true, courseId: true, classTeacherId: true,
   capacity: true, minCapacity: true, startDate: true, endDate: true, status: true })
 const onCols = (c) => Object.assign(cols, c)
+/** 班级所属校区：经教室（edu_classroom.campus）解析 */
+const campusOf = (row) => classroomList.value.find((r) => r.id === row.classroomId)?.campus || '—'
 
 const visible = ref(false)
 const saving = ref(false)
@@ -995,6 +1817,7 @@ const classTimeText = computed(() => {
   return [...set].join('；')
 })
 /** 上课记录：已完成课次 */
+/* 已完成课次（原上课记录TAB数据源，现由 class-records 聚合接口取代，留作过滤工具） */
 const doneSchedules = computed(() => detailSchedules.value.filter((s) => s.status === 1))
 
 /* ===== 排课TAB：课程表(FullCalendar，同排课管理) + 新建排课 + 导出 ===== */
@@ -1388,6 +2211,13 @@ async function cancelSchedRow(row) {
   await loadDetailSchedules()
   refreshCalEvents()
 }
+/** 排课列表「更多」下拉分发（区别于班级列表的 onRowCommand） */
+function onSchedCommand(cmd, row) {
+  switch (cmd) {
+    case 'edit': openEditSched(row); break
+    case 'cancel': cancelSchedRow(row); break
+  }
+}
 /** 重复排课提交参数（预览与提交共用） */
 function repeatPayload() {
   const f = schedForm.value
@@ -1572,6 +2402,593 @@ function onSchedSort({ prop, order }) {
 }
 /** 序号跨页连续：(当前页-1)×页大小 + 行号 */
 const schedRowNo = (i) => (schedPager.page - 1) * schedPager.size + i + 1
+
+/* ===== 上课记录TAB：出勤统计（到课/请假/旷课聚合）+ 排课记上课/未排课补录 + 考勤明细 ===== */
+const recRows = ref([])
+const recDetail = ref([])
+const recLoading = ref(false)
+const recQuick = ref('month')        // 本周/本月快捷区间
+const recRange = ref(null)           // 自定义日期范围（设置后优先生效）
+const showCost = ref(false)          // 学费计算：显示学费消耗列
+async function loadClassRecords() {
+  if (!detailClazz.value) return
+  recLoading.value = true
+  try {
+    const r = await api.scheduleClassRecords({ clazzId: detailClazz.value.id })
+    recRows.value = r.rows || []
+    recDetail.value = r.detail || []
+  } catch (e) { recRows.value = []; recDetail.value = [] }
+  finally { recLoading.value = false }
+}
+watch(() => detailTab.value, (t) => { if (t === 'history') loadClassRecords() })
+/** 生效筛选区间：自定义范围优先，否则按本周/本月 */
+const recEffRange = computed(() => {
+  if (recRange.value && recRange.value[0] && recRange.value[1]) return recRange.value
+  const now = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  if (recQuick.value === 'week') {
+    const d = new Date(now); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))   // 周一
+    const e = new Date(d); e.setDate(d.getDate() + 6)
+    return [`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, `${e.getFullYear()}-${p(e.getMonth() + 1)}-${p(e.getDate())}`]
+  }
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  return [`${now.getFullYear()}-${p(now.getMonth() + 1)}-01`, `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(last)}`]
+})
+const recFiltered = computed(() => {
+  const [b, e] = recEffRange.value
+  return recRows.value.filter((r) => {
+    const d = String(r.startTime || '').slice(0, 10)
+    return d >= b && d <= e
+  })
+})
+/** 汇总：学员课时总计 + 出勤率总计（Σ实到/Σ应到） */
+const recHoursTotal = computed(() =>
+  recFiltered.value.reduce((s, r) => s + Number(r.hours || 0), 0).toFixed(1))
+const recRateTotal = computed(() => {
+  const a = recFiltered.value.reduce((s, r) => s + Number(r.attend || 0), 0)
+  const q = recFiltered.value.reduce((s, r) => s + Number(r.should || 0), 0)
+  return q ? ((a / q) * 100).toFixed(2) + '%' : '0.00%'
+})
+const rateOf = (row) => (row.should ? Math.round((row.attend / row.should) * 100) + '%' : '-')
+const rateClass = (row) => {
+  if (!row.should) return ''
+  const v = row.attend / row.should
+  return v >= 0.9 ? 'high' : v >= 0.6 ? 'mid' : 'low'
+}
+/** 学费单价：取课程第一个有课时的收费标准（总额÷课时） */
+const costUnit = computed(() => {
+  const ps = priceMap.value[detailClazz.value?.courseId] || []
+  const p = ps.find((x) => Number(x.hours) > 0 && Number(x.totalAmount) > 0)
+  return p ? Number(p.totalAmount) / Number(p.hours) : 0
+})
+const costOf = (row) => (Number(row.hours || 0) * costUnit.value).toFixed(2)
+function onRecQuick() { recRange.value = null }
+function onRecRange() { /* 选择范围后自定义优先，快捷按钮高亮保留但不生效 */ }
+/** 导出当前筛选的上课记录 */
+function exportRecords() {
+  if (!recFiltered.value.length) return ElMessage.warning('当前筛选暂无上课记录')
+  exportXlsx(`上课记录_${curClazz.value?.name || ''}`, [
+    { label: '上课日期', prop: 'startTime' },
+    { label: '教师', prop: 'teacherId', fmt: (v) => teacherName(v) },
+    { label: '助教', prop: 'assistantId', fmt: (v) => (v ? teacherName(v) : '-') },
+    { label: '实到', prop: 'attend' }, { label: '应到', prop: 'should' },
+    { label: '出勤率', prop: 'attend', fmt: (v, r) => (r.should ? Math.round((v / r.should) * 100) + '%' : '-') },
+    { label: '请假', prop: 'leave' }, { label: '旷课', prop: 'absent' },
+    { label: '学员课时', prop: 'hours' },
+    { label: '上课内容', prop: 'remark' },
+    { label: '创建日期', prop: 'createTime' }
+  ], recFiltered.value)
+}
+/* 排课记上课：选已下课未登记课次 */
+const recAttendVisible = ref(false)
+const recAttendSaving = ref(false)
+const recAttendInfo = ref(null)
+const recAttendForm = ref({ id: null, hours: 1, content: '' })
+/** 待登记课次：本班、待上课、开始时间已过（已下课/上课中） */
+const recAttendCandidates = computed(() => detailSchedules.value.filter((s) =>
+  s.status === 0 && new Date(String(s.startTime).replace(' ', 'T')) <= new Date()))
+function openRecAttend() {
+  recAttendInfo.value = null
+  recAttendForm.value = { id: null, hours: 1, content: '' }
+  recAttendVisible.value = true
+}
+async function loadAttendInfo(id) {
+  recAttendInfo.value = null
+  if (!id) return
+  try {
+    recAttendInfo.value = await api.scheduleAttendInfo(id)
+    recAttendForm.value.hours = recAttendInfo.value.maxHours || 1
+  } catch { /* 忽略 */ }
+}
+async function saveRecAttend() {
+  const f = recAttendForm.value
+  if (!f.id) return ElMessage.warning('请选择课次')
+  if (recAttendInfo.value && f.hours < recAttendInfo.value.maxHours && !f.content)
+    return ElMessage.warning('扣课节数少于应扣节数，请填写上课内容说明')
+  recAttendSaving.value = true
+  try {
+    const n = await api.scheduleAttend(f.id, f.hours, f.content || '')
+    ElMessage.success(`记上课成功，已扣 ${n} 份合同课时`)
+    recAttendVisible.value = false
+    await Promise.all([loadDetailSchedules(), loadClassRecords()])
+  } finally { recAttendSaving.value = false }
+}
+/* 未排课记上课（整页抽屉）：补录历史课次，按学员逐个登记 到课(扣课)/请假(不扣)/旷课(走审批) */
+const recAdhocVisible = ref(false)
+const recAdhocSaving = ref(false)
+const recAdhocSearch = ref('')
+const recAdhocStudents = ref([])      // {studentId, name, remainHours, leaveCount, att: 0未记录/1到课/2请假/3旷课, hours}
+const recAdhocCustom = ref(false)     // 时段：预设/自定义
+const recAdhocPreset = ref('18:00~20:00')
+const recAdhocForm = ref({})
+const rahCnt = (att) => recAdhocStudents.value.filter((s) => s.att === att).length
+const rahStudentsFiltered = computed(() => recAdhocStudents.value.filter((s) =>
+  !recAdhocSearch.value || String(s.name || '').includes(recAdhocSearch.value)))
+/** 学员头像底色：姓名哈希取色，稳定且多彩 */
+function avatarColor(name) {
+  const cs = ['#155EEF', '#12b76a', '#f79009', '#7c5cff', '#0e9f9f', '#f04438']
+  let h = 0
+  for (const c of String(name || '')) h = (h * 31 + c.charCodeAt(0)) % 997
+  return cs[h % cs.length]
+}
+function onAdhocPreset(p) { const [a, b] = String(p).split('~'); recAdhocForm.value.range = [a, b] }
+function toggleAdhocCustom() {
+  recAdhocCustom.value = !recAdhocCustom.value
+  if (!recAdhocCustom.value) onAdhocPreset(recAdhocPreset.value)
+}
+function openRecAdhoc() {
+  recAdhocForm.value = {
+    date: todayStr(), range: ['18:00', '20:00'],
+    teacherId: detailClazz.value?.classTeacherId || null,
+    teacherHours: 1,
+    assistantId: null,
+    memo: ''
+  }
+  recAdhocSearch.value = ''
+  recAdhocPreset.value = '18:00~20:00'
+  recAdhocCustom.value = false
+  // 学员行：在读学员 + 历史请假次数（来自考勤明细统计）
+  const leaveCnt = {}
+  for (const d of recDetail.value) if (d.type === '请假') leaveCnt[d.studentId] = (leaveCnt[d.studentId] || 0) + 1
+  recAdhocStudents.value = (stuInfo.rows || []).map((r) => ({
+    studentId: r.studentId, name: r.name, remainHours: r.remainHours,
+    leaveCount: leaveCnt[r.studentId] || 0, att: 0, hours: 1, kind: null
+  }))
+  recAdhocVisible.value = true
+}
+/** 批量到课：勾选行优先，未勾选则作用于当前筛选结果；临时学员固定到课 */
+function rahBatchAttend() {
+  const list = rahChecked.value.length ? rahChecked.value : rahStudentsFiltered.value
+  if (!list.length) return ElMessage.warning('当前没有可标记的学员')
+  for (const s of list) if (s.kind !== 'temp') s.att = 1
+}
+function rahRemoveStu(row) {
+  recAdhocStudents.value = recAdhocStudents.value.filter((s) => s.studentId !== row.studentId)
+}
+/* 添加临时/补课学员（临时=全库搜索到课不扣课；补课=同课程已分班请假学员，扣本人合同） */
+const rahPickVisible = ref(false)
+const rahPickKind = ref('temp')         // temp=临时学员 makeup=补课学员
+const rahPickKw = ref('')
+const rahPickSel = ref([])
+const rahChecked = ref([])              // 学员表勾选行（批量到课用）
+const rahTableRef = ref()
+/* 补课学员筛选：校区/班级/姓名（数据一次拉取，前端筛选） */
+const rahMakeupRows = ref([])
+const rahMkCampus = ref('')
+const rahMkClazz = ref(null)
+const rahMkKw = ref('')
+const rahPickFiltered = computed(() => {
+  const added = new Set(recAdhocStudents.value.map((s) => s.studentId))
+  const k = rahPickKw.value.trim().toLowerCase()
+  return (allStudents.value || []).filter((s) => !added.has(s.studentId ?? s.id)
+    && (!k || String(s.name || '').toLowerCase().includes(k) || String(s.phone || '').includes(k))).slice(0, 50)
+})
+const rahMkCampusOptions = computed(() =>
+  [...new Set(rahMakeupRows.value.map((r) => r.campus).filter(Boolean))])
+const rahMkClazzOptions = computed(() =>
+  (clazzList.value || []).filter((c) => c.courseId === detailClazz.value?.courseId))
+const rahMakeupFiltered = computed(() => {
+  const added = new Set(recAdhocStudents.value.map((s) => s.studentId))
+  const k = rahMkKw.value.trim().toLowerCase()
+  return rahMakeupRows.value.filter((r) => !added.has(r.studentId)
+    && (!rahMkCampus.value || r.campus === rahMkCampus.value)
+    && (!rahMkClazz.value || String(r.clazzId) === String(rahMkClazz.value))
+    && (!k || String(r.stuName || '').toLowerCase().includes(k)))
+})
+async function openRahPicker(kind) {
+  rahPickKind.value = kind
+  rahPickKw.value = ''
+  rahPickSel.value = []
+  if (kind === 'makeup') {
+    rahMkCampus.value = ''
+    rahMkClazz.value = null
+    rahMkKw.value = ''
+    rahMakeupRows.value = []
+    rahPickVisible.value = true
+    try {
+      rahMakeupRows.value = (await api.scheduleMakeupCandidates({ courseId: detailClazz.value?.courseId })) || []
+    } catch { /* 空列表由 empty 兜底 */ }
+  } else {
+    allStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
+    rahPickVisible.value = true
+  }
+}
+function confirmRahPick() {
+  if (!rahPickSel.value.length) return ElMessage.warning('请勾选要加入的学员')
+  for (const s of rahPickSel.value) {
+    recAdhocStudents.value.push({
+      studentId: s.studentId ?? s.id, name: s.name || s.stuName,
+      remainHours: null, leaveCount: 0,
+      att: 1, hours: 1, kind: rahPickKind.value
+    })
+  }
+  ElMessage.success(`已加入 ${rahPickSel.value.length} 名${rahPickKind.value === 'temp' ? '临时' : '补课'}学员`)
+  rahPickVisible.value = false
+}
+
+/* ===== 成绩TAB：考试成绩列表 + 整班录入 + 单条编辑/删除 ===== */
+const scoreRows = ref([])
+const scoreLoading = ref(false)
+const scoreExam = ref('')          // 考试名称筛选
+const scoreKw = ref('')            // 学员姓名筛选
+async function loadScores() {
+  if (!detailClazz.value) return
+  scoreLoading.value = true
+  try {
+    scoreRows.value = (await api.examScoreList(detailClazz.value.id)) || []
+  } catch (e) { scoreRows.value = [] }
+  finally { scoreLoading.value = false }
+}
+watch(() => detailTab.value, (t) => { if (t === 'score') loadScores() })
+const scoreExamOptions = computed(() => [...new Set(scoreRows.value.map((r) => r.examName).filter(Boolean))])
+const scoreFiltered = computed(() => {
+  const k = scoreKw.value.trim().toLowerCase()
+  return scoreRows.value.filter((r) => (!scoreExam.value || r.examName === scoreExam.value)
+    && (!k || String(r.stuName || '').toLowerCase().includes(k)))
+})
+/* 录入成绩：基本信息（来源机构内/外、项目/考试下拉可新建、日期）+ 整班学员成绩，可包含停课结课学员 */
+const scoreEntryVisible = ref(false)
+const scoreEntrySaving = ref(false)
+const scoreEntryForm = ref({})
+const scoreIncludeAll = ref(false)   // 包含停课、结课学员
+const scoreExtraItems = ref([])      // 本次会话新建的项目/考试（补进下拉）
+let scoreAllStudents = null          // 含结课学员的完整名单缓存（勾选后拉取）
+const scoreItemOptions = computed(() => [
+  ...new Set([...scoreRows.value.map((r) => r.item).filter(Boolean), ...scoreExtraItems.value])
+])
+function scoreStudents(list) {
+  return (list || []).map((r) => ({ studentId: r.studentId, name: r.name, phone: r.phone, score: null, remark: '' }))
+}
+function openScoreEntry() {
+  scoreEntryForm.value = {
+    source: '机构内', examName: '', examDate: todayStr(), item: '',
+    students: scoreStudents(stuInfo.rows)
+  }
+  if (!scoreEntryForm.value.students.length) return ElMessage.warning('本班暂无在读学员，无法录入成绩')
+  scoreIncludeAll.value = false
+  scoreAllStudents = null
+  scoreEntryVisible.value = true
+}
+/** 勾选"包含停课、结课学员"：拉取在读+已结课名单并保留已填成绩 */
+async function onScoreIncludeAll(v) {
+  const keep = new Map(scoreEntryForm.value.students.map((s) => [s.studentId, s]))
+  if (v) {
+    if (!scoreAllStudents) {
+      try { scoreAllStudents = (await api.clazzStudents(curClazz.value.id, { all: 1 })).rows || [] }
+      catch { scoreAllStudents = [] }
+    }
+    scoreEntryForm.value.students = scoreStudents(scoreAllStudents)
+      .map((s) => keep.has(s.studentId) ? { ...keep.get(s.studentId), phone: s.phone } : s)
+  } else {
+    scoreEntryForm.value.students = scoreStudents(stuInfo.rows)
+      .map((s) => keep.has(s.studentId) ? keep.get(s.studentId) : s)
+      .filter((s) => s)
+  }
+}
+/** 新建项目/新建考试：弹输入框，加入下拉并选中 */
+async function newScoreDict(kind) {
+  const isItem = kind === 'item'
+  try {
+    const r = await ElMessageBox.prompt(isItem ? '请输入项目名称' : '请输入考试名称', isItem ? '新建项目' : '新建考试', {
+      inputPlaceholder: isItem ? '如：数学 / 阶段测试' : '如：11月月考', confirmButtonText: '创 建', cancelButtonText: '取 消'
+    })
+    const v = (r.value || '').trim()
+    if (!v) return
+    scoreExtraItems.value.push(v)
+    if (isItem) scoreEntryForm.value.item = v
+    else scoreEntryForm.value.examName = v
+  } catch { /* 取消 */ }
+}
+async function saveScoreEntry() {
+  const f = scoreEntryForm.value
+  if (!f.examName?.trim()) return ElMessage.warning('请选择或新建考试')
+  if (!f.examDate) return ElMessage.warning('请选择考试日期')
+  const rows = f.students.filter((s) => s.score != null)
+  if (!rows.length) return ElMessage.warning('请至少填写一名学员的成绩')
+  scoreEntrySaving.value = true
+  try {
+    const n = await api.examScoreSaveBatch({
+      clazzId: curClazz.value.id, examName: f.examName.trim(), examDate: f.examDate,
+      item: f.item || null, source: f.source,
+      rows: rows.map((s) => ({ studentId: s.studentId, score: s.score, remark: s.remark }))
+    })
+    ElMessage.success(`已录入 ${n} 名学员的成绩`)
+    scoreEntryVisible.value = false
+    loadScores()
+  } finally { scoreEntrySaving.value = false }
+}
+/* 单条编辑/删除 */
+const scoreEditVisible = ref(false)
+const scoreEditSaving = ref(false)
+const scoreEditForm = ref({})
+function openScoreEdit(row) {
+  scoreEditForm.value = { id: row.id, stuName: row.stuName, examName: row.examName,
+    item: row.item || '', score: row.score, examDate: row.examDate, remark: row.remark || '' }
+  scoreEditVisible.value = true
+}
+async function saveScoreEdit() {
+  const f = scoreEditForm.value
+  if (f.score == null) return ElMessage.warning('请填写成绩')
+  scoreEditSaving.value = true
+  try {
+    await api.examScoreUpdate(f.id, { item: f.item, score: f.score, examDate: f.examDate, remark: f.remark })
+    ElMessage.success('成绩已更新')
+    scoreEditVisible.value = false
+    loadScores()
+  } finally { scoreEditSaving.value = false }
+}
+function onScoreCommand(cmd, row) {
+  if (cmd === 'edit') openScoreEdit(row)
+  else if (cmd === 'del') {
+    ElMessageBox.confirm(`确认删除 ${row.stuName} 的「${row.examName}」成绩？`, '删除成绩', { type: 'warning' })
+      .then(async () => {
+        await api.examScoreDelete(row.id)
+        ElMessage.success('已删除')
+        loadScores()
+      }).catch(() => {})
+  }
+}
+
+/* ===== 课堂点评TAB：按课次聚合，点评=给到课学员发小红花+内容（课次×学员 upsert） ===== */
+const cmtRows = ref([])
+const cmtLoading = ref(false)
+const cmtVisible = ref(false)
+const cmtSaving = ref(false)
+const cmtReadonly = ref(false)   // 查看模式：只读展示已点评内容
+const cmtForm = ref({})
+async function loadComments() {
+  if (!detailClazz.value) return
+  cmtLoading.value = true
+  try {
+    cmtRows.value = (await api.lessonCommentByClazz(detailClazz.value.id)) || []
+  } catch (e) { cmtRows.value = [] }
+  finally { cmtLoading.value = false }
+}
+watch(() => detailTab.value, (t) => { if (t === 'comment') loadComments() })
+/** 打开点评/查看：行=到课学员，预填已有点评（小红花/内容） */
+function openCmt(row, readonly) {
+  const had = new Map((row.comments || []).map((c) => [c.studentId, c]))
+  cmtForm.value = {
+    scheduleId: row.scheduleId, startTime: row.startTime, endTime: row.endTime,
+    teacherId: row.teacherId,
+    rows: (row.attendStudents || []).map((a) => {
+      const c = had.get(a.studentId)
+      return { studentId: a.studentId, stuName: a.stuName,
+        flowers: c?.flowers ?? 0, content: c?.content || '', readFlag: c?.readFlag || 0 }
+    })
+  }
+  cmtReadonly.value = !!readonly
+  cmtVisible.value = true
+}
+function onCmtCommand(cmd, row) {
+  if (cmd === 'edit') openCmt(row, false)
+  else if (cmd === 'view') openCmt(row, true)
+}
+async function saveCmt() {
+  const f = cmtForm.value
+  const rows = f.rows.filter((r) => r.flowers > 0 || (r.content || '').trim())
+  if (!rows.length) return ElMessage.warning('请至少给一名学员填小红花或点评内容')
+  cmtSaving.value = true
+  try {
+    const n = await api.lessonCommentSave({
+      scheduleId: f.scheduleId,
+      rows: rows.map((r) => ({ studentId: r.studentId, flowers: r.flowers, content: r.content }))
+    })
+    ElMessage.success(`已点评 ${n} 名学员`)
+    cmtVisible.value = false
+    loadComments()
+  } finally { cmtSaving.value = false }
+}
+
+/* ===== 作业TAB：布置作业 + 提交/点评登记（按作业聚合统计） ===== */
+const hwRows = ref([])
+const hwLoading = ref(false)
+const hwEditVisible = ref(false)
+const hwEditSaving = ref(false)
+const hwEditForm = ref({})
+const hwSubmitVisible = ref(false)
+const hwSubmitSaving = ref(false)
+const hwSubmitForm = ref({})
+async function loadHomework() {
+  if (!detailClazz.value) return
+  hwLoading.value = true
+  try {
+    hwRows.value = (await api.homeworkByClazz(detailClazz.value.id)) || []
+  } catch (e) { hwRows.value = [] }
+  finally { hwLoading.value = false }
+}
+watch(() => detailTab.value, (t) => { if (t === 'homework') loadHomework() })
+/** 作业状态：草稿 > 手动关闭 > 截止日期已过 > 开放中 */
+function hwStatusOf(row) {
+  if (row.status === 2) return { text: '草稿', type: 'info' }
+  if (row.status === 1) return { text: '已关闭', type: 'info' }
+  if (row.deadline && row.deadline < todayStr()) return { text: '已截止', type: 'warning' }
+  return { text: '开放中', type: 'success' }
+}
+const parseArr = (s) => { try { return JSON.parse(s || '[]') || [] } catch { return [] } }
+function openHwEdit(row) {
+  hwEditForm.value = row
+    ? { id: row.id, title: row.title, content: row.content || '',
+        images: parseArr(row.images).map((x) => ({ name: x.name, url: x.url })),
+        videos: parseArr(row.videos).map((x) => ({ name: x.name, url: x.url })),
+        audios: parseArr(row.audios).map((x) => ({ name: x.name, url: x.url })),
+        teacherId: row.teacherId,
+        targets: row.targetStudents ? String(row.targetStudents).split(',').map(Number) : [],
+        deadline: row.deadline || null, status: row.status,
+        visibleAll: row.visibleAll !== 0, parentSubmit: row.parentSubmit !== 0 }
+    : { id: null, title: '', content: '', images: [], videos: [], audios: [],
+        teacherId: detailClazz.value?.classTeacherId || null, targets: [], deadline: null,
+        status: null, visibleAll: true, parentSubmit: true }
+  hwEditVisible.value = true
+}
+/** 发送学员选择：不选=全班在读 */
+const hwStuVisible = ref(false)
+const hwPickTargets = ref([])
+const hwStuAllPicked = computed(() =>
+  (stuInfo.rows || []).length > 0 && hwPickTargets.value.length === (stuInfo.rows || []).length)
+const hwTargetsText = computed(() => {
+  const names = (hwEditForm.value.targets || []).map((id) =>
+    (stuInfo.rows || []).find((s) => s.studentId === id)?.name).filter(Boolean)
+  return names.slice(0, 6).join('、') + (names.length > 6 ? ` 等${names.length}人` : '')
+})
+function openHwStuPicker() {
+  hwPickTargets.value = [...(hwEditForm.value.targets || [])]
+  hwStuVisible.value = true
+}
+function toggleHwStuAll(v) {
+  hwPickTargets.value = v ? (stuInfo.rows || []).map((s) => s.studentId) : []
+}
+function confirmHwStu() {
+  hwEditForm.value.targets = [...hwPickTargets.value]
+  hwStuVisible.value = false
+}
+/** 附件上传：类型/大小校验 + 通用上传通道 */
+function beforeHwUpload(file, maxMB, exts) {
+  const ext = String(file.name || '').split('.').pop().toLowerCase()
+  if (!exts.includes(ext)) { ElMessage.warning(`仅支持 ${exts.join('/')} 格式`); return false }
+  if (file.size > maxMB * 1024 * 1024) { ElMessage.warning(`文件大小不能超过 ${maxMB}M`); return false }
+  return true
+}
+async function doHwUpload(opt, key) {
+  const fd = new FormData()
+  fd.append('file', opt.file)
+  try {
+    const r = await api.upload(fd)
+    hwEditForm.value[key] = [...hwEditForm.value[key], { name: opt.file.name, url: r.url }]
+  } catch (e) { ElMessage.error('上传失败') }
+}
+async function saveHw(draft) {
+  const f = hwEditForm.value
+  if (!f.title?.trim()) return ElMessage.warning('请填写作业标题')
+  const pack = (list) => JSON.stringify((list || []).map(({ name, url }) => ({ name, url })))
+  const payload = {
+    title: f.title, content: f.content, teacherId: f.teacherId,
+    images: pack(f.images), videos: pack(f.videos), audios: pack(f.audios),
+    targets: f.targets || [], deadline: f.deadline,
+    visibleAll: f.visibleAll ? 1 : 0, parentSubmit: f.parentSubmit ? 1 : 0,
+    status: draft ? 2 : 0
+  }
+  hwEditSaving.value = true
+  try {
+    if (f.id) {
+      await api.homeworkUpdate(f.id, payload)
+      ElMessage.success(draft ? '草稿已保存' : '作业已发布')
+    } else {
+      await api.homeworkCreate({ ...payload, clazzId: curClazz.value.id })
+      ElMessage.success(draft ? '草稿已保存' : '作业已布置')
+    }
+    hwEditVisible.value = false
+    loadHomework()
+  } finally { hwEditSaving.value = false }
+}
+function openHwSubmit(row) {
+  hwSubmitForm.value = {
+    id: row.id, title: row.title,
+    rows: (row.students || []).map((s) => ({ ...s, content: s.content || '', reviewContent: s.reviewContent || '' }))
+  }
+  hwSubmitVisible.value = true
+}
+async function saveHwSubmit() {
+  const f = hwSubmitForm.value
+  hwSubmitSaving.value = true
+  try {
+    const n = await api.homeworkSubmitSave({
+      homeworkId: f.id,
+      rows: f.rows.map((r) => ({ studentId: r.studentId, submitted: !!r.submitted,
+        content: r.submitted ? r.content : null, reviewContent: r.submitted ? r.reviewContent : null }))
+    })
+    ElMessage.success(`已登记 ${n} 名学员的提交`)
+    hwSubmitVisible.value = false
+    loadHomework()
+  } finally { hwSubmitSaving.value = false }
+}
+function onHwCommand(cmd, row) {
+  if (cmd === 'submit') openHwSubmit(row)
+  else if (cmd === 'edit') openHwEdit(row)
+  else if (cmd === 'toggle') {
+    // 关闭→开放 / 开放→关闭 / 草稿→发布
+    const next = row.status === 0 ? 1 : 0
+    api.homeworkUpdate(row.id, { status: next }).then(() => {
+      ElMessage.success(next === 1 ? '作业已关闭' : row.status === 2 ? '作业已发布' : '作业已重新开放')
+      loadHomework()
+    })
+  } else if (cmd === 'del') {
+    ElMessageBox.confirm(`确认删除作业「${row.title}」？提交与点评记录将一并删除`, '删除作业', { type: 'warning' })
+      .then(async () => {
+        await api.homeworkDelete(row.id)
+        ElMessage.success('已删除')
+        loadHomework()
+      }).catch(() => {})
+  }
+}
+async function saveRecAdhoc() {
+  const f = recAdhocForm.value
+  if (!f.date) return ElMessage.warning('请选择上课日期')
+  if (!f.range?.[0] || !f.range?.[1]) return ElMessage.warning('请选择上课时段')
+  if (!f.teacherId) return ElMessage.warning('请选择上课教师')
+  const marked = recAdhocStudents.value.filter((s) => s.att > 0)
+  if (!marked.length) return ElMessage.warning('请先标记学员出勤（到课/请假/旷课）')
+  if (marked.some((s) => s.att === 1 && s.kind !== 'temp' && (!s.hours || s.hours < 1)))
+    return ElMessage.warning('到课学员的扣课节数至少 1 节')
+  // 教师课时随备注留痕；教室沿用班级默认
+  const memo = [f.memo?.trim(), f.teacherHours ? `教师课时：${f.teacherHours}` : ''].filter(Boolean).join('；')
+  recAdhocSaving.value = true
+  try {
+    const n = await api.scheduleRecord({
+      clazzId: curClazz.value.id,
+      teacherId: f.teacherId, assistantId: f.assistantId || null,
+      classroomId: detailClazz.value?.classroomId || null,
+      topic: null, memo: memo || null,
+      date: f.date, beginTime: f.range[0], endTime: f.range[1],
+      students: marked.map((s) => ({
+        studentId: s.studentId, att: s.kind === 'temp' ? 1 : s.att,
+        hours: s.att === 1 && s.kind !== 'temp' ? s.hours : null,
+        kind: s.kind || null
+      }))
+    })
+    ElMessage.success(`补录成功：登记 ${marked.length} 名学员，消课合同 ${n} 份`)
+    recAdhocVisible.value = false
+    await Promise.all([loadDetailSchedules(), loadClassRecords(), loadStudents()])
+  } finally { recAdhocSaving.value = false }
+}
+/* 考勤记录/单课次明细 */
+const recDetailVisible = ref(false)
+const recDetailSchedule = ref(null)   // null=范围内全部；行「明细」=单课次
+function openRecDetail(row) {
+  recDetailSchedule.value = row || null
+  recDetailVisible.value = true
+}
+const recDetailFiltered = computed(() => {
+  const [b, e] = recEffRange.value
+  const sid = recDetailSchedule.value?.id
+  return recDetail.value.filter((d) => {
+    if (sid && d.scheduleId !== sid) return false
+    if (sid) return true
+    const day = recRows.value.find((r) => r.id === d.scheduleId)
+    const day2 = String(day?.startTime || '').slice(0, 10)
+    return day2 >= b && day2 <= e
+  })
+})
 function backToList() {
   mode.value = 'list'
   detailClazz.value = null
@@ -1621,7 +3038,7 @@ async function searchAudStudents(kw) {
   if (!kw || !kw.trim()) { audStuCands.value = []; return }
   audSearching.value = true
   try {
-    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    allStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
     const k = kw.trim().toLowerCase()
     audStuCands.value = mapAudStudents(allStudents.value.filter((s) =>
       (s.name || '').toLowerCase().includes(k) || (s.phone || '').includes(k)))
@@ -1632,7 +3049,7 @@ async function loadAllAudStudents() {
   if (audSearching.value) return
   audSearching.value = true
   try {
-    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    allStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
     audStuCands.value = mapAudStudents(allStudents.value)
   } finally { audSearching.value = false }
 }
@@ -1699,7 +3116,7 @@ async function searchBatchAudStu(kw) {
   if (!k) { batchAudCands.value = []; return }
   batchAudSearching.value = true
   try {
-    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    allStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
     batchAudCands.value = allStudents.value
       .filter((s) => (s.name || '').toLowerCase().includes(k.toLowerCase()) || (s.phone || '').includes(k))
       .map((s) => ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade }))
@@ -1709,7 +3126,7 @@ async function loadAllBatchAudStu() {
   if (batchAudSearching.value) return
   batchAudSearching.value = true
   try {
-    if (!allStudents.value.length) allStudents.value = (await api.studentList()) || []
+    allStudents.value = (await api.studentList()) || []   // 每次拉新：学员手机号变更后立即生效
     batchAudCands.value = allStudents.value
       .map((s) => ({ studentId: s.id, name: s.name, phone: s.phone, grade: s.grade }))
   } finally { batchAudSearching.value = false }
@@ -1855,9 +3272,14 @@ function onRowClick(row, column) {
   openDetailPage(row)
 }
 
+/** 编辑前的原始教室（换教室时判断是否需要联动调整已排课次） */
+const editOrigRoomId = ref(null)
 function openEdit(row) {
   form.value = row ? { ...row } : { capacity: 20, minCapacity: null, studentHours: null,
     teacherHours: null, classroomId: null, startDate: null, endDate: null, status: 1 }
+  editOrigRoomId.value = row?.classroomId ?? null
+  // 打开抽屉即加载教室占用（watch 只在换教室时触发，同教室编辑需手动拉）
+  loadRoomUsage(form.value.classroomId)
   // 已有班主任（教师档案ID）回显为对应员工 userId
   if (row?.classTeacherId) {
     const cand = staffCandidates.value.find((c) => c.teacherId === row.classTeacherId)
@@ -1879,13 +3301,54 @@ async function save() {
     if (room && Number(room.capacity || 0) < Number(form.value.capacity || 0))
       return ElMessage.warning(`教室「${room.name}」可容纳 ${room.capacity} 人，小于满班人数 ${form.value.capacity} 人，请更换更大的教室`)
   }
+  // 教室时段冲突校验：本班未取消课次 × 该教室其它班级课次，时间重叠则阻止保存
+  if (form.value.classroomId != null) {
+    const clashes = await roomClashes()
+    if (clashes.length) {
+      ElMessageBox.alert(
+        clashes.slice(0, 5).map((c) =>
+          `本班课次 <b>${c.own}</b> 与「${c.name}」的教室课次 <b>${c.other}</b> 时间重叠`).join('<br>')
+        + (clashes.length > 5 ? `<br>… 共 ${clashes.length} 处重叠` : ''),
+        '教室时段冲突', { dangerouslyUseHTMLString: true, type: 'warning', confirmButtonText: '去调整' })
+      return
+    }
+  }
+  // 已排课班级更换教室：确认是否把本班未来未上课课次一并换到新教室（避免课次仍占原教室、新旧不一致）
+  let futureMoves = []
+  if (form.value.id && form.value.classroomId != null
+      && String(form.value.classroomId) !== String(editOrigRoomId.value)) {
+    try {
+      const rs = (await api.schedulePage({ page: 1, size: 500, clazzId: form.value.id })).records || []
+      futureMoves = rs.filter((s) => s.status === 0
+        && String(s.startTime).slice(0, 10) >= todayStr())
+    } catch (e) { futureMoves = [] }
+    if (futureMoves.length) {
+      const oldRoom = roomName(editOrigRoomId.value) || '原教室'
+      const newRoom = roomName(form.value.classroomId) || '新教室'
+      try {
+        await ElMessageBox.confirm(
+          `该班级已有 <b>${futureMoves.length}</b> 个未上课课次排在原教室「${oldRoom}」，是否一并调整到新教室「${newRoom}」？<br>` +
+          `确认：逐个校验新教室时段，无冲突的课次换到新教室（时段冲突的保留原教室）<br>取消：仅修改班级固定教室，已排课次仍在原教室`,
+          '更换教室', { dangerouslyUseHTMLString: true, type: 'warning',
+            confirmButtonText: '一并调整课次', cancelButtonText: '仅改班级教室' })
+      } catch (e) { futureMoves = [] }   // 用户选择仅改班级教室：不动画次
+    }
+  }
   // 后端仅按 classTeacherUserId 解析班主任；清空选择时须把原教师档案ID一并置空
   if (!form.value.classTeacherUserId) form.value.classTeacherId = null
   saving.value = true
   try {
     if (form.value.id) await api.clazzUpdate(form.value)
     else await api.clazzSave(form.value)
-    ElMessage.success('已保存')
+    // 课次批量换教室（用户确认后）：逐个走编辑接口（含新教室时段冲突校验），冲突的保留原教室
+    if (futureMoves.length) {
+      let moved = 0, kept = 0
+      for (const s of futureMoves) {
+        try { await api.scheduleUpdate(s.id, { classroomId: form.value.classroomId }); moved++ }
+        catch (e) { kept++ }
+      }
+      ElMessage.success(`已保存：${moved} 个课次已换到新教室${kept ? `，${kept} 个因时段冲突保留原教室` : ''}`)
+    } else ElMessage.success('已保存')
     visible.value = false
     // 班主任可能在保存时才补建教师档案，刷新映射表避免列表显示 '-'
     await refreshTeacherMaps()
@@ -1939,22 +3402,117 @@ const feeStdText = (c) => {
   const p = (priceMap.value[c.id] || []).find((x) => x.chargeMode === 1)
   return p ? `${fmt(p.hours)}课时=${fmt(p.totalAmount)}元` : '—'
 }
+const dlgCampus = ref(null)   // 选课弹窗校区筛选（声明先于 courseFiltered，避免立即求值时 TDZ）
+/* 选课弹窗排序（sortable=custom，与分页同源）：默认校区升序，取消排序恢复默认 */
+const dlgSort = reactive({ prop: '__campus', order: 'ascending' })
+function onCourseSort({ prop, order }) {
+  dlgSort.prop = order ? prop : '__campus'
+  dlgSort.order = order || 'ascending'
+  dlgPage.page = 1
+}
+const dlgPage = reactive({ page: 1, size: 10 })
+const dlgPaged = computed(() =>
+  courseFiltered.value.slice((dlgPage.page - 1) * dlgPage.size, dlgPage.page * dlgPage.size))
+
 const courseFiltered = computed(() => {
   const k = (courseKw.value || '').trim().toLowerCase()
-  return courses.value.filter((c) => {
+  const base = courses.value.filter((c) => {
     if (c.status !== 1) return false
     // 仅展示班课课程
     if (bankeVal.value != null && c.teachMode !== bankeVal.value) return false
     if (k && !(c.name || '').toLowerCase().includes(k)
       && !(dictStore.label('course_category', c.category) || '').toLowerCase().includes(k)) return false
     if (dlgCategory.value != null && c.category !== dlgCategory.value) return false
+    // 校区筛选：课程开课校区（中间表 campuses）包含所选校区才展示
+    if (dlgCampus.value && !(c.campuses || []).includes(dlgCampus.value)) return false
     return true
   })
+  // 选了校区：一课程一行（带 __campus 供开班数按校区统计）
+  let rows
+  if (dlgCampus.value) rows = base.map((c) => ({ ...c, __campus: dlgCampus.value }))
+  else {
+    // 未选校区：按「课程 × 校区」拆行——A/B 校区都有语文则展示两条（A 一条、B 一条），无校区课程一行
+    rows = []
+    for (const c of base) {
+      const cs = (c.campuses || []).length ? c.campuses : ['']
+      for (const cp of cs) rows.push({ ...c, __campus: cp })
+    }
+  }
+  // 排序：表头 sortable=custom 驱动（默认校区升序 + 课程名），同值回落课程名中文序
+  const dir = dlgSort.order === 'descending' ? -1 : 1
+  const valOf = (r) => dlgSort.prop === '__campus' ? (r.__campus || '~~~')
+    : dlgSort.prop === 'name' ? (r.name || '')
+    : dlgSort.prop === 'category' ? String(r.category ?? 0).padStart(3, '0')
+    : dlgSort.prop === 'count' ? clazzCountOf(r.id, r.__campus)
+    : ''
+  rows.sort((a, b) => {
+    const va = valOf(a), vb = valOf(b)
+    return ((va > vb ? 1 : va < vb ? -1 : 0) * dir)
+      || (a.name || '').localeCompare(b.name || '', 'zh')
+      || (a.__campus || '').localeCompare(b.__campus || '', 'zh')
+  })
+  return rows
 })
-/** 该课程已开班级数（含已结课） */
-const clazzCountOf = (cid) => clazzList.value.filter((c) => c.courseId === cid).length
+/** 筛选条件变化（结果集长度变化）后回到第 1 页 */
+watch(() => courseFiltered.value.length, () => { dlgPage.page = 1 })
+/** 全量班级（含已结课）：选课弹窗开班数统计口径，打开弹窗时刷新 */
+const clazzAll = ref([])
+/** 该课程已开班级数（含已结课；带校区时只数该校区——经班级教室→校区解析） */
+const clazzCountOf = (cid, campus) => clazzRowsOf(cid, campus).length
+/** 开班数问号浮窗：该课程（该校区）的班级明细（校区/开班日期/状态/报名人数），含已结课 */
+const clazzRowsOf = (cid, campus) => clazzAll.value.filter((c) =>
+  c.courseId === cid && (!campus || clazzCampus(c) === campus))
+/** 成班状态：报名人数 ≥ 最少开班人数（未设最少按已成班） */
+const isClazzFormed = (c) => (stuCount.value[c.id] ?? 0) >= (c.minCapacity ?? 0)
+
+/* 教室占用：选教室时展示该教室今天起未取消课次；保存时用于时段冲突校验 */
+const roomUsage = ref([])
+const roomUsageLoading = ref(false)
+async function loadRoomUsage(classroomId) {
+  if (!classroomId) { roomUsage.value = []; return }
+  roomUsageLoading.value = true
+  try {
+    roomUsage.value = (await api.clazzRoomUsage(classroomId)) || []
+  } catch (e) { roomUsage.value = [] }
+  finally { roomUsageLoading.value = false }
+}
+watch(() => form.value.classroomId, (v) => loadRoomUsage(v))
+/** 本班课次 × 该教室其它班级课次 的时间重叠（区间相交；字符串时间字典序即时间序） */
+async function roomClashes() {
+  const roomId = form.value.classroomId
+  let own = []
+  if (form.value.id) {
+    try {
+      own = ((await api.schedulePage({ page: 1, size: 500, clazzId: form.value.id })).records || [])
+        .filter((s) => s.status !== 2)
+    } catch (e) { own = [] }
+  }
+  let others = roomUsage.value
+  if (!others.length) { try { others = (await api.clazzRoomUsage(roomId)) || [] } catch (e) { others = [] } }
+  others = others.filter((u) => String(u.clazzId) !== String(form.value.id))
+  const out = []
+  for (const a of own) {
+    for (const b of others) {
+      if (String(a.startTime) < String(b.endTime) && String(b.startTime) < String(a.endTime)) {
+        out.push({
+          own: `${String(a.startTime).slice(5, 16)}~${String(a.endTime).slice(11, 16)}`,
+          other: `${String(b.startTime).slice(5, 16)}~${String(b.endTime).slice(11, 16)}`,
+          name: b.clazzName
+        })
+        break
+      }
+    }
+  }
+  return out
+}
 function openCourseDlg() {
   courseKw.value = ''
+  // 打开即按校区筛选（同报名/续报）：保持已选校区，未选时默认第一个校区；
+  // 课程与班级 1 对多——一个课程可在多校区/同校区开多个班，不因已有班级限制选择
+  dlgCampus.value = dlgCampus.value || campusOptions.value[0] || null
+  // 刷新班级数据：开班数统计用全量（含已结课），选班级场景用未结课列表
+  api.clazzList({ includeClosed: 1 }).then((r) => (clazzAll.value = r || [])).catch(() => (clazzAll.value = []))
+  if (!clazzList.value.length) api.clazzList().then((r) => (clazzList.value = r || [])).catch(() => {})
   // 已选课程若为一对一（历史数据）仍可回显选中，不丢失
   dlgPicked.value = courses.value.find((c) => c.id === form.value.courseId) || null
   // 学费标准：懒加载在售课程的按课时定价（未缓存过才拉取）
@@ -1963,8 +3521,22 @@ function openCourseDlg() {
   })
   courseDlgVisible.value = true
 }
-function confirmCourseDlg() {
+async function confirmCourseDlg() {
   if (!dlgPicked.value) return ElMessage.warning('请先点击选择一门课程')
+  // 已订阅/已排课的班级禁止改课程：学员报名单、消课与课时统计均挂在原课程上，改课会造成数据错乱；
+  // 无学员且无排课时允许改（新建时选错课程的纠错场景）
+  if (form.value.id && dlgPicked.value.id !== form.value.courseId) {
+    const stu = stuCount.value[form.value.id] ?? 0
+    if (stu > 0)
+      return ElMessage.warning(`该班级已有 ${stu} 名在读学员（报名与消课均挂在原课程），不能更改课程；请新建班级`)
+    let cnt = 0
+    try {
+      cnt = ((await api.schedulePage({ page: 1, size: 500, clazzId: form.value.id })).records || [])
+        .filter((s) => s.status !== 2).length
+    } catch (e) { /* 拉取失败按无排课放行 */ }
+    if (cnt > 0)
+      return ElMessage.warning(`该班级已排 ${cnt} 个课次，不能更改课程；请新建班级`)
+  }
   form.value.courseId = dlgPicked.value.id
   courseDlgVisible.value = false
 }
@@ -2207,6 +3779,53 @@ onMounted(async () => {
 .sched-end-unit { font-size: 13px; color: #667c99; }
 .repeat-preview-tip { width: 100%; margin-top: 4px; font-size: 12px; color: #667c99; }
 .repeat-preview-tip b { color: #f79009; padding: 0 2px; }
+/* 上课记录TAB：工具条 + 汇总行 + 出勤率着色 */
+.rec-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.rec-summary { display: flex; align-items: center; justify-content: space-between;
+  font-size: 12.5px; color: #667c99; background: #f5f9ff; border: 1px solid #dbe7fb;
+  border-radius: 8px; padding: 5px 12px; margin-bottom: 8px; }
+.rec-summary b { color: #155EEF; padding: 0 2px; }
+.rec-rate { font-weight: 600; }
+.rec-rate.high { color: #12b76a; }
+.rec-rate.mid { color: #f79009; }
+.rec-rate.low { color: #f04438; }
+.rec-hint { font-size: 12px; color: #8fa8c4; }
+/* 教室占用面板（班级新增/编辑）：表格化呈现 */
+.room-usage { margin-top: 8px; border: 1px dashed #dbe7fb; border-radius: 8px; background: #fafcff; padding: 8px 10px; }
+.room-usage .ru-title { font-size: 12px; font-weight: 600; color: #8fa8c4; margin-bottom: 6px; }
+.room-usage .ru-empty { font-size: 12px; color: #98a2b3; }
+.room-usage .ru-time { color: #f04438; font-weight: 600; font-size: 12px; }
+/* 选课弹窗开班数：数字在前 + 问号浮窗在后 */
+.cnt-cell { display: inline-flex; align-items: center; gap: 3px; }
+.cnt-cell .cnt-num { font-size: 13px; font-weight: 600; color: #344054; }
+.cnt-q { cursor: pointer; }
+/* 未排课记上课：整页抽屉（头部信息条 + 分区 + 学员表） */
+.rah-header { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.rah-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #344054; }
+.rah-ic { width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.rah-ic-blue { background: linear-gradient(135deg, #155EEF, #4FA8FF); }
+.rah-ic-purple { background: linear-gradient(135deg, #7c5cff, #a78bfa); }
+.rah-ic-green { background: linear-gradient(135deg, #12b76a, #7ccf9c); }
+.rah-sec { border: 1px solid #e4edf7; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.rah-title { font-size: 13px; font-weight: 600; color: #344054;
+  padding-left: 8px; border-left: 3px solid #155EEF; margin-bottom: 10px; }
+.rah-row { display: flex; gap: 18px; flex-wrap: wrap; }
+.rah-row .el-form-item { flex: 1; min-width: 220px; margin-bottom: 10px; }
+.rah-stat { font-size: 12.5px; color: #667c99; margin-bottom: 8px; }
+.rah-stat b { color: #155EEF; padding: 0 2px; }
+.rah-toolbar { display: flex; align-items: center; margin-bottom: 8px; }
+.rah-stu { display: flex; align-items: center; gap: 8px; }
+.rah-avatar { width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.rah-name { font-weight: 500; color: #344054; }
+/* 补课学员筛选行 */
+.rah-mk-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.rah-mk-lb { font-size: 13px; color: #667c99; }
+/* 布置作业：发送学员选择列表 */
+.hw-stu-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto;
+  border: 1px solid #e4edf7; border-radius: 8px; padding: 10px 12px; }
+/* 布置作业全屏抽屉：内容限宽居中，长表单在抽屉体内滚动 */
+.hw-edit-page { max-width: 1180px; margin: 0 auto; }
 /* 课次操作弹窗（时间/教师/教室/状态/标记 + 调课取消） */
 .sch-op-row { display: flex; gap: 10px; font-size: 13px; color: #344054; padding: 4px 0; align-items: flex-start; }
 .sch-op-row > span:first-child { width: 62px; color: #8fa8c4; flex-shrink: 0; }
